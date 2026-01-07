@@ -1,7 +1,7 @@
 <h1 align="center">ar.sis's dotfiles</h1>
 
 <p align="center">
-  <img src="docs/girl.webp" alt="girl" width="400">
+  <img src="docs/BD09068F832247CD9DD5ED2273F76F7CEBCB441A92CED8A076E213D7A4202EF0.webp" alt="girl" width="400">
 </p>
 
 <br>

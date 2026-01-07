@@ -328,7 +328,7 @@ remove_package() {
 
 install_nvim() {
 	curl -LO "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz"
-	$SUDO -rf "/opt/nvim-linux-x86_64"
+	$SUDO rm -rf "/opt/nvim-linux-x86_64"
 	$SUDO tar -C "/opt" -xzf "nvim-linux-x86_64.tar.gz"
 }
 
@@ -573,6 +573,7 @@ do_setup_vultr() {
 	# Oh My Zsh installation script
 	log_info "Executing oh-my-zsh installation script..."
 	sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+	# sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --keep-zshrc
 
 	# Docker installation script
 	if [[ "$IS_DOCKER" == "false" ]]; then
