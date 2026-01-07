@@ -326,6 +326,10 @@ remove_package() {
 	fi
 }
 
+install_nvim() {
+
+}
+
 add_user() {
 	local username="$1"
 	local passwd="$2"
@@ -428,6 +432,7 @@ link() {
 	local target_dir="$1"
 	local host_dir="${2:-}" # Preferred
 	local default_dir="${3:-}"
+	log_vars "target_dir" "host_dir" "default_dir"
 
 	local all_host_items=() all_default_items=()
 	[[ -z "$host_dir" ]] || get_items "$host_dir" "all_host_items"
@@ -446,6 +451,7 @@ link() {
 		# shellcheck disable=SC2034
 		local default_items=("${all_default_items[@]}")
 	fi
+	log_vars "union_items[@]" "host_items[@]" "default_items[@]"
 
 	local item_type prefixed_items=()
 	for item_type in "host" "union" "default"; do
@@ -467,6 +473,7 @@ link() {
 			local as_target_item="${target_dir}/${item}"
 			local as_host_item="${host_dir}/${item}"
 			local as_default_item="${default_dir}/${item}"
+			local actual_path="${!as_var}"
 
 			# Backup home exists item
 			if [[ -e "$as_target_item" ]]; then
@@ -475,7 +482,7 @@ link() {
 				rm -rf "$as_target_item"
 			fi
 
-			local actual_path="${!as_var}" fixed_target_path=""
+			local fixed_target_path=""
 			if [[ "$item_type" == "host" && "$item" == "$HOST_PREFIX"* ]]; then
 				fixed_target_path="${target_dir}/${renamed_item}"
 				prefixed_items+=("${renamed_item}")
@@ -517,7 +524,8 @@ do_setup_vultr() {
 	fi
 
 	log_info "Start linking dotfiles"
-	link "$HOME_DIR" "${DOTFILES_REPO["host"]}" "${DOTFILES_REPO["common"]}"
+	local ignores=("^${DOTFILES_REPO["host"]}/template$")
+	link "$HOME_DIR" "${DOTFILES_REPO["host"]}" "${DOTFILES_REPO["common"]}" "ignores"
 
 	log_info "Install packages"
 	while read -r pkg; do

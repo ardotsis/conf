@@ -4,15 +4,6 @@
   <img src="docs/girl.webp" alt="girl" width="400">
 </p>
 
-<p align="center">
-  <em>
-    hey, ar.sis, it's ok! your isolated home is here.
-    <br>
-    simple / minimal / pixel perfect / suckless / secure / free / reproducible / efficient / unique / kawaii / menhera
-  </em>
-</p>
-
-<br>
 <br>
 
 > [!WARNING]
@@ -110,3 +101,8 @@ curl -fsSL get.ardotsis.com/df | bash -s -- -h arch
   - <https://github.com/ardotsis/dotfiles-old>
 - [ ] VSCode extension list
   - [ ] automate install
+
+```plaintext
+hey, ar.sis, it's ok! your isolated home is here.
+simple / minimal / pixel perfect / suckless / secure / free / reproducible / efficient / unique / kawaii / menhera
+```
