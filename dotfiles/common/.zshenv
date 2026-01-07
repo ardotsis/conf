@@ -10,3 +10,5 @@ export ZCACHEDIR=$XDG_CACHE_HOME/zsh
 export ZDOTDIR=$HOME/.config/zsh
 export ZHOMEDIR=$HOME/.config/zsh
 export ZRCDIR=$ZHOMEDIR/rc
+
+export PATH="$PATH:/opt/nvim-linux-x86_64/bin"

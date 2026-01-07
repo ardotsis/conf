@@ -327,7 +327,9 @@ remove_package() {
 }
 
 install_nvim() {
-
+	curl -LO "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz"
+	$SUDO -rf "/opt/nvim-linux-x86_64"
+	$SUDO tar -C "/opt" -xzf "nvim-linux-x86_64.tar.gz"
 }
 
 add_user() {
@@ -522,6 +524,8 @@ do_setup_vultr() {
 	else
 		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DOTFILES_REPO["_dir"]}"
 	fi
+
+	install_nvim
 
 	log_info "Start linking dotfiles"
 	local ignores=("^${DOTFILES_REPO["host"]}/template$")
