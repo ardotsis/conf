@@ -1,5 +1,6 @@
+export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
+
 # Oh My Zsh
-ZSH_CUSTOM="$HOME/.dotfiles/oh-my-zsh"
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="robbyrussell"
 

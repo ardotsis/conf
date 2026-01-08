@@ -328,9 +328,11 @@ remove_package() {
 
 install_nvim() {
 	# TODO: Install globally (/etc/zshenv)
-	curl -LO "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz"
+	local gz_path="${TMP_DIR}/vim-linux-x86_64.tar.gz"
+	curl -L "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz" -o "$gz_path"
 	$SUDO rm -rf "/opt/nvim-linux-x86_64"
-	$SUDO tar -C "/opt" -xzf "nvim-linux-x86_64.tar.gz"
+	$SUDO tar -C "/opt" -xzf "$gz_path"
+	$SUDO rm -f "$gz_path"
 }
 
 add_user() {
@@ -571,6 +573,9 @@ do_setup_vultr() {
 
 	log_info "Change default shell to Zsh"
 	$SUDO chsh -s "$(which zsh)" "$(whoami)"
+
+	# Zsh plugins
+	git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
 
 	if [[ "$IS_DOCKER" == "false" ]]; then
 		log_info "Executing Docker installation script.."
