@@ -566,16 +566,12 @@ do_setup_vultr() {
 	$SUDO sed -i "s/^Port [0-9]\+/Port $ssh_port/" "${OPENSSH_SERVER["sshd_config"]}"
 	$SUDO sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "${IPTABLES["rules_v4"]}"
 
-	# Change default shell to Zsh
-
-	# Oh My Zsh installation script
 	log_info "Executing oh-my-zsh installation script..."
 	git clone https://github.com/ohmyzsh/ohmyzsh.git "${HOME_DIR}/.oh-my-zsh"
 
 	log_info "Change default shell to Zsh"
 	$SUDO chsh -s "$(which zsh)" "$(whoami)"
 
-	# Docker installation script
 	if [[ "$IS_DOCKER" == "false" ]]; then
 		log_info "Executing Docker installation script.."
 		sh -c "$(curl -fsSL https://get.docker.com)"
