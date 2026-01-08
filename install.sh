@@ -529,8 +529,7 @@ do_setup_vultr() {
 	install_nvim
 
 	log_info "Start linking dotfiles"
-	local ignores=("^${DOTFILES_REPO["host"]}/template$")
-	link "$HOME_DIR" "${DOTFILES_REPO["host"]}" "${DOTFILES_REPO["common"]}" "ignores"
+	link "$HOME_DIR" "${DOTFILES_REPO["host"]}" "${DOTFILES_REPO["common"]}"
 
 	log_info "Install packages"
 	while read -r pkg; do
@@ -573,8 +572,7 @@ do_setup_vultr() {
 
 	# Oh My Zsh installation script
 	log_info "Executing oh-my-zsh installation script..."
-	sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-	# sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --keep-zshrc
+	sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --keep-zshrc
 
 	# Docker installation script
 	if [[ "$IS_DOCKER" == "false" ]]; then
