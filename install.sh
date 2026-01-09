@@ -70,6 +70,7 @@ get_arg() {
 	printf %s "${_PARAMS[$name]}"
 }
 
+# Parameters
 HOSTNAME=$(get_arg "host")
 declare -r HOSTNAME
 INSTALL_USER=$(get_arg "username")
@@ -81,6 +82,7 @@ declare -r IS_DEBUG
 CURRENT_USER="$(whoami)"
 declare -r CURRENT_USER
 
+# Global variables
 declare -r SCRIPT_NAME="${BASH_SOURCE[0]+x}"
 declare -r HOME_DIR="/home/$INSTALL_USER"
 declare -r TMP_DIR="/var/tmp"
@@ -132,6 +134,7 @@ IPTABLES["service"]="/etc/systemd/system/iptables-restore.service"
 declare -r IPTABLES
 
 declare -Ar PERMISSION=(
+	["$HOME_DIR"]="d $INSTALL_USER $INSTALL_USER 0700"
 	["$TMP_INSTALL_SCRIPT_FILE"]="f root root 0755"
 
 	["${APP["_dir"]}"]="d $INSTALL_USER $INSTALL_USER 0700"
@@ -328,9 +331,10 @@ remove_package() {
 
 install_nvim() {
 	# TODO: Install globally (/etc/zshenv)
+	$SUDO rm -rf "/opt/nvim-linux-x86_64" # Clean up old items
+
 	local gz_path="${TMP_DIR}/vim-linux-x86_64.tar.gz"
 	curl -L "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz" -o "$gz_path"
-	$SUDO rm -rf "/opt/nvim-linux-x86_64"
 	$SUDO tar -C "/opt" -xzf "$gz_path"
 	$SUDO rm -f "$gz_path"
 }
@@ -340,9 +344,11 @@ add_user() {
 	local passwd="$2"
 
 	if [[ "$OS" == "debian" ]]; then
-		$SUDO useradd -m -s "/bin/bash" -G "sudo" "$username"
+		$SUDO useradd -s "/bin/bash" -G "sudo" "$username"
 		printf "%s:%s" "$username" "$passwd" | $SUDO chpasswd
 		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" >"/etc/sudoers.d/$username"
+		# TODO: .local
+		set_perm_item "" "$HOME_DIR"
 	fi
 }
 
@@ -569,13 +575,15 @@ do_setup_vultr() {
 	$SUDO sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "${IPTABLES["rules_v4"]}"
 
 	log_info "Executing oh-my-zsh installation script..."
-	git clone https://github.com/ohmyzsh/ohmyzsh.git "${HOME_DIR}/.oh-my-zsh"
+	git clone https://github.com/ohmyzsh/ohmyzsh.git "${HOME_DIR}/.local/share/oh-my-zsh"
 
 	log_info "Change default shell to Zsh"
 	$SUDO chsh -s "$(which zsh)" "$(whoami)"
 
+	local ohmyzsh="${HOME_DIR}/.local/share/oh-my-zsh"
+
 	# Zsh plugins
-	git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+	git clone "https://github.com/zsh-users/zsh-autosuggestions" "${ohmyzsh}/plugins/zsh-autosuggestions"
 
 	if [[ "$IS_DOCKER" == "false" ]]; then
 		log_info "Executing Docker installation script.."
