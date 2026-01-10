@@ -1,0 +1,13 @@
+# ls
+alias ls="ls --color=auto"
+alias l="ls --color=auto -lFh"
+alias la="ls --color=auto -lAFh"
+alias lr="ls --color=auto -tRFh"
+alias lt="ls --color=auto -ltFh"
+alias ll="ls --color=auto -l"
+alias ldot="ls --color=auto -ld .*"
+alias lS="ls --color=auto -1FSsh"
+alias lart="ls --color=auto -1Fcart"
+alias lrt="ls --color=auto -1Fcrt"
+alias lsr="ls --color=auto -lARFh"
+alias lsn="ls --color=auto -1"

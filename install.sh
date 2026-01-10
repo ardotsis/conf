@@ -102,9 +102,9 @@ declare -r PASSWD_LENGTH=72
 declare -A DOTFILES_REPO
 DOTFILES_REPO["_dir"]="$HOME_DIR/$REPO_DIRNAME"
 DOTFILES_REPO["src"]="${DOTFILES_REPO["_dir"]}/dotfiles"
-DOTFILES_REPO["home"]="${DOTFILES_REPO["src"]}/home"
-DOTFILES_REPO["default"]="${DOTFILES_REPO["home"]}/default"
-DOTFILES_REPO["host"]="${DOTFILES_REPO["home"]}/$HOSTNAME"
+DOTFILES_REPO["hosts"]="${DOTFILES_REPO["src"]}/hosts"
+DOTFILES_REPO["default"]="${DOTFILES_REPO["hosts"]}/_default"
+DOTFILES_REPO["host"]="${DOTFILES_REPO["hosts"]}/$HOSTNAME"
 DOTFILES_REPO["packages"]="${DOTFILES_REPO["src"]}/packages.txt"
 DOTFILES_REPO["template"]="${DOTFILES_REPO["src"]}/template"
 declare -r DOTFILES_REPO
@@ -347,6 +347,13 @@ install_nvim() {
 	local gz_path="${TMP_DIR}/vim-linux-x86_64.tar.gz"
 	curl -L "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz" -o "$gz_path"
 	$SUDO tar -C "/opt" -xzf "$gz_path"
+	$SUDO rm -f "$gz_path"
+}
+
+install_starship() {
+	local gz_path="${TMP_DIR}/starship-x86_64-unknown-linux-musl.tar.gz"
+	curl -L "https://github.com/starship/starship/releases/download/v1.24.2/starship-x86_64-unknown-linux-musl.tar.gz" -o "$gz_path"
+	$SUDO tar -C "/usr/local/bin" -xzf "$gz_path"
 	$SUDO rm -f "$gz_path"
 }
 
@@ -598,8 +605,7 @@ do_setup_vultr() {
 	# git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "${zsh_plugins_dir}/zsh-autosuggestions"
 	# git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "${zsh_plugins_dir}/zsh-syntax-highlighting"
 
-	# log_info "Executing starship installation script..."
-	# curl -sS https://starship.rs/install.sh | sh
+	install_starship
 
 	if [[ "$IS_DOCKER" == "false" ]]; then
 		log_info "Executing Docker installation script.."
@@ -694,7 +700,6 @@ main_() {
 		"do_setup_${HOSTNAME}"
 	else
 		log_info "Create user: ${LOG_CLR["highlight"]}${INSTALL_USER}${CLR["reset"]}"
-
 		# Update sudo credentials for non-root user
 		if [[ -n "$SUDO" ]]; then
 			sudo -v
@@ -718,6 +723,8 @@ main_() {
 		sudo -u "$INSTALL_USER" -- "${run_cmd[@]}"
 		exit 0
 	fi
+
+	[[ -e "${HOME_DIR}/.sudo_as_admin_successful" ]] && rm -f "${HOME_DIR}/.sudo_as_admin_successful"
 
 	if [[ "$IS_DOCKER" == "true" ]]; then
 		log_info "Docker mode is enabled. Keeping docker container running..."
