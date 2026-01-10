@@ -8,11 +8,11 @@ $SymlinkDirPairs = @(
     # FORMAT : [Windows directory],  [Dotfiles directory]
 
     # VSCode
-    @("${Env:APPDATA}\Code\User", "$DotfilesRepoDir\dotfiles\common\.config\Code\User"),
+    @("${Env:APPDATA}\Code\User", "$DotfilesRepoDir\dotfiles\home\default\.config\Code\User"),
     # PowerShell
     @("${Env:USERPROFILE}\Documents\PowerShell", "$DotfilesRepoDir\dotfiles-win\config\PowerShell"),
     # NeoVim
-    @("${Env:LOCALAPPDATA}\nvim", "$DotfilesRepoDir\dotfiles\common\.config\nvim")
+    @("${Env:LOCALAPPDATA}\nvim", "$DotfilesRepoDir\dotfiles\home\default\.config\nvim")
 
     # CAUTION: Do NOT forget to add a "comma (,)" for each array.
 )

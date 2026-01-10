@@ -102,10 +102,11 @@ declare -r PASSWD_LENGTH=72
 declare -A DOTFILES_REPO
 DOTFILES_REPO["_dir"]="$HOME_DIR/$REPO_DIRNAME"
 DOTFILES_REPO["src"]="${DOTFILES_REPO["_dir"]}/dotfiles"
-DOTFILES_REPO["common"]="${DOTFILES_REPO["src"]}/common"
-DOTFILES_REPO["host"]="${DOTFILES_REPO["src"]}/hosts/$HOSTNAME"
+DOTFILES_REPO["home"]="${DOTFILES_REPO["src"]}/home"
+DOTFILES_REPO["default"]="${DOTFILES_REPO["home"]}/default"
+DOTFILES_REPO["host"]="${DOTFILES_REPO["home"]}/$HOSTNAME"
 DOTFILES_REPO["packages"]="${DOTFILES_REPO["src"]}/packages.txt"
-DOTFILES_REPO["template"]="${DOTFILES_REPO["host"]}/.template"
+DOTFILES_REPO["template"]="${DOTFILES_REPO["src"]}/template"
 declare -r DOTFILES_REPO
 
 declare -A APP
@@ -120,6 +121,12 @@ HOME_SSH["_dir"]="$HOME_DIR/.ssh"
 HOME_SSH["authorized_keys"]="${HOME_SSH["_dir"]}/authorized_keys"
 HOME_SSH["config"]="${HOME_SSH["_dir"]}/config"
 declare -r HOME_SSH
+
+declare -A HOME_LOCAL
+HOME_LOCAL["_dir"]="$HOME_DIR/.local"
+HOME_LOCAL["share"]="${HOME_LOCAL["_dir"]}/share"
+HOME_LOCAL["state"]="${HOME_LOCAL["_dir"]}/state"
+declare -r HOME_LOCAL
 
 declare -A OPENSSH_SERVER
 OPENSSH_SERVER["etc"]="/etc/ssh"
@@ -145,6 +152,10 @@ declare -Ar PERMISSION=(
 	["${HOME_SSH["_dir"]}"]="d $INSTALL_USER $INSTALL_USER 0700"
 	["${HOME_SSH["authorized_keys"]}"]="f $INSTALL_USER $INSTALL_USER 0600"
 	["${HOME_SSH["config"]}"]="f $INSTALL_USER $INSTALL_USER 0600"
+
+	["${HOME_LOCAL["_dir"]}"]="d $INSTALL_USER $INSTALL_USER 0700"
+	["${HOME_LOCAL["share"]}"]="d $INSTALL_USER $INSTALL_USER 0700"
+	["${HOME_LOCAL["state"]}"]="d $INSTALL_USER $INSTALL_USER 0700"
 
 	["${OPENSSH_SERVER["etc"]}"]="d root root 0755"
 	["${OPENSSH_SERVER["sshd_config"]}"]="f root root 0600"
@@ -344,11 +355,16 @@ add_user() {
 	local passwd="$2"
 
 	if [[ "$OS" == "debian" ]]; then
-		$SUDO useradd -s "/bin/bash" -G "sudo" "$username"
+		$SUDO useradd -s "/bin/zsh" -G "sudo" "$username"
+		# Set password
 		printf "%s:%s" "$username" "$passwd" | $SUDO chpasswd
+		# Allow "sudo" command without password
 		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" >"/etc/sudoers.d/$username"
-		# TODO: .local
+		# Build home directory
 		set_perm_item "" "$HOME_DIR"
+		set_perm_item "" "${HOME_LOCAL["_dir"]}"
+		set_perm_item "" "${HOME_LOCAL["share"]}"
+		set_perm_item "" "${HOME_LOCAL["state"]}"
 	fi
 }
 
@@ -475,6 +491,7 @@ link() {
 
 		local item
 		for item in "${items[@]}"; do
+			[[ -z "$item" ]] && continue
 			# Skip host prefixed item
 			local renamed_item="${item#"${HOST_PREFIX}"}"
 			if [[ "$item_type" == "default" && " ${prefixed_items[*]} " =~ [[:space:]]${renamed_item}[[:space:]] ]]; then
@@ -537,7 +554,7 @@ do_setup_vultr() {
 	install_nvim
 
 	log_info "Start linking dotfiles"
-	link "$HOME_DIR" "${DOTFILES_REPO["host"]}" "${DOTFILES_REPO["common"]}"
+	link "$HOME_DIR" "${DOTFILES_REPO["host"]}" "${DOTFILES_REPO["default"]}"
 
 	log_info "Install packages"
 	while read -r pkg; do
@@ -574,16 +591,15 @@ do_setup_vultr() {
 	$SUDO sed -i "s/^Port [0-9]\+/Port $ssh_port/" "${OPENSSH_SERVER["sshd_config"]}"
 	$SUDO sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "${IPTABLES["rules_v4"]}"
 
-	log_info "Executing oh-my-zsh installation script..."
-	git clone https://github.com/ohmyzsh/ohmyzsh.git "${HOME_DIR}/.local/share/oh-my-zsh"
-
-	log_info "Change default shell to Zsh"
-	$SUDO chsh -s "$(which zsh)" "$(whoami)"
-
-	local ohmyzsh="${HOME_DIR}/.local/share/oh-my-zsh"
+	# local zsh_plugins_dir="${HOME_LOCAL["share"]}/zsh/plugins"
+	# mkdir -p "$zsh_plugins_dir"
 
 	# Zsh plugins
-	git clone "https://github.com/zsh-users/zsh-autosuggestions" "${ohmyzsh}/plugins/zsh-autosuggestions"
+	# git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "${zsh_plugins_dir}/zsh-autosuggestions"
+	# git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "${zsh_plugins_dir}/zsh-syntax-highlighting"
+
+	# log_info "Executing starship installation script..."
+	# curl -sS https://starship.rs/install.sh | sh
 
 	if [[ "$IS_DOCKER" == "false" ]]; then
 		log_info "Executing Docker installation script.."
