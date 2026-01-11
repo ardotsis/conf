@@ -17,5 +17,10 @@ git commit -m "$CommitMessage"
 git push
 
 if ($All) {
-    "llll"
+    $branch = git branch --show-current
+    if ($branch -ne "main") {
+        git checkout main
+        git merge dev
+        git checkout dev
+    }
 }
