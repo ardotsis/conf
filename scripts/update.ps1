@@ -14,6 +14,10 @@ git merge
 
 git add -A
 git commit -m "$CommitMessage"
+if (-not $?) {
+    exit 1
+}
+
 git push
 
 if ($All) {
