@@ -19,7 +19,7 @@ curl -fsSL get.ardotsis.com/df | bash -s -- -h vultr
 ```batch
 git clone https://github.com/ardotsis/dotfiles ~\.dotfiles
 cd ~\.dotfiles
-.\install.sh
+.\install.ps1
 ```
 
 ## Test
