@@ -1,6 +1,5 @@
 #!/bin/bash
 set -e -u -o pipefail -C
-printf "Bash version: %s\n" "$BASH_VERSION"
 
 declare -ar _PARAM_0=("--host" "-h" "value" "")
 declare -ar _PARAM_1=("--username" "-u" "value" "ardotsis")
@@ -675,6 +674,8 @@ do_setup_arch() {
 
 # "main_": Prevent the log function from logging it as "_GLOBAL_"
 main_() {
+	log_debug "Bash version: $BASH_VERSION"
+
 	local session_id
 	session_id="$(get_safe_random_str 4)"
 	log_debug "================ Begin $(clr "$CURRENT_USER ($session_id)" "${LOG_CLR["highlight"]}") session ================"
