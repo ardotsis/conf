@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e -u -o pipefail -C
+printf "Bash version: %s\n" "$BASH_VERSION"
 
 declare -ar _PARAM_0=("--host" "-h" "value" "")
 declare -ar _PARAM_1=("--username" "-u" "value" "ardotsis")
@@ -87,7 +88,7 @@ declare -r SCRIPT_NAME="${BASH_SOURCE[0]+x}"
 declare -r HOME_DIR="/home/$INSTALL_USER"
 declare -r TMP_DIR="/var/tmp"
 declare -r REPO_DIRNAME=".dotfiles"
-declare -r DEV_REPO_DIR="$TMP_DIR/${REPO_DIRNAME}_dev"
+declare -r DEV_REPO_DIR="$TMP_DIR/${REPO_DIRNAME}_docker"
 declare -r TMP_INSTALL_SCRIPT_FILE="$TMP_DIR/install_dotfiles.sh"
 declare -r GIT_REMOTE_BRANCH="main"
 declare -r HOST_PREFIX="${HOSTNAME^^}##"
@@ -223,8 +224,6 @@ _log() {
 	local timestamp
 	timestamp="$(date "+%Y-%m-%d %H:%M:%S")"
 	printf "[%s] [%b%s%b] [%s:%s] (%s) %b\n" "$timestamp" "${LOG_CLR["${level}"]}" "${level^^}" "${CLR["reset"]}" "$caller" "$lineno" "$CURRENT_USER" "$msg" >&2
-	# TODO:
-	# printf "[%s] [%s] [%s:%s] (%s) %b\n" "$timestamp" "${level^^}" "$caller" "$lineno" "$CURRENT_USER" "$msg" >>"${APP["log"]}"
 }
 log_debug() { _log "debug" "$1"; }
 log_info() { _log "info" "$1"; }
@@ -367,7 +366,7 @@ add_user() {
 		# Set password
 		printf "%s:%s" "$username" "$passwd" | $SUDO chpasswd
 		# Allow "sudo" command without password
-		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" >"/etc/sudoers.d/$username"
+		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" | sudo tee "/etc/sudoers.d/$username"
 		# Build home directory
 		set_perm_item "" "$HOME_DIR"
 		set_perm_item "" "${HOME_LOCAL["_dir"]}"
@@ -486,7 +485,7 @@ link() {
 		# shellcheck disable=SC2034
 		local default_items=("${all_default_items[@]}")
 	fi
-	log_vars "union_items[@]" "host_items[@]" "default_items[@]"
+	log_vars "union_items[@]" "host_items[@]" "default_items[@]" # TODO: Error on Ubuntu
 
 	local item_type prefixed_items=()
 	for item_type in "host" "union" "default"; do
@@ -625,7 +624,7 @@ do_setup_vultr() {
 	printf "%s" "$ssh_publickey" >>"${HOME_SSH["authorized_keys"]}"
 
 	{
-		printf "# Config template for SSH client\n"
+		printf "# Client's SSH template"
 		printf "Host %s\n" "$HOSTNAME"
 		printf "  HostName %s\n" "$(curl -fsSL https://api.ipify.org)"
 		printf "  Port %s\n" "$ssh_port"
@@ -716,7 +715,7 @@ main_() {
 		set_perm_item "" "${APP["_dir"]}"
 		set_perm_item "" "${APP["backups"]}"
 		set_perm_item "" "${APP["secret"]}"
-		printf "# Do NOT share with others!\n# DELETE this file, once you complete the process.\n\n" >>"${APP["secret"]}"
+		printf "# DELETE this file, once you complete the process.\n\n" >>"${APP["secret"]}"
 		printf "# Password for %s\n%s\n\n" "$INSTALL_USER" "$passwd" >>"${APP["secret"]}"
 
 		local run_cmd

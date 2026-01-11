@@ -6,8 +6,8 @@ set "FLAG=%~2"
 
 @REM Docker run configurations
 set "REPO_DIR=%~dp0.."
-set "DOCKERFILE=%REPO_DIR%\tests\Dockerfile.debian"
-set "IMAGE_NAME=dotfiles-debian"
+set "DOCKERFILE=%REPO_DIR%\tests\Dockerfile.ubuntu"
+set "IMAGE_NAME=dotfiles-ubuntu"
 set "IMAGE_TAG=latest"
 set "IMAGE=%IMAGE_NAME%:%IMAGE_TAG%"
 set "CONTAINER_NAME=%IMAGE_NAME%-container"
