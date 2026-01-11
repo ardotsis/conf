@@ -1,5 +1,5 @@
 param (
-    [string]$CommitMessage,
+    [string]$msg,
     [switch]$all = $false
 )
 
