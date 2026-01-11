@@ -11,3 +11,5 @@ alias lart="ls --color=auto -1Fcart"
 alias lrt="ls --color=auto -1Fcrt"
 alias lsr="ls --color=auto -lARFh"
 alias lsn="ls --color=auto -1"
+
+alias nv="nvim"

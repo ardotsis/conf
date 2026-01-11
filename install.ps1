@@ -8,11 +8,11 @@ $SymlinkDirPairs = @(
     # FORMAT : [Windows directory],  [Dotfiles directory]
 
     # VSCode
-    @("${Env:APPDATA}\Code\User", "$DotfilesRepoDir\dotfiles\hosts\_default\.config\Code\User"),
+    @("${Env:APPDATA}\Code\User", "$DotfilesRepoDir\linux\hosts\_default\.config\Code\User"),
     # PowerShell
-    @("${Env:USERPROFILE}\Documents\PowerShell", "$DotfilesRepoDir\dotfiles-win\config\PowerShell"),
+    @("${Env:USERPROFILE}\Documents\PowerShell", "$DotfilesRepoDir\win\config\PowerShell"),
     # NeoVim
-    @("${Env:LOCALAPPDATA}\nvim", "$DotfilesRepoDir\dotfiles\hosts\_default\.config\nvim")
+    @("${Env:LOCALAPPDATA}\nvim", "$DotfilesRepoDir\linux\hosts\_default\.config\nvim")
 
     # CAUTION: Do NOT forget to add a "comma (,)" for each array.
 )
@@ -46,7 +46,7 @@ function Test-Administrator {
 function main() {
     if (-not (Test-Administrator)) {
         Write-Output "Not running as Administrator. Restarting..."
-        $scriptPath = $MyInvocation.MyCommand.Definition
+        $scriptPath = $PSCommandPath
         Start-Process  -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File `"$scriptPath`"" -Verb RunAs
         exit 0
     }
@@ -63,3 +63,5 @@ function main() {
 }
 
 main
+
+pause

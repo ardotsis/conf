@@ -101,7 +101,7 @@ declare -r PASSWD_LENGTH=72
 
 declare -A DOTFILES_REPO
 DOTFILES_REPO["_dir"]="$HOME_DIR/$REPO_DIRNAME"
-DOTFILES_REPO["src"]="${DOTFILES_REPO["_dir"]}/dotfiles"
+DOTFILES_REPO["src"]="${DOTFILES_REPO["_dir"]}/linux"
 DOTFILES_REPO["hosts"]="${DOTFILES_REPO["src"]}/hosts"
 DOTFILES_REPO["default"]="${DOTFILES_REPO["hosts"]}/_default"
 DOTFILES_REPO["host"]="${DOTFILES_REPO["hosts"]}/$HOSTNAME"
@@ -340,6 +340,7 @@ remove_package() {
 	fi
 }
 
+# TODO: install manual package (function: nvim starship etc..)
 install_nvim() {
 	# TODO: Install globally (/etc/zshenv)
 	$SUDO rm -rf "/opt/nvim-linux-x86_64" # Clean up old items
@@ -598,12 +599,12 @@ do_setup_vultr() {
 	$SUDO sed -i "s/^Port [0-9]\+/Port $ssh_port/" "${OPENSSH_SERVER["sshd_config"]}"
 	$SUDO sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "${IPTABLES["rules_v4"]}"
 
-	# local zsh_plugins_dir="${HOME_LOCAL["share"]}/zsh/plugins"
-	# mkdir -p "$zsh_plugins_dir"
+	local zsh_plugins_dir="${HOME_LOCAL["share"]}/zsh/plugins"
+	mkdir -p "$zsh_plugins_dir"
 
 	# Zsh plugins
-	# git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "${zsh_plugins_dir}/zsh-autosuggestions"
-	# git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "${zsh_plugins_dir}/zsh-syntax-highlighting"
+	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "${zsh_plugins_dir}/zsh-autosuggestions"
+	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "${zsh_plugins_dir}/zsh-syntax-highlighting"
 
 	install_starship
 
@@ -710,7 +711,7 @@ main_() {
 		passwd="$(get_random_str $PASSWD_LENGTH)"
 		add_user "$INSTALL_USER" "$passwd"
 
-		# Create app directory
+		# Create dotfiles directory
 		set_perm_item "" "${APP["_dir"]}"
 		set_perm_item "" "${APP["backups"]}"
 		set_perm_item "" "${APP["secret"]}"
