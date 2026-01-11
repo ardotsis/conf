@@ -27,7 +27,7 @@ cd ~\.dotfiles
 
 ## Test
 
-### `install.sh` on Docker (Windows)
+### Test `install.sh` on Docker (Windows)
 
 ```powershell
 .\scripts\test_debian.bat "--host vultr --username kana --local --docker" --build
