@@ -1,6 +1,6 @@
 param (
     [string]$msg,
-    [switch]$all = $false
+    [switch]$main = $false
 )
 
 if (-not $msg) {
@@ -17,7 +17,7 @@ if (-not $?) {
 
 git push
 
-if ($all) {
+if ($main) {
     $branch = git branch --show-current
     if ($branch -ne "main") {
         git checkout main
