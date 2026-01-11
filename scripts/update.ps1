@@ -1,6 +1,6 @@
 param (
     [string]$CommitMessage,
-    [switch]$All = $false
+    [switch]$all = $false
 )
 
 if (-not $CommitMessage) {
