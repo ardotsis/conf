@@ -63,5 +63,4 @@ function main() {
 }
 
 main
-
-pause
+Pause

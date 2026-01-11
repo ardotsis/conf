@@ -556,6 +556,7 @@ do_setup_vultr() {
 		log_debug "New debug symlink: \"${LOG_CLR["path"]}${DOTFILES_REPO["_dir"]}${CLR["reset"]}\" -> \"${LOG_CLR["path"]}$DEV_REPO_DIR${CLR["reset"]}\""
 		ln -s "$DEV_REPO_DIR" "${DOTFILES_REPO["_dir"]}"
 	else
+
 		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DOTFILES_REPO["_dir"]}"
 	fi
 
@@ -715,7 +716,7 @@ main_() {
 		set_perm_item "" "${APP["_dir"]}"
 		set_perm_item "" "${APP["backups"]}"
 		set_perm_item "" "${APP["secret"]}"
-		printf "# Do NOT share with others!\n# Delete this file, once you complete the process.\n\n" >>"${APP["secret"]}"
+		printf "# Do NOT share with others!\n# DELETE this file, once you complete the process.\n\n" >>"${APP["secret"]}"
 		printf "# Password for %s\n%s\n\n" "$INSTALL_USER" "$passwd" >>"${APP["secret"]}"
 
 		local run_cmd

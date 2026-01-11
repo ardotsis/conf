@@ -14,6 +14,9 @@
 curl -fsSL get.ardotsis.com/df | bash -s -- -h vultr
 ```
 
+> [!NOTE]
+> After installation, check the `~/dotfiles-data/secret` file to configure the client's settings.
+
 ### `ardotsis@windows`
 
 ```batch
