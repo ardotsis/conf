@@ -17,8 +17,8 @@ curl -fsSL get.ardotsis.com/df | bash -s -- -h vultr
 ### `ardotsis@windows`
 
 ```batch
-git clone https://github.com/ardotsis/dotfiles "~\.dotfiles"
-cd "~\.dotfiles"
+git clone https://github.com/ardotsis/dotfiles ~\.dotfiles
+cd ~\.dotfiles
 .\install.sh
 ```
 

@@ -7,11 +7,8 @@ if (-not $msg) {
     $msg = "update: $((Get-Date).ToString("yyyy-MM-dd HH:mm:ss (zzz)"))"
 }
 
-Write-Host "Commit message: $msg"
-
 git fetch
 git merge
-
 git add -A
 git commit -m "$msg"
 if (-not $?) {
@@ -20,7 +17,7 @@ if (-not $?) {
 
 git push
 
-if ($All) {
+if ($all) {
     $branch = git branch --show-current
     if ($branch -ne "main") {
         git checkout main
