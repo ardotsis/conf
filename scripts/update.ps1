@@ -1,5 +1,6 @@
 param (
-    [string]$CommitMessage
+    [string]$CommitMessage,
+    [switch]$All
 )
 
 if (-not $CommitMessage) {
@@ -14,3 +15,7 @@ git merge
 git add -A
 git commit -m "$CommitMessage"
 git push
+
+if ($All) {
+    "llll"
+}

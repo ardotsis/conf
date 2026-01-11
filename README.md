@@ -103,6 +103,7 @@ curl -fsSL get.ardotsis.com/df | bash -s -- -h arch
   - [ ] automate install
 
 ```plaintext
-hey, ar.sis, it's ok! your isolated home is here.
-simple / minimal / pixel perfect / suckless / secure / free / reproducible / efficient / unique / kawaii / menhera
+to me: hey, ar.sis, it's ok! your isolated home is here.
+goal: simple / minimal / pixel perfect / suckless / secure / free / reproducible / efficient / unique / kawaii / menhera
+true taste: #FF7FAB
 ```
