@@ -682,7 +682,7 @@ main_() {
 
 	# Download script
 	if [[ -z "$SCRIPT_NAME" ]]; then
-		[[ -e "$TMP_INSTALL_SCRIPT_FILE" ]] && rm -f "$TMP_INSTALL_SCRIPT_FILE"
+		[[ -e "$TMP_INSTALL_SCRIPT_FILE" ]] && $SUDO rm -f "$TMP_INSTALL_SCRIPT_FILE"
 
 		if [[ "$IS_DEBUG" == "true" ]]; then
 			log_debug "Copy script from \"${CLR["yellow"]}${DEV_REPO_DIR}/install.sh${CLR["reset"]}\""
