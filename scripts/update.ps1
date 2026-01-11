@@ -4,7 +4,7 @@ param (
 )
 
 if (-not $CommitMessage) {
-    $CommitMessage = (Get-Date).ToString("update: yyyy-MM-dd HH:mm:ss (zzz)")
+    $CommitMessage = "update: $((Get-Date).ToString("yyyy-MM-dd HH:mm:ss (zzz)"))"
 }
 
 Write-Host "Commit message: $CommitMessage"
