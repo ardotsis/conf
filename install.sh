@@ -485,7 +485,7 @@ link() {
 		# shellcheck disable=SC2034
 		local default_items=("${all_default_items[@]}")
 	fi
-	log_vars "union_items[@]" "host_items[@]" "default_items[@]" # TODO: Error on Ubuntu
+	# log_vars "union_items[@]" "host_items[@]" "default_items[@]" # TODO Ubuntu:jammy -> line 237: !var_name: unbound variable
 
 	local item_type prefixed_items=()
 	for item_type in "host" "union" "default"; do
