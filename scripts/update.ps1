@@ -18,11 +18,11 @@ if (-not $?) {
 git push
 
 if ($main) {
-    $branch = git branch --show-current
-    if ($branch -ne "main") {
+    $currentBranch = git branch --show-current
+    if ($currentBranch -ne "main") {
         git checkout main
-        git merge dev
+        git merge $currentBranch
         git push
-        git checkout dev
+        git checkout $currentBranch
     }
 }
