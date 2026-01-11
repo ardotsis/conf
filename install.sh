@@ -327,6 +327,30 @@ install_package() {
 	fi
 }
 
+install_package_manually() {
+	local tgz_url="$1"
+	local dst_dir="$2"
+	local item_name="$3"
+	local owner="$4"
+	local group="$5"
+
+	local tmp_tgz_path
+	tmp_tgz_path="${TMP_DIR}/$(get_safe_random_str 16).tar.gz"
+
+	log_vars "tmp_tgz_path"
+
+	rm_() {
+		$SUDO rm -f "$tmp_tgz_path"
+	}
+	rm_
+
+	curl -fsSL "$tgz_url" -o "$tmp_tgz_path"
+	$SUDO tar -C "$dst_dir" -xzf "$tmp_tgz_path"
+	rm_
+
+	$SUDO chown -R "${owner}:${group}" "${dst_dir}/${item_name}"
+}
+
 remove_package() {
 	local pkg="$1"
 
@@ -336,24 +360,6 @@ remove_package() {
 		$SUDO apt-get autoremove -y
 		$SUDO apt-get clean
 	fi
-}
-
-# TODO: install manual package (function: nvim starship etc..)
-install_nvim() {
-	# TODO: Install globally (/etc/zshenv)
-	$SUDO rm -rf "/opt/nvim-linux-x86_64" # Clean up old items
-
-	local gz_path="${TMP_DIR}/vim-linux-x86_64.tar.gz"
-	curl -L "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz" -o "$gz_path"
-	$SUDO tar -C "/opt" -xzf "$gz_path"
-	$SUDO rm -f "$gz_path"
-}
-
-install_starship() {
-	local gz_path="${TMP_DIR}/starship-x86_64-unknown-linux-musl.tar.gz"
-	curl -L "https://github.com/starship/starship/releases/download/v1.24.2/starship-x86_64-unknown-linux-musl.tar.gz" -o "$gz_path"
-	$SUDO tar -C "/usr/local/bin" -xzf "$gz_path"
-	$SUDO rm -f "$gz_path"
 }
 
 add_user() {
@@ -412,6 +418,7 @@ set_perm_item() {
 	# Source: Internet file
 	if [[ "$template_uri" == "https://"* ]]; then
 		curl_file_path="$TMP_DIR/$(get_random_str 16)"
+		# TODO: curl command wrapper (-fsSL by default, -o option, sudo)
 		curl -fsSL "$template_uri" >"$curl_file_path"
 		install_cmd=("${install_cmd[@]}" "$curl_file_path" "$item_path")
 		is_curled="true"
@@ -558,7 +565,9 @@ do_setup_vultr() {
 		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DOTFILES_REPO["_dir"]}"
 	fi
 
-	install_nvim
+	# Install neovim
+	install_package_manually "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz" "/opt" "nvim-linux-x86_64" "root" "root"
+	install_package_manually "https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-musl.tar.gz" "/usr/local/bin" "starship" "root" "root"
 
 	log_info "Start linking dotfiles"
 	link "$HOME_DIR" "${DOTFILES_REPO["host"]}" "${DOTFILES_REPO["default"]}"
@@ -604,8 +613,6 @@ do_setup_vultr() {
 	# Zsh plugins
 	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "${zsh_plugins_dir}/zsh-autosuggestions"
 	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "${zsh_plugins_dir}/zsh-syntax-highlighting"
-
-	install_starship
 
 	if [[ "$IS_DOCKER" == "false" ]]; then
 		log_info "Executing Docker installation script.."
@@ -666,6 +673,8 @@ do_setup_vultr() {
 		log_info "Enable iptables-restore service"
 		$SUDO systemctl enable iptables-restore.service
 	fi
+
+	# TODO: ssh GIT (publish public key on http port??? )
 }
 
 do_setup_arch() {

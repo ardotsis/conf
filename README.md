@@ -30,6 +30,5 @@ cd ~\.dotfiles
 ### Test `install.sh` on Docker (Windows)
 
 ```powershell
-.\scripts\test_debian.bat "--host vultr --username kana --local --docker" --build
-.\scripts\test_debian.bat "--host vultr --username kana --local --docker" --cleanup
+.\scripts\test_debian.bat "--host vultr --debug --docker" --build
 ```
