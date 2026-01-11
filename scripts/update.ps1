@@ -25,6 +25,7 @@ if ($All) {
     if ($branch -ne "main") {
         git checkout main
         git merge dev
+        git push
         git checkout dev
     }
 }
