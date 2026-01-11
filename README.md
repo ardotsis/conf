@@ -16,15 +16,17 @@
 curl -fsSL get.ardotsis.com/df | bash -s -- -h vultr
 ```
 
-### Test `install.sh` on Docker (Windows)
+### `ardotsis@windows`
+
+```batch
+.\install.sh
+```
+
+## Test
+
+### `install.sh` on Docker (Windows)
 
 ```powershell
 .\scripts\test_debian.bat "--host vultr --username kana --local --docker" --build
 .\scripts\test_debian.bat "--host vultr --username kana --local --docker" --cleanup
-```
-
-### Windows
-
-```batch
-.\install.sh
 ```
