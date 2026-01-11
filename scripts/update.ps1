@@ -3,17 +3,17 @@ param (
     [switch]$all = $false
 )
 
-if (-not $CommitMessage) {
-    $CommitMessage = "update: $((Get-Date).ToString("yyyy-MM-dd HH:mm:ss (zzz)"))"
+if (-not $msg) {
+    $msg = "update: $((Get-Date).ToString("yyyy-MM-dd HH:mm:ss (zzz)"))"
 }
 
-Write-Host "Commit message: $CommitMessage"
+Write-Host "Commit message: $msg"
 
 git fetch
 git merge
 
 git add -A
-git commit -m "$CommitMessage"
+git commit -m "$msg"
 if (-not $?) {
     exit 1
 }
