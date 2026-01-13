@@ -1,6 +1,8 @@
 export LC_ALL="${LC_ALL:-C.UTF-8}"
 export LANG="${LANG:-C.UTF-8}"
 
+# TODO: XDG
+
 # ZSH's environment variables
 export ZDOTDIR="${HOME}/.config/zsh"
 # Own ZSH's environment variables

@@ -8,8 +8,6 @@ RUN apt-get update && \
     sudo \
     curl \
     git \
-    wget \
     zsh
 
-# Simulate run script via pipeline (curl)
 CMD ["bash", "-c", "cat $DOTFILES_VOLUME_DIR/install.sh | bash -s -- $INSTALL_SCRIPT_PARAMS"]

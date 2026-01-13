@@ -317,7 +317,6 @@ get_safe_random_str() {
 	local length="$1"
 	_get_random_str "$length" "A-Za-z0-9"
 }
-
 install_package() {
 	local pkg="$1"
 
@@ -325,6 +324,20 @@ install_package() {
 	if [[ "$OS" == "debian" ]]; then
 		$SUDO apt-get install -y --no-install-recommends "$pkg"
 	fi
+}
+
+get_tmp_curl_file() {
+	local url="$1"
+
+	local tmp_path
+	tmp_path="${TMP_DIR}/$(get_random_safe_str 16)"
+
+	curl -fsSL "$url" -o "$tmp_path"
+	printf "%s" "$tmp_path"
+}
+
+install_zoxide() {
+	get_tmp_curl_file "https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.8/zoxide-0.9.8-x86_64-unknown-linux-musl.tar.gz"
 }
 
 install_package_manually() {
@@ -440,7 +453,7 @@ set_perm_item() {
 	"${install_cmd[@]}"
 
 	if [[ $is_curled == "true" ]]; then
-		rm -rf "$curl_file_path"
+		rm -f "$curl_file_path"
 	fi
 }
 
@@ -568,6 +581,7 @@ do_setup_vultr() {
 	# Install neovim
 	install_package_manually "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz" "/opt" "nvim-linux-x86_64" "root" "root"
 	install_package_manually "https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-musl.tar.gz" "/usr/local/bin" "starship" "root" "root"
+	# install_package_manually "https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.8/zoxide-0.9.8-x86_64-unknown-linux-musl.tar.gz" "/usr/local/bin" "starship" "root" "root"
 
 	log_info "Start linking dotfiles"
 	link "$HOME_DIR" "${DOTFILES_REPO["host"]}" "${DOTFILES_REPO["default"]}"
