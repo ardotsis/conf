@@ -761,4 +761,10 @@ main_() {
 	log_debug "================ End $(clr "$CURRENT_USER ($session_id)" "${LOG_CLR["highlight"]}") session ================"
 }
 
-main_
+# main_
+
+testmain() {
+	install_zoxide
+	echo "keep container running..."
+	tail -f /dev/null
+}
