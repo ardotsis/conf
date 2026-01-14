@@ -98,22 +98,21 @@ declare -r DOCKER_VOLUME_DIR="/app"
 declare -r CUSTOM_SSH_PORT_FILE="/etc/CUSTOM_SSH_PORT"
 declare -r TMP_INSTALL_SCRIPT_FILE="$TMP_DIR/install_dotfiles.sh"
 
-declare -A DOTFILES_REPO
-DOTFILES_REPO["_dir"]="$HOME/.dotfiles"
-DOTFILES_REPO["linux_dir"]="${DOTFILES_REPO["_dir"]}/linux"
-DOTFILES_REPO["package_list"]="${DOTFILES_REPO["linux_dir"]}/packages.txt"
-DOTFILES_REPO["template_dir"]="${DOTFILES_REPO["linux_dir"]}/template"
-DOTFILES_REPO["hosts_dir"]="${DOTFILES_REPO["linux_dir"]}/hosts"
-DOTFILES_REPO["default_host"]="${DOTFILES_REPO["hosts_dir"]}/_default"
-DOTFILES_REPO["current_host"]="${DOTFILES_REPO["hosts_dir"]}/$HOSTNAME"
-declare -r DOTFILES_REPO
+declare -A DF_REPO
+DF_REPO["_dir"]="$HOME/.dotfiles"
+DF_REPO["linux_dir"]="${DF_REPO["_dir"]}/linux"
+DF_REPO["package_list"]="${DF_REPO["linux_dir"]}/packages.txt"
+DF_REPO["template_dir"]="${DF_REPO["linux_dir"]}/template"
+DF_REPO["hosts_dir"]="${DF_REPO["linux_dir"]}/hosts"
+DF_REPO["default_host"]="${DF_REPO["hosts_dir"]}/_default"
+DF_REPO["current_host"]="${DF_REPO["hosts_dir"]}/$HOSTNAME"
+declare -r DF_REPO
 
-declare -A DOTFILES_DATA
-DOTFILES_DATA["_dir"]="/etc/dotfiles-data"
-DOTFILES_DATA["secret"]="${DOTFILES_DATA["_dir"]}/log"
-DOTFILES_DATA["secret"]="${DOTFILES_DATA["_dir"]}/secret"
-DOTFILES_DATA["backups_dir"]="${DOTFILES_DATA["_dir"]}/backups"
-declare -A DOTFILES_DATA
+declare -A DF_DATA
+DF_DATA["_dir"]="/etc/dotfiles-data"
+DF_DATA["secret"]="${DF_DATA["_dir"]}/secret"
+DF_DATA["backups_dir"]="${DF_DATA["_dir"]}/backups"
+declare -A DF_DATA
 
 declare -Ar TEMPLATE=(
 	# Home
@@ -121,7 +120,7 @@ declare -Ar TEMPLATE=(
 	["$HOME/.ssh/config"]="f $INSTALL_USER $INSTALL_USER 0600"
 
 	# dotfiles-data
-	["${DOTFILES_DATA["secret"]}"]="f $INSTALL_USER $INSTALL_USER 0600"
+	["${DF_DATA["secret"]}"]="f $INSTALL_USER $INSTALL_USER 0600"
 
 	# openssh-server
 	["/etc/ssh"]="d root root 0755"
@@ -347,8 +346,6 @@ build_home() {
 	local username="$1"
 
 	local home_dir="/home/$username"
-
-	# XDG directories
 	$SUDO mkdir -p "$home_dir"/{.cache,.config,.local,.ssh}
 	$SUDO mkdir "$home_dir/.local"/{bin,share,state}
 	$SUDO mkdir "$home_dir/.local/share/"{zsh,man}
@@ -377,7 +374,7 @@ backup_item() {
 	parent_dir="$(dirname "$item_path")"
 	basename="$(basename "$item_path")"
 	timestamp="$(date "+%Y-%m-%d_%H-%M-%S")"
-	dst="${DOTFILES_DATA["backups_dir"]}/${basename}.${timestamp}.tgz"
+	dst="${DF_DATA["backups_dir"]}/${basename}.${timestamp}.tgz"
 
 	log_info "Create backup: $(clr "$dst" "${LOG_CLR["path"]}" "true")"
 	$SUDO tar czvf "$dst" -C "$parent_dir" "$basename"
@@ -532,31 +529,33 @@ link() {
 #                   Installers                   #
 ##################################################
 setup_system() {
-	# Install Neovim
 	install_nvim
 
-	# Override network configuration
+	# Generate random SSH port
 	local ssh_port
 	ssh_port="$((1024 + RANDOM % (65535 - 1024 + 1)))"
-
 	$SUDO install -m 0755 -o "root" -g "root" "/dev/null" "$CUSTOM_SSH_PORT_FILE"
 	printf "%s" "$ssh_port" | $SUDO tee "$CUSTOM_SSH_PORT_FILE"
 
-	install_template "" "/etc/ssh"
-	install_template "${DOTFILES_REPO["template_dir"]}/openssh-server/sshd_config" "/etc/ssh/sshd_config"
-	$SUDO sed -i "s/^Port [0-9]\+/Port $ssh_port/" "/etc/ssh/sshd_config" # TODO: warn: depends on template file
+	# openssh-server
+	[[ -e "/etc/ssh" ]] && $SUDO rm -rf "/etc/ssh"
+	$SUDO install -m 0755 -o "root" -g "root" "/etc/ssh" -d
+	$SUDO install -m 0600 -o "root" -g "root" "${DF_REPO["template_dir"]}/openssh-server/sshd_config" "/etc/ssh/sshd_config"
+	$SUDO sed -i "s/^Port [0-9]\+/Port $ssh_port/" "/etc/ssh/sshd_config"
 
 	# iptables
-	install_template "" "/etc/iptables"
-	install_template "${DOTFILES_REPO["template"]}/iptables/rules.v4" "/etc/iptables/rules.v4"
-	install_template "${DOTFILES_REPO["template"]}/iptables/rules.v6" "/etc/iptables/rules.v6"
-	install_template "${DOTFILES_REPO["template"]}/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
-	$SUDO sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "/etc/iptables/rules.v4" # TODO: warn: depends on template file
+	[[ -e "/etc/iptables" ]] && $SUDO rm -rf "/etc/iptables"
+	$SUDO install -m 0755 -o "root" -g "root" "/etc/iptables" -d
+	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template"]}/iptables/rules.v4" "/etc/iptables/rules.v4"
+	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template"]}/iptables/rules.v6" "/etc/iptables/rules.v6"
+	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template"]}/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
+	$SUDO sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "/etc/iptables/rules.v4"
 
-	# Reload services
 	if [[ "$IS_DOCKER" == "false" ]]; then
+		# Reload sshd config
 		log_info "Restart sshd service"
 		$SUDO systemctl restart sshd
+		# Enable iptables-restore.service
 		log_info "Reload systemctl daemon"
 		$SUDO systemctl daemon-reload
 		log_info "Enable iptables-restore service"
@@ -570,7 +569,7 @@ _setup_vultr() {
 		if ! is_cmd_exist "$pkg"; then
 			install_package "$pkg"
 		fi
-	done <"${DOTFILES_REPO["package_list"]}"
+	done <"${DF_REPO["package_list"]}"
 
 	if is_cmd_exist ufw; then
 		log_info "Uninstall UFW"
@@ -580,14 +579,14 @@ _setup_vultr() {
 
 	log_info "Start SSH setup"
 	local ssh_dir="$HOME/.ssh"
-	install_template "" "$ssh_dir/authorized_keys"
-	install_template "" "$ssh_dir/config"
+	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/authorized_keys"
+	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/config"
 
 	if [[ "$IS_DEBUG" == "true" ]]; then
-		log_debug "New debug symlink: \"${LOG_CLR["path"]}${DOTFILES_REPO["_dir"]}${CLR["reset"]}\" -> \"${LOG_CLR["path"]}$DOCKER_VOLUME_DIR${CLR["reset"]}\""
-		ln -s "$DOCKER_VOLUME_DIR" "${DOTFILES_REPO["_dir"]}"
+		log_debug "New debug symlink: \"${LOG_CLR["path"]}${DF_REPO["_dir"]}${CLR["reset"]}\" -> \"${LOG_CLR["path"]}$DOCKER_VOLUME_DIR${CLR["reset"]}\""
+		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
 	else
-		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DOTFILES_REPO["_dir"]}"
+		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
 	fi
 
 	# # Install neovim
@@ -595,7 +594,7 @@ _setup_vultr() {
 	# # install_package_manually "https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-musl.tar.gz" "/usr/local/bin" "starship" "root" "root"
 	# # install_package_manually "https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.8/zoxide-0.9.8-x86_64-unknown-linux-musl.tar.gz" "/usr/local/bin" "starship" "root" "root"
 	# log_info "Start linking dotfiles"
-	# link "$HOME" "${DOTFILES_REPO["current_host"]}" "${DOTFILES_REPO["default_host"]}"
+	# link "$HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
 
 	# Zsh plugins
 	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$Z_SHARE_DIR/zsh-autosuggestions"
@@ -624,7 +623,7 @@ _setup_vultr() {
 		printf "  IdentityFile ~/.ssh/%s\n" "$HOSTNAME"
 		printf "  IdentitiesOnly yes\n"
 		printf "\n"
-	} >>"${DOTFILES_DATA["secret"]}"
+	} >>"${DF_DATA["secret"]}"
 
 	### This Host -> Git
 	local ssh_git_passphrase
@@ -636,7 +635,7 @@ _setup_vultr() {
 		printf "# SSH public key for Git\n"
 		cat "$ssh_dir/${git_filename}.pub"
 		printf "\n"
-	} >>"${DOTFILES_DATA["secret"]}"
+	} >>"${DF_DATA["secret"]}"
 
 	{
 		printf "Host git\n"
@@ -669,10 +668,11 @@ main_() {
 
 		if [[ "$IS_DEBUG" == "true" ]]; then
 			log_debug "Copy script from \"${CLR["yellow"]}${DOCKER_VOLUME_DIR}/install.sh${CLR["reset"]}\""
-			install_template "$DOCKER_VOLUME_DIR/install.sh" "$TMP_INSTALL_SCRIPT_FILE"
+			$SUDO install -m 0755 -o root -g root "${DOCKER_VOLUME_DIR}/install.sh" "$TMP_INSTALL_SCRIPT_FILE"
 		else
 			log_debug "Download script from ${CLR["yellow"]}${URL["dotfiles_install_script"]}${CLR["reset"]}"
-			install_template "${URL["dotfiles_install_script"]}" "$TMP_INSTALL_SCRIPT_FILE"
+			curl-fsSL "${URL["dotfiles_install_script"]}" -o "$TMP_INSTALL_SCRIPT_FILE"
+			chmod 755 "$TMP_INSTALL_SCRIPT_FILE" && chown root:root $TMP_INSTALL_SCRIPT_FILE
 		fi
 
 		get_script_run_cmd "$TMP_INSTALL_SCRIPT_FILE" "run_cmd"
@@ -700,10 +700,11 @@ main_() {
 		passwd="$(get_random_str $PASSWD_LENGTH)"
 		add_user "$INSTALL_USER" "$passwd"
 
-		# Create dotfiles directory
-		install_template "" "${DOTFILES_DATA["secret"]}"
-		printf "# DELETE this file, once you complete the process.\n\n" >>"${DOTFILES_DATA["secret"]}"
-		printf "# Password for %s\n%s\n\n" "$INSTALL_USER" "$passwd" >>"${DOTFILES_DATA["secret"]}"
+		# Create "~/dotfiles-data"
+		$SUDO install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "${DF_DATA["_dir"]}" -d
+		$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "${DF_DATA["secret"]}"
+		printf "# DELETE this file, once you complete the process.\n\n" >>"${DF_DATA["secret"]}"
+		printf "# Password (%s)\n%s\n\n" "$INSTALL_USER" "$passwd" >>"${DF_DATA["secret"]}"
 
 		local run_cmd
 		get_script_run_cmd "$(get_script_path)" "run_cmd"
