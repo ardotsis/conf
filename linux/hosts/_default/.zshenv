@@ -1,12 +1,10 @@
 export LC_ALL="${LC_ALL:-C.UTF-8}"
 export LANG="${LANG:-C.UTF-8}"
 
-# TODO: XDG
+# TODO: set XDG
 
 # ZSH's environment variables
-export ZDOTDIR="${HOME}/.config/zsh"
-# Own ZSH's environment variables
-export ZHOMEDIR="${HOME}/.config/zsh"
-export ZSHAREDIR="${HOME}/.local/share/zsh"
-export ZPLUGINDIR="${ZSHAREDIR}/plugins"
-export ZRCDIR="${ZHOMEDIR}/rc"
+export ZDOTDIR="$HOME/.config/zsh"
+# Custom ZSH environment variables
+export Z_SHARE_DIR="$HOME/.local/share/zsh"
+export Z_RC_DIR="$ZDOTDIR/rc"

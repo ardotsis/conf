@@ -1,3 +1,4 @@
+curl
 git
-wget
 zsh
+man

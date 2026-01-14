@@ -8,6 +8,7 @@ RUN apt-get update && \
     sudo \
     curl \
     git \
+    man \
     zsh
 
 # Simulate run script via pipeline (curl)

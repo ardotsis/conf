@@ -70,7 +70,6 @@ get_arg() {
 	printf %s "${_PARAMS[$name]}"
 }
 
-# Parameters
 HOSTNAME=$(get_arg "host")
 declare -r HOSTNAME
 INSTALL_USER=$(get_arg "username")
@@ -80,15 +79,8 @@ declare -r IS_DOCKER
 IS_DEBUG=$(get_arg "debug")
 declare -r IS_DEBUG
 CURRENT_USER="$(whoami)"
-declare -r CURRENT_USER
 
-# Global variables
-declare -r SCRIPT_NAME="${BASH_SOURCE[0]+x}"
-declare -r HOME_DIR="/home/$INSTALL_USER"
-declare -r TMP_DIR="/var/tmp"
-declare -r REPO_DIRNAME=".dotfiles"
-declare -r DEV_REPO_DIR="$TMP_DIR/${REPO_DIRNAME}_docker"
-declare -r TMP_INSTALL_SCRIPT_FILE="$TMP_DIR/install_dotfiles.sh"
+declare -r CURRENT_USER
 declare -r GIT_REMOTE_BRANCH="main"
 declare -r HOST_PREFIX="${HOSTNAME^^}##"
 declare -Ar HOST_OS=(
@@ -98,72 +90,52 @@ declare -Ar HOST_OS=(
 )
 declare -r OS="${HOST_OS["$HOSTNAME"]}"
 declare -r PASSWD_LENGTH=72
+declare -r SCRIPT_NAME="${BASH_SOURCE[0]+x}"
+
+declare -r HOME="/home/$INSTALL_USER" # Override $HOME
+declare -r TMP_DIR="/var/tmp"
+declare -r DOCKER_VOLUME_DIR="/app"
+declare -r CUSTOM_SSH_PORT_FILE="/etc/CUSTOM_SSH_PORT"
+declare -r TMP_INSTALL_SCRIPT_FILE="$TMP_DIR/install_dotfiles.sh"
 
 declare -A DOTFILES_REPO
-DOTFILES_REPO["_dir"]="$HOME_DIR/$REPO_DIRNAME"
-DOTFILES_REPO["src"]="${DOTFILES_REPO["_dir"]}/linux"
-DOTFILES_REPO["hosts"]="${DOTFILES_REPO["src"]}/hosts"
-DOTFILES_REPO["default"]="${DOTFILES_REPO["hosts"]}/_default"
-DOTFILES_REPO["host"]="${DOTFILES_REPO["hosts"]}/$HOSTNAME"
-DOTFILES_REPO["packages"]="${DOTFILES_REPO["src"]}/packages.txt"
-DOTFILES_REPO["template"]="${DOTFILES_REPO["src"]}/template"
+DOTFILES_REPO["_dir"]="$HOME/.dotfiles"
+DOTFILES_REPO["linux_dir"]="${DOTFILES_REPO["_dir"]}/linux"
+DOTFILES_REPO["package_list"]="${DOTFILES_REPO["linux_dir"]}/packages.txt"
+DOTFILES_REPO["template_dir"]="${DOTFILES_REPO["linux_dir"]}/template"
+DOTFILES_REPO["hosts_dir"]="${DOTFILES_REPO["linux_dir"]}/hosts"
+DOTFILES_REPO["default_host"]="${DOTFILES_REPO["hosts_dir"]}/_default"
+DOTFILES_REPO["current_host"]="${DOTFILES_REPO["hosts_dir"]}/$HOSTNAME"
 declare -r DOTFILES_REPO
 
-declare -A APP
-APP["_dir"]="$HOME_DIR/dotfiles-data"
-APP["log"]="${APP["_dir"]}/log"
-APP["secret"]="${APP["_dir"]}/secret"
-APP["backups"]="${APP["_dir"]}/backups"
-declare -A APP
+declare -A DOTFILES_DATA
+DOTFILES_DATA["_dir"]="/etc/dotfiles-data"
+DOTFILES_DATA["secret"]="${DOTFILES_DATA["_dir"]}/log"
+DOTFILES_DATA["secret"]="${DOTFILES_DATA["_dir"]}/secret"
+DOTFILES_DATA["backups_dir"]="${DOTFILES_DATA["_dir"]}/backups"
+declare -A DOTFILES_DATA
 
-declare -A HOME_SSH
-HOME_SSH["_dir"]="$HOME_DIR/.ssh"
-HOME_SSH["authorized_keys"]="${HOME_SSH["_dir"]}/authorized_keys"
-HOME_SSH["config"]="${HOME_SSH["_dir"]}/config"
-declare -r HOME_SSH
+declare -Ar TEMPLATE=(
+	# Home
+	["$HOME/.ssh/authorized_keys"]="f $INSTALL_USER $INSTALL_USER 0600"
+	["$HOME/.ssh/config"]="f $INSTALL_USER $INSTALL_USER 0600"
 
-declare -A HOME_LOCAL
-HOME_LOCAL["_dir"]="$HOME_DIR/.local"
-HOME_LOCAL["share"]="${HOME_LOCAL["_dir"]}/share"
-HOME_LOCAL["state"]="${HOME_LOCAL["_dir"]}/state"
-declare -r HOME_LOCAL
+	# dotfiles-data
+	["${DOTFILES_DATA["secret"]}"]="f $INSTALL_USER $INSTALL_USER 0600"
 
-declare -A OPENSSH_SERVER
-OPENSSH_SERVER["etc"]="/etc/ssh"
-OPENSSH_SERVER["sshd_config"]="${OPENSSH_SERVER["etc"]}/sshd_config"
-declare -r OPENSSH_SERVER
+	# openssh-server
+	["/etc/ssh"]="d root root 0755"
+	["/etc/ssh/sshd_config"]="f root root 0600"
 
-declare -A IPTABLES
-IPTABLES["etc"]="/etc/iptables"
-IPTABLES["rules_v4"]="${IPTABLES["etc"]}/rules.v4"
-IPTABLES["rules_v6"]="${IPTABLES["etc"]}/rules.v6"
-IPTABLES["service"]="/etc/systemd/system/iptables-restore.service"
-declare -r IPTABLES
+	# iptables
+	["/etc/iptables"]="d root root 0755"
+	["/etc/iptables/rules.v4"]="f root root 0644"
+	["/etc/iptables/rules.v6"]="f root root 0644"
+	["/etc/systemd/system/iptables-restore.service"]="f root root 0644"
 
-declare -Ar PERMISSION=(
-	["$HOME_DIR"]="d $INSTALL_USER $INSTALL_USER 0700"
+	# Other
 	["$TMP_INSTALL_SCRIPT_FILE"]="f root root 0755"
-
-	["${APP["_dir"]}"]="d $INSTALL_USER $INSTALL_USER 0700"
-	["${APP["log"]}"]="f $INSTALL_USER $INSTALL_USER 0600"
-	["${APP["secret"]}"]="f $INSTALL_USER $INSTALL_USER 0600"
-	["${APP["backups"]}"]="d $INSTALL_USER $INSTALL_USER 0700"
-
-	["${HOME_SSH["_dir"]}"]="d $INSTALL_USER $INSTALL_USER 0700"
-	["${HOME_SSH["authorized_keys"]}"]="f $INSTALL_USER $INSTALL_USER 0600"
-	["${HOME_SSH["config"]}"]="f $INSTALL_USER $INSTALL_USER 0600"
-
-	["${HOME_LOCAL["_dir"]}"]="d $INSTALL_USER $INSTALL_USER 0700"
-	["${HOME_LOCAL["share"]}"]="d $INSTALL_USER $INSTALL_USER 0700"
-	["${HOME_LOCAL["state"]}"]="d $INSTALL_USER $INSTALL_USER 0700"
-
-	["${OPENSSH_SERVER["etc"]}"]="d root root 0755"
-	["${OPENSSH_SERVER["sshd_config"]}"]="f root root 0600"
-
-	["${IPTABLES["etc"]}"]="d root root 0755"
-	["${IPTABLES["rules_v4"]}"]="f root root 0644"
-	["${IPTABLES["rules_v6"]}"]="f root root 0644"
-	["${IPTABLES["service"]}"]="f root root 0644"
+	["$CUSTOM_SSH_PORT_FILE"]="f root root 0755"
 )
 
 declare -Ar URL=(
@@ -201,7 +173,7 @@ else
 fi
 
 ##################################################
-#                Common Functions                #
+#                 Pure Functions                 #
 ##################################################
 _log() {
 	local level="$1"
@@ -317,6 +289,7 @@ get_safe_random_str() {
 	local length="$1"
 	_get_random_str "$length" "A-Za-z0-9"
 }
+
 install_package() {
 	local pkg="$1"
 
@@ -330,38 +303,33 @@ get_tmp_curl_file() {
 	local url="$1"
 
 	local tmp_path
-	tmp_path="${TMP_DIR}/$(get_random_safe_str 16)"
+	tmp_path="${TMP_DIR}/$(get_safe_random_str 16)"
 
 	curl -fsSL "$url" -o "$tmp_path"
 	printf "%s" "$tmp_path"
 }
 
-install_zoxide() {
-	get_tmp_curl_file "https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.8/zoxide-0.9.8-x86_64-unknown-linux-musl.tar.gz"
+install_nvim() {
+	local tgz_path
+	tgz_path=$(get_tmp_curl_file "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz")
+	$SUDO tar -C "/opt" -xzf "$tgz_path"
+	$SUDO rm -rf "$tgz_path"
 }
 
-install_package_manually() {
-	local tgz_url="$1"
-	local dst_dir="$2"
-	local item_name="$3"
-	local owner="$4"
-	local group="$5"
+install_zoxide() {
+	local username="$1"
 
-	local tmp_tgz_path
-	tmp_tgz_path="${TMP_DIR}/$(get_safe_random_str 16).tar.gz"
+	local home_dir="/home/$username"
 
-	log_vars "tmp_tgz_path"
-
-	rm_() {
-		$SUDO rm -f "$tmp_tgz_path"
-	}
-	rm_
-
-	curl -fsSL "$tgz_url" -o "$tmp_tgz_path"
-	$SUDO tar -C "$dst_dir" -xzf "$tmp_tgz_path"
-	rm_
-
-	$SUDO chown -R "${owner}:${group}" "${dst_dir}/${item_name}"
+	local tgz_path
+	tgz_path=$(get_tmp_curl_file "https://github.com/ajeetdsouza/zoxide/releases/latest/download/zoxide-0.9.8-x86_64-unknown-linux-musl.tar.gz")
+	local tmp_dir="$TMP_DIR/zoxide"
+	$SUDO mkdir $tmp_dir
+	$SUDO tar -C "$tmp_dir" -xzf "$tgz_path"
+	$SUDO cp -R "$tmp_dir/man/man1" "$home_dir/.local/share/man"
+	$SUDO chown -R "$username:$username" "$home_dir/.local/share/man"
+	$SUDO mv "$tmp_dir/zoxide" "$home_dir/.local/bin"
+	$SUDO rm -rf "$tmp_dir" "$tgz_path"
 }
 
 remove_package() {
@@ -375,21 +343,30 @@ remove_package() {
 	fi
 }
 
+build_home() {
+	local username="$1"
+
+	local home_dir="/home/$username"
+
+	# XDG directories
+	$SUDO mkdir -p "$home_dir"/{.cache,.config,.local,.ssh}
+	$SUDO mkdir "$home_dir/.local"/{bin,share,state}
+	$SUDO mkdir "$home_dir/.local/share/"{zsh,man}
+
+	$SUDO chown -R "$username:$username" "$home_dir"
+	$SUDO chmod -R 700 "$home_dir"
+}
+
 add_user() {
 	local username="$1"
 	local passwd="$2"
 
 	if [[ "$OS" == "debian" ]]; then
 		$SUDO useradd -s "/bin/zsh" -G "sudo" "$username"
-		# Set password
 		printf "%s:%s" "$username" "$passwd" | $SUDO chpasswd
 		# Allow "sudo" command without password
-		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" | sudo tee "/etc/sudoers.d/$username"
-		# Build home directory
-		set_perm_item "" "$HOME_DIR"
-		set_perm_item "" "${HOME_LOCAL["_dir"]}"
-		set_perm_item "" "${HOME_LOCAL["share"]}"
-		set_perm_item "" "${HOME_LOCAL["state"]}"
+		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" | $SUDO tee "/etc/sudoers.d/$username"
+		build_home "$username"
 	fi
 }
 
@@ -400,60 +377,49 @@ backup_item() {
 	parent_dir="$(dirname "$item_path")"
 	basename="$(basename "$item_path")"
 	timestamp="$(date "+%Y-%m-%d_%H-%M-%S")"
-	dst="${APP["backups"]}/${basename}.${timestamp}.tgz"
+	dst="${DOTFILES_DATA["backups_dir"]}/${basename}.${timestamp}.tgz"
 
 	log_info "Create backup: $(clr "$dst" "${LOG_CLR["path"]}" "true")"
 	$SUDO tar czvf "$dst" -C "$parent_dir" "$basename"
 }
 
-set_perm_item() {
-	local template_uri="$1"
-	local item_path="$2"
+install_template() {
+	local template_uri="${1:-/dev/null}"
+	local dst_path="$2"
 
-	read -r -a perm <<<"${PERMISSION[$item_path]}" # TODO: Don't use 'read'
+	read -r -a perm <<<"${TEMPLATE[$dst_path]}"
 	local type="${perm[0]}"
 	local group="${perm[1]}"
 	local user="${perm[2]}"
 	local num="${perm[3]}"
 
-	local is_curled="false"
 	local install_cmd=("install" "-m" "$num" "-o" "$user" "-g" "$group")
-
 	if [[ -n "$SUDO" ]]; then
 		install_cmd=("$SUDO" "${install_cmd[@]}")
 	fi
 
-	if [[ -e "$item_path" ]]; then
-		backup_item "$item_path"
-		$SUDO rm -rf "$item_path"
+	if [[ -e "$dst_path" ]]; then
+		backup_item "$dst_path"
+		$SUDO rm -rf "$dst_path"
 	fi
 
-	# Source: Internet file
+	local tmp_path=""
 	if [[ "$template_uri" == "https://"* ]]; then
-		curl_file_path="$TMP_DIR/$(get_random_str 16)"
-		# TODO: curl command wrapper (-fsSL by default, -o option, sudo)
-		curl -fsSL "$template_uri" >"$curl_file_path"
-		install_cmd=("${install_cmd[@]}" "$curl_file_path" "$item_path")
-		is_curled="true"
-	# Source: Local file
+		tmp_path="$(get_tmp_curl_file "$template_uri")"
+		install_cmd=("${install_cmd[@]}" "$tmp_path" "$dst_path")
 	else
 		if [[ "$type" == "f" ]]; then
-			if [[ -n "$template_uri" ]]; then
-				install_cmd=("${install_cmd[@]}" "$template_uri" "$item_path")
-			else
-				install_cmd=("${install_cmd[@]}" "/dev/null" "$item_path")
-			fi
+			install_cmd=("${install_cmd[@]}" "$template_uri" "$dst_path")
 		elif [[ "$type" == "d" ]]; then
-			install_cmd=("${install_cmd[@]}" "$item_path" "-d")
+			install_cmd=("${install_cmd[@]}" "$dst_path" "-d")
 		fi
 	fi
 
-	# Execute "install" command
-	log_info "Create item: \"${LOG_CLR["path"]}$item_path${CLR["reset"]}\" (template=\"${LOG_CLR["path"]}$template_uri${CLR["reset"]}\" owner=$user, group=$group, mode=$num)"
+	log_info "Create item: \"${LOG_CLR["path"]}$dst_path${CLR["reset"]}\" (template=\"${LOG_CLR["path"]}$template_uri${CLR["reset"]}\" owner=$user, group=$group, mode=$num)"
 	"${install_cmd[@]}"
 
-	if [[ $is_curled == "true" ]]; then
-		rm -f "$curl_file_path"
+	if [[ -n "$tmp_path" ]]; then
+		rm -f "$tmp_path"
 	fi
 }
 
@@ -565,118 +531,27 @@ link() {
 ##################################################
 #                   Installers                   #
 ##################################################
-do_setup_vultr() {
-	if ! is_cmd_exist git; then
-		install_package "git"
-	fi
+setup_system() {
+	# Install Neovim
+	install_nvim
 
-	if [[ "$IS_DEBUG" == "true" ]]; then
-		log_debug "New debug symlink: \"${LOG_CLR["path"]}${DOTFILES_REPO["_dir"]}${CLR["reset"]}\" -> \"${LOG_CLR["path"]}$DEV_REPO_DIR${CLR["reset"]}\""
-		ln -s "$DEV_REPO_DIR" "${DOTFILES_REPO["_dir"]}"
-	else
+	# Override network configuration
+	local ssh_port
+	ssh_port="$((1024 + RANDOM % (65535 - 1024 + 1)))"
 
-		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DOTFILES_REPO["_dir"]}"
-	fi
+	$SUDO install -m 0755 -o "root" -g "root" "/dev/null" "$CUSTOM_SSH_PORT_FILE"
+	printf "%s" "$ssh_port" | $SUDO tee "$CUSTOM_SSH_PORT_FILE"
 
-	# Install neovim
-	install_package_manually "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz" "/opt" "nvim-linux-x86_64" "root" "root"
-	install_package_manually "https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-musl.tar.gz" "/usr/local/bin" "starship" "root" "root"
-	# install_package_manually "https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.8/zoxide-0.9.8-x86_64-unknown-linux-musl.tar.gz" "/usr/local/bin" "starship" "root" "root"
+	install_template "" "/etc/ssh"
+	install_template "${DOTFILES_REPO["template_dir"]}/openssh-server/sshd_config" "/etc/ssh/sshd_config"
+	$SUDO sed -i "s/^Port [0-9]\+/Port $ssh_port/" "/etc/ssh/sshd_config" # TODO: warn: depends on template file
 
-	log_info "Start linking dotfiles"
-	link "$HOME_DIR" "${DOTFILES_REPO["host"]}" "${DOTFILES_REPO["default"]}"
-
-	log_info "Install packages"
-	while read -r pkg; do
-		if ! is_cmd_exist "$pkg"; then
-			install_package "$pkg"
-		fi
-	done <"${DOTFILES_REPO["packages"]}"
-
-	# Uninstall UFW
-	if is_cmd_exist ufw; then
-		log_info "Uninstall UFW"
-		$SUDO ufw disable
-		remove_package "ufw"
-	fi
-
-	set_perm_item "" "${HOME_SSH["_dir"]}"
-
-	# Install files / directories
-	# SSH
-	set_perm_item "" "${HOME_SSH["_dir"]}"
-	set_perm_item "" "${HOME_SSH["authorized_keys"]}"
-	set_perm_item "" "${HOME_SSH["config"]}"
-	# openssh-server
-	set_perm_item "${DOTFILES_REPO["template"]}/openssh-server/sshd_config" "${OPENSSH_SERVER["sshd_config"]}"
 	# iptables
-	local tmpl_iptables="${DOTFILES_REPO["template"]}/iptables"
-	set_perm_item "" "${IPTABLES["etc"]}"
-	set_perm_item "$tmpl_iptables/rules.v4" "${IPTABLES["rules_v4"]}"
-	set_perm_item "$tmpl_iptables/rules.v6" "${IPTABLES["rules_v6"]}"
-	set_perm_item "$tmpl_iptables/iptables-restore.service" "${IPTABLES["service"]}"
-
-	# Change SSH port
-	local ssh_port="$((1024 + RANDOM % (65535 - 1024 + 1)))"
-	$SUDO sed -i "s/^Port [0-9]\+/Port $ssh_port/" "${OPENSSH_SERVER["sshd_config"]}"
-	$SUDO sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "${IPTABLES["rules_v4"]}"
-
-	local zsh_plugins_dir="${HOME_LOCAL["share"]}/zsh/plugins"
-	mkdir -p "$zsh_plugins_dir"
-
-	# Zsh plugins
-	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "${zsh_plugins_dir}/zsh-autosuggestions"
-	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "${zsh_plugins_dir}/zsh-syntax-highlighting"
-
-	if [[ "$IS_DOCKER" == "false" ]]; then
-		log_info "Executing Docker installation script.."
-		sh -c "$(curl -fsSL https://get.docker.com)"
-	fi
-
-	# Prepare SSH config for "client" and "Git"
-	# [ Client ] --> [ This Host ]
-	local ssh_publickey
-	if [[ "$IS_DEBUG" == "true" ]]; then
-		ssh_publickey="some_ssh_publickey"
-	else
-		read -r -p "Paste SSH public key: " ssh_publickey </dev/tty
-	fi
-	printf "%s" "$ssh_publickey" >>"${HOME_SSH["authorized_keys"]}"
-
-	{
-		printf "# Client's SSH template"
-		printf "Host %s\n" "$HOSTNAME"
-		printf "  HostName %s\n" "$(curl -fsSL https://api.ipify.org)"
-		printf "  Port %s\n" "$ssh_port"
-		printf "  User %s\n" "$INSTALL_USER"
-		printf "  IdentityFile ~/.ssh/%s\n" "$HOSTNAME"
-		printf "  IdentitiesOnly yes\n"
-		printf "\n"
-	} >>"${APP["secret"]}"
-
-	# [ This Host ] --> [ Git ]
-	local ssh_git_passphrase
-	ssh_git_passphrase="$(get_random_str $PASSWD_LENGTH)"
-	local git_filename="git"
-	ssh-keygen -t ed25519 -b 4096 -f "${HOME_SSH["_dir"]}/$git_filename" -N "$ssh_git_passphrase"
-
-	{
-		printf "# SSH passphrase for Git\n%s\n\n" "$ssh_git_passphrase"
-		printf "# SSH public key for Git\n"
-		cat "${HOME_SSH["_dir"]}/${git_filename}.pub"
-		printf "\n"
-	} >>"${APP["secret"]}"
-
-	{
-		printf "Host git\n"
-		printf "  HostName github.com\n"
-		printf "  User git\n"
-		printf "  IdentityFile ~/.ssh/%s\n" "$git_filename"
-		printf "  IdentitiesOnly yes\n"
-		printf "\n"
-	} >>"${HOME_SSH["config"]}"
-
-	rm -f "${HOME_SSH["_dir"]}/${git_filename}.pub"
+	install_template "" "/etc/iptables"
+	install_template "${DOTFILES_REPO["template"]}/iptables/rules.v4" "/etc/iptables/rules.v4"
+	install_template "${DOTFILES_REPO["template"]}/iptables/rules.v6" "/etc/iptables/rules.v6"
+	install_template "${DOTFILES_REPO["template"]}/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
+	$SUDO sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "/etc/iptables/rules.v4" # TODO: warn: depends on template file
 
 	# Reload services
 	if [[ "$IS_DOCKER" == "false" ]]; then
@@ -687,17 +562,101 @@ do_setup_vultr() {
 		log_info "Enable iptables-restore service"
 		$SUDO systemctl enable iptables-restore.service
 	fi
-
-	# TODO: ssh GIT (publish public key on http port??? )
 }
 
-do_setup_arch() {
+_setup_vultr() {
+	log_info "Start package installation"
+	while read -r pkg; do
+		if ! is_cmd_exist "$pkg"; then
+			install_package "$pkg"
+		fi
+	done <"${DOTFILES_REPO["package_list"]}"
+
+	if is_cmd_exist ufw; then
+		log_info "Uninstall UFW"
+		$SUDO ufw disable
+		remove_package "ufw"
+	fi
+
+	log_info "Start SSH setup"
+	local ssh_dir="$HOME/.ssh"
+	install_template "" "$ssh_dir/authorized_keys"
+	install_template "" "$ssh_dir/config"
+
+	if [[ "$IS_DEBUG" == "true" ]]; then
+		log_debug "New debug symlink: \"${LOG_CLR["path"]}${DOTFILES_REPO["_dir"]}${CLR["reset"]}\" -> \"${LOG_CLR["path"]}$DOCKER_VOLUME_DIR${CLR["reset"]}\""
+		ln -s "$DOCKER_VOLUME_DIR" "${DOTFILES_REPO["_dir"]}"
+	else
+		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DOTFILES_REPO["_dir"]}"
+	fi
+
+	# # Install neovim
+	# # install_package_manually "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz" "/opt" "nvim-linux-x86_64" "root" "root"
+	# # install_package_manually "https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-musl.tar.gz" "/usr/local/bin" "starship" "root" "root"
+	# # install_package_manually "https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.8/zoxide-0.9.8-x86_64-unknown-linux-musl.tar.gz" "/usr/local/bin" "starship" "root" "root"
+	# log_info "Start linking dotfiles"
+	# link "$HOME" "${DOTFILES_REPO["current_host"]}" "${DOTFILES_REPO["default_host"]}"
+
+	# Zsh plugins
+	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$Z_SHARE_DIR/zsh-autosuggestions"
+	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$Z_SHARE_DIR/zsh-syntax-highlighting"
+
+	if [[ "$IS_DOCKER" == "false" ]]; then
+		log_info "Executing Docker installation script.."
+		sh -c "$(curl -fsSL https://get.docker.com)"
+	fi
+
+	### Client -> This Host
+	local ssh_publickey
+	if [[ "$IS_DEBUG" == "true" ]]; then
+		ssh_publickey="some_ssh_publickey"
+	else
+		read -r -p "Paste SSH public key: " ssh_publickey </dev/tty
+	fi
+
+	printf "%s" "$ssh_publickey" >>"$ssh_dir/authorized_keys"
+	{
+		printf "# Client's SSH template"
+		printf "Host %s\n" "$HOSTNAME"
+		printf "  HostName %s\n" "$(curl -fsSL https://api.ipify.org)"
+		printf "  Port %s\n" "$ssh_port"
+		printf "  User %s\n" "$INSTALL_USER"
+		printf "  IdentityFile ~/.ssh/%s\n" "$HOSTNAME"
+		printf "  IdentitiesOnly yes\n"
+		printf "\n"
+	} >>"${DOTFILES_DATA["secret"]}"
+
+	### This Host -> Git
+	local ssh_git_passphrase
+	ssh_git_passphrase="$(get_random_str $PASSWD_LENGTH)"
+	local git_filename="git"
+	ssh-keygen -t ed25519 -b 4096 -f "$ssh_dir/$git_filename" -N "$ssh_git_passphrase"
+	{
+		printf "# SSH passphrase for Git\n%s\n\n" "$ssh_git_passphrase"
+		printf "# SSH public key for Git\n"
+		cat "$ssh_dir/${git_filename}.pub"
+		printf "\n"
+	} >>"${DOTFILES_DATA["secret"]}"
+
+	{
+		printf "Host git\n"
+		printf "  HostName github.com\n"
+		printf "  User git\n"
+		printf "  IdentityFile ~/.ssh/%s\n" "$git_filename"
+		printf "  IdentitiesOnly yes\n"
+		printf "\n"
+	} >>"$ssh_dir/config"
+
+	rm -f "$ssh_dir/${git_filename}.pub"
+
+}
+
+_setup_arch() {
 	log_warn "dotfiles for arch - Not implemented yet"
 }
 
-# "main_": Prevent the log function from logging it as "_GLOBAL_"
 main_() {
-	log_debug "Bash version: $BASH_VERSION"
+	log_debug "Bash version\n: $BASH_VERSION"
 
 	local session_id
 	session_id="$(get_safe_random_str 4)"
@@ -709,11 +668,11 @@ main_() {
 		[[ -e "$TMP_INSTALL_SCRIPT_FILE" ]] && $SUDO rm -f "$TMP_INSTALL_SCRIPT_FILE"
 
 		if [[ "$IS_DEBUG" == "true" ]]; then
-			log_debug "Copy script from \"${CLR["yellow"]}${DEV_REPO_DIR}/install.sh${CLR["reset"]}\""
-			set_perm_item $DEV_REPO_DIR/install.sh "$TMP_INSTALL_SCRIPT_FILE"
+			log_debug "Copy script from \"${CLR["yellow"]}${DOCKER_VOLUME_DIR}/install.sh${CLR["reset"]}\""
+			install_template "$DOCKER_VOLUME_DIR/install.sh" "$TMP_INSTALL_SCRIPT_FILE"
 		else
 			log_debug "Download script from ${CLR["yellow"]}${URL["dotfiles_install_script"]}${CLR["reset"]}"
-			set_perm_item "${URL["dotfiles_install_script"]}" "$TMP_INSTALL_SCRIPT_FILE"
+			install_template "${URL["dotfiles_install_script"]}" "$TMP_INSTALL_SCRIPT_FILE"
 		fi
 
 		get_script_run_cmd "$TMP_INSTALL_SCRIPT_FILE" "run_cmd"
@@ -722,15 +681,19 @@ main_() {
 		exit 0
 	fi
 
+	############### Main Process ###############
 	if is_usr_exist "$INSTALL_USER"; then
-		cd "$HOME_DIR"
-		"do_setup_${HOSTNAME}"
+		cd "$HOME"
+		"_setup_$HOSTNAME"
+		if [[ ! -e "$CUSTOM_SSH_PORT_FILE" ]]; then
+			log_info "New system installation. Setup network config..."
+		fi
 	else
-		log_info "Create user: ${LOG_CLR["highlight"]}${INSTALL_USER}${CLR["reset"]}"
-		# Update sudo credentials for non-root user
 		if [[ -n "$SUDO" ]]; then
 			sudo -v
 		fi
+
+		log_info "Create user: ${LOG_CLR["highlight"]}${INSTALL_USER}${CLR["reset"]}"
 
 		# Create user
 		local passwd
@@ -738,11 +701,9 @@ main_() {
 		add_user "$INSTALL_USER" "$passwd"
 
 		# Create dotfiles directory
-		set_perm_item "" "${APP["_dir"]}"
-		set_perm_item "" "${APP["backups"]}"
-		set_perm_item "" "${APP["secret"]}"
-		printf "# DELETE this file, once you complete the process.\n\n" >>"${APP["secret"]}"
-		printf "# Password for %s\n%s\n\n" "$INSTALL_USER" "$passwd" >>"${APP["secret"]}"
+		install_template "" "${DOTFILES_DATA["secret"]}"
+		printf "# DELETE this file, once you complete the process.\n\n" >>"${DOTFILES_DATA["secret"]}"
+		printf "# Password for %s\n%s\n\n" "$INSTALL_USER" "$passwd" >>"${DOTFILES_DATA["secret"]}"
 
 		local run_cmd
 		get_script_run_cmd "$(get_script_path)" "run_cmd"
@@ -751,7 +712,7 @@ main_() {
 		exit 0
 	fi
 
-	[[ -e "${HOME_DIR}/.sudo_as_admin_successful" ]] && rm -f "${HOME_DIR}/.sudo_as_admin_successful"
+	[[ -e "$HOME/.sudo_as_admin_successful" ]] && rm -f "$HOME/.sudo_as_admin_successful"
 
 	if [[ "$IS_DOCKER" == "true" ]]; then
 		log_info "Docker mode is enabled. Keeping docker container running..."
@@ -762,9 +723,4 @@ main_() {
 }
 
 # main_
-
-testmain() {
-	install_zoxide
-	echo "keep container running..."
-	tail -f /dev/null
-}
+setup_system

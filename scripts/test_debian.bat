@@ -11,7 +11,7 @@ set "IMAGE_NAME=dotfiles-debian"
 set "IMAGE_TAG=latest"
 set "IMAGE=%IMAGE_NAME%:%IMAGE_TAG%"
 set "CONTAINER_NAME=%IMAGE_NAME%-container"
-set "DOTFILES_VOLUME_DIR=/var/tmp/.dotfiles_docker"
+set "DOTFILES_VOLUME_DIR=/app"
 
 @REM Docker configurations
 set "DOCKER_CLI_HINTS=false"
