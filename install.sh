@@ -109,34 +109,12 @@ DF_REPO["current_host"]="${DF_REPO["hosts_dir"]}/$HOSTNAME"
 declare -r DF_REPO
 
 declare -A DF_DATA
-DF_DATA["_dir"]="/etc/dotfiles-data"
+DF_DATA["_dir"]="$HOME/dotfiles-data"
 DF_DATA["secret"]="${DF_DATA["_dir"]}/secret"
 DF_DATA["backups_dir"]="${DF_DATA["_dir"]}/backups"
 declare -A DF_DATA
 
-declare -Ar TEMPLATE=(
-	# Home
-	["$HOME/.ssh/authorized_keys"]="f $INSTALL_USER $INSTALL_USER 0600"
-	["$HOME/.ssh/config"]="f $INSTALL_USER $INSTALL_USER 0600"
-
-	# dotfiles-data
-	["${DF_DATA["secret"]}"]="f $INSTALL_USER $INSTALL_USER 0600"
-
-	# openssh-server
-	["/etc/ssh"]="d root root 0755"
-	["/etc/ssh/sshd_config"]="f root root 0600"
-
-	# iptables
-	["/etc/iptables"]="d root root 0755"
-	["/etc/iptables/rules.v4"]="f root root 0644"
-	["/etc/iptables/rules.v6"]="f root root 0644"
-	["/etc/systemd/system/iptables-restore.service"]="f root root 0644"
-
-	# Other
-	["$TMP_INSTALL_SCRIPT_FILE"]="f root root 0755"
-	["$CUSTOM_SSH_PORT_FILE"]="f root root 0755"
-)
-
+# TODO: Deprecated
 declare -Ar URL=(
 	["dotfiles_repo"]="https://github.com/ardotsis/dotfiles.git"
 	["dotfiles_install_script"]="https://raw.githubusercontent.com/ardotsis/dotfiles/refs/heads/main/install.sh"
@@ -326,9 +304,19 @@ install_zoxide() {
 	$SUDO mkdir $tmp_dir
 	$SUDO tar -C "$tmp_dir" -xzf "$tgz_path"
 	$SUDO cp -R "$tmp_dir/man/man1" "$home_dir/.local/share/man"
-	$SUDO chown -R "$username:$username" "$home_dir/.local/share/man"
 	$SUDO mv "$tmp_dir/zoxide" "$home_dir/.local/bin"
 	$SUDO rm -rf "$tmp_dir" "$tgz_path"
+}
+
+install_starship() {
+	local username="$1"
+
+	local home_dir="/home/$username"
+	local tgz_path
+	tgz_path=$(get_tmp_curl_file "https://github.com/starship/starship/releases/download/v1.24.2/starship-x86_64-unknown-linux-musl.tar.gz")
+	$SUDO tar -C "$TMP_DIR" -xzf "$tgz_path"
+	$SUDO mv "$TMP_DIR/starship" "$home_dir/.local/bin"
+	$SUDO rm -rf "$tgz_path"
 }
 
 remove_package() {
@@ -529,6 +517,9 @@ link() {
 #                   Installers                   #
 ##################################################
 setup_system() {
+	local template_dir="$1"
+
+	log_info "Installing neovim..."
 	install_nvim
 
 	# Generate random SSH port
@@ -546,9 +537,9 @@ setup_system() {
 	# iptables
 	[[ -e "/etc/iptables" ]] && $SUDO rm -rf "/etc/iptables"
 	$SUDO install -m 0755 -o "root" -g "root" "/etc/iptables" -d
-	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template"]}/iptables/rules.v4" "/etc/iptables/rules.v4"
-	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template"]}/iptables/rules.v6" "/etc/iptables/rules.v6"
-	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template"]}/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
+	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template_dir"]}/iptables/rules.v4" "/etc/iptables/rules.v4"
+	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template_dir"]}/iptables/rules.v6" "/etc/iptables/rules.v6"
+	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template_dir"]}/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
 	$SUDO sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "/etc/iptables/rules.v4"
 
 	if [[ "$IS_DOCKER" == "false" ]]; then
@@ -564,6 +555,24 @@ setup_system() {
 }
 
 _setup_vultr() {
+	if [[ "$IS_DEBUG" == "true" ]]; then
+		log_debug "New debug symlink: \"${LOG_CLR["path"]}${DF_REPO["_dir"]}${CLR["reset"]}\" -> \"${LOG_CLR["path"]}$DOCKER_VOLUME_DIR${CLR["reset"]}\""
+		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
+	else
+		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
+	fi
+
+	local ssh_port
+	if [[ ! -e "$CUSTOM_SSH_PORT_FILE" ]]; then
+		log_info "New system installation. Setup network config..."
+		ssh_port=$(setup_system "${DF_REPO["template_dir"]}")
+	else
+		ssh_port="$(<"$CUSTOM_SSH_PORT_FILE")"
+	fi
+
+	log_info "Start linking dotfiles"
+	link "$HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
+
 	log_info "Start package installation"
 	while read -r pkg; do
 		if ! is_cmd_exist "$pkg"; then
@@ -582,23 +591,12 @@ _setup_vultr() {
 	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/authorized_keys"
 	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/config"
 
-	if [[ "$IS_DEBUG" == "true" ]]; then
-		log_debug "New debug symlink: \"${LOG_CLR["path"]}${DF_REPO["_dir"]}${CLR["reset"]}\" -> \"${LOG_CLR["path"]}$DOCKER_VOLUME_DIR${CLR["reset"]}\""
-		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
-	else
-		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
-	fi
-
-	# # Install neovim
-	# # install_package_manually "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz" "/opt" "nvim-linux-x86_64" "root" "root"
-	# # install_package_manually "https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-musl.tar.gz" "/usr/local/bin" "starship" "root" "root"
-	# # install_package_manually "https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.8/zoxide-0.9.8-x86_64-unknown-linux-musl.tar.gz" "/usr/local/bin" "starship" "root" "root"
-	# log_info "Start linking dotfiles"
-	# link "$HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
-
 	# Zsh plugins
-	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$Z_SHARE_DIR/zsh-autosuggestions"
-	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$Z_SHARE_DIR/zsh-syntax-highlighting"
+	local z_share_dir="$HOME/.local/share/zsh"
+	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$z_share_dir/zsh-autosuggestions"
+	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$z_share_dir/zsh-syntax-highlighting"
+	install_zoxide "$INSTALL_USER"
+	install_starship "$INSTALL_USER"
 
 	if [[ "$IS_DOCKER" == "false" ]]; then
 		log_info "Executing Docker installation script.."
@@ -655,12 +653,12 @@ _setup_arch() {
 }
 
 main_() {
-	log_debug "Bash version\n: $BASH_VERSION"
-
 	local session_id
 	session_id="$(get_safe_random_str 4)"
 	log_debug "================ Begin $(clr "$CURRENT_USER ($session_id)" "${LOG_CLR["highlight"]}") session ================"
 	log_vars "HOSTNAME" "INSTALL_USER" "CURRENT_USER" "IS_DOCKER" "IS_DEBUG"
+
+	log_debug "Bash version: $BASH_VERSION"
 
 	# Download script
 	if [[ -z "$SCRIPT_NAME" ]]; then
@@ -672,7 +670,7 @@ main_() {
 		else
 			log_debug "Download script from ${CLR["yellow"]}${URL["dotfiles_install_script"]}${CLR["reset"]}"
 			curl-fsSL "${URL["dotfiles_install_script"]}" -o "$TMP_INSTALL_SCRIPT_FILE"
-			chmod 755 "$TMP_INSTALL_SCRIPT_FILE" && chown root:root $TMP_INSTALL_SCRIPT_FILE
+			chmod 755 "$TMP_INSTALL_SCRIPT_FILE" && chown root:root "$TMP_INSTALL_SCRIPT_FILE"
 		fi
 
 		get_script_run_cmd "$TMP_INSTALL_SCRIPT_FILE" "run_cmd"
@@ -685,9 +683,6 @@ main_() {
 	if is_usr_exist "$INSTALL_USER"; then
 		cd "$HOME"
 		"_setup_$HOSTNAME"
-		if [[ ! -e "$CUSTOM_SSH_PORT_FILE" ]]; then
-			log_info "New system installation. Setup network config..."
-		fi
 	else
 		if [[ -n "$SUDO" ]]; then
 			sudo -v
@@ -702,6 +697,7 @@ main_() {
 
 		# Create "~/dotfiles-data"
 		$SUDO install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "${DF_DATA["_dir"]}" -d
+		$SUDO install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "${DF_DATA["backups_dir"]}" -d
 		$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "${DF_DATA["secret"]}"
 		printf "# DELETE this file, once you complete the process.\n\n" >>"${DF_DATA["secret"]}"
 		printf "# Password (%s)\n%s\n\n" "$INSTALL_USER" "$passwd" >>"${DF_DATA["secret"]}"
@@ -723,5 +719,5 @@ main_() {
 	log_debug "================ End $(clr "$CURRENT_USER ($session_id)" "${LOG_CLR["highlight"]}") session ================"
 }
 
-# main_
-setup_system
+main_
+# setup_system

@@ -8,7 +8,6 @@ set "DOCKER_CLI_HINTS=false"
 docker exec ^
 --interactive ^
 --tty ^
+--workdir "/home/%DEV_USERNAME%" ^
 --user "%DEV_USERNAME%" ^
 "%CONTAINER_NAME%" zsh
-
-@REM --workdir "/home/%DEV_USERNAME%" ^
