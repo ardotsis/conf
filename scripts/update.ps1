@@ -11,6 +11,7 @@ git fetch
 git merge
 git add -A
 git commit -m "$msg"
+# TODO: you cant update if working tree is clean
 if (-not $?) {
     exit 1
 }
