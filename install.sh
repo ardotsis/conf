@@ -120,27 +120,27 @@ declare -Ar URL=(
 	["dotfiles_install_script"]="https://raw.githubusercontent.com/ardotsis/dotfiles/refs/heads/main/install.sh"
 )
 
-declare -Ar CLR=(
-	["reset"]="\033[0m"
-	["black"]="\033[0;30m"
-	["red"]="\033[0;31m"
-	["green"]="\033[0;32m"
-	["yellow"]="\033[0;33m"
+declare -Ar C=(
+	["0"]="\033[0m"
+	["k"]="\033[0;30m"
+	["r"]="\033[0;31m"
+	["g"]="\033[0;32m"
+	["y"]="\033[0;33m"
 	["blue"]="\033[0;34m"
-	["purple"]="\033[0;35m"
-	["cyan"]="\033[0;36m"
+	["p"]="\033[0;35m"
+	["c"]="\033[0;36m"
 	["white"]="\033[0;37m"
 )
 
-declare -Ar LOG_CLR=(
-	["debug"]="${CLR["white"]}"
-	["info"]="${CLR["green"]}"
-	["warn"]="${CLR["yellow"]}"
-	["error"]="${CLR["red"]}"
-	["var"]="${CLR["purple"]}"
-	["value"]="${CLR["cyan"]}"
-	["path"]="${CLR["yellow"]}"
-	["highlight"]="${CLR["red"]}"
+declare -Ar LOG_C=(
+	["debug"]="${C["white"]}"
+	["info"]="${C["g"]}"
+	["warn"]="${C["y"]}"
+	["error"]="${C["r"]}"
+	["var"]="${C["p"]}"
+	["value"]="${C["c"]}"
+	["path"]="${C["y"]}"
+	["highlight"]="${C["r"]}"
 )
 
 if [[ "$(id -u)" == "0" ]]; then
@@ -159,11 +159,10 @@ _log() {
 	local i=0
 	local lineno="${BASH_LINENO[1]}"
 	local caller=" <GLOBAL> "
+	local -r ignore="_log _debug _info _warn _error _vars main"
 	for funcname in "${FUNCNAME[@]}"; do
 		i=$((i + 1))
-		[[ "$funcname" == "_log" ]] && continue
-		[[ "$funcname" == "log_"* ]] && continue
-		[[ "$funcname" == "main" ]] && continue
+		[[ $ignore =~ (^|[[:space:]])$funcname($|[[:space:]]) ]] && continue
 		lineno="${BASH_LINENO[$((i - 2))]}"
 		caller="$funcname"
 		break
@@ -171,18 +170,18 @@ _log() {
 
 	local timestamp
 	timestamp="$(date "+%Y-%m-%d %H:%M:%S")"
-	printf "[%s] [%b%s%b] [%s:%s] (%s) %b\n" "$timestamp" "${LOG_CLR["${level}"]}" "${level^^}" "${CLR["reset"]}" "$caller" "$lineno" "$CURRENT_USER" "$msg" >&2
+	printf "[%s] [%b%s%b] [%s:%s] (%s) %b\n" "$timestamp" "${LOG_C["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$CURRENT_USER" "$msg" >&2
 }
-log_debug() { _log "debug" "$1"; }
-log_info() { _log "info" "$1"; }
-log_warn() { _log "warn" "$1"; }
-log_error() { _log "error" "$1"; }
-log_vars() {
+_debug() { _log "debug" "$1"; }
+_info() { _log "info" "$1"; }
+_warn() { _log "warn" "$1"; }
+_error() { _log "error" "$1"; }
+_vars() {
 	local var_names=("$@")
 
 	local msg=""
 	for var_name in "${var_names[@]}"; do
-		fmt="${LOG_CLR["var"]}\$$var_name${CLR["reset"]}=\"${LOG_CLR["value"]}${!var_name}${CLR["reset"]}\""
+		fmt="${LOG_C["var"]}\$$var_name${C["0"]}=\"${LOG_C["value"]}${!var_name}${C["0"]}\""
 		if [[ -z "$msg" ]]; then
 			msg="$fmt"
 		else
@@ -204,7 +203,7 @@ clr() {
 		local q=''
 	fi
 
-	printf "%b" "${q}${clr}${msg}${CLR["reset"]}${q}"
+	printf "%b" "${q}${clr}${msg}${C["0"]}${q}"
 }
 
 get_script_path() {
@@ -226,7 +225,7 @@ get_script_run_cmd() {
 	[[ "$IS_DOCKER" == "true" ]] && arr_ref+=("--docker") || true
 	[[ "$IS_DEBUG" == "true" ]] && arr_ref+=("--debug") || true
 
-	log_vars "arr_ref[@]"
+	_vars "arr_ref[@]"
 }
 
 is_cmd_exist() {
@@ -270,7 +269,7 @@ get_safe_random_str() {
 install_package() {
 	local pkg="$1"
 
-	log_info "Installing $pkg..."
+	_info "Installing $pkg..."
 	if [[ "$OS" == "debian" ]]; then
 		$SUDO apt-get install -y --no-install-recommends "$pkg"
 	fi
@@ -364,7 +363,7 @@ backup_item() {
 	timestamp="$(date "+%Y-%m-%d_%H-%M-%S")"
 	dst="${DF_DATA["backups_dir"]}/${basename}.${timestamp}.tgz"
 
-	log_info "Create backup: $(clr "$dst" "${LOG_CLR["path"]}" "true")"
+	_info "Create backup: $(clr "$dst" "${LOG_C["path"]}" "true")"
 	$SUDO tar czvf "$dst" -C "$parent_dir" "$basename"
 }
 
@@ -400,7 +399,7 @@ install_template() {
 		fi
 	fi
 
-	log_info "Create item: \"${LOG_CLR["path"]}$dst_path${CLR["reset"]}\" (template=\"${LOG_CLR["path"]}$template_uri${CLR["reset"]}\" owner=$user, group=$group, mode=$num)"
+	_info "Create item: \"${LOG_C["path"]}$dst_path${C["0"]}\" (template=\"${LOG_C["path"]}$template_uri${C["0"]}\" owner=$user, group=$group, mode=$num)"
 	"${install_cmd[@]}"
 
 	if [[ -n "$tmp_path" ]]; then
@@ -434,9 +433,9 @@ get_mixed_items() {
 
 link() {
 	local target_dir="$1"
-	local host_dir="${2:-}" # Preferred
+	local host_dir="${2:-}" # Preferr
 	local default_dir="${3:-}"
-	log_vars "target_dir" "host_dir" "default_dir"
+	_vars "target_dir" "host_dir" "default_dir"
 
 	local all_host_items=() all_default_items=()
 	[[ -z "$host_dir" ]] || get_items "$host_dir" "all_host_items"
@@ -455,7 +454,7 @@ link() {
 		# shellcheck disable=SC2034
 		local default_items=("${all_default_items[@]}")
 	fi
-	# log_vars "union_items[@]" "host_items[@]" "default_items[@]" # TODO Ubuntu:jammy -> line 237: !var_name: unbound variable
+	# _vars "union_items[@]" "host_items[@]" "default_items[@]" # TODO Ubuntu:jammy -> line 237: !var_name: unbound variable
 
 	local item_type prefixed_items=()
 	for item_type in "host" "union" "default"; do
@@ -482,7 +481,7 @@ link() {
 
 			# Backup home exists item
 			if [[ -e "$as_target_item" ]]; then
-				log_debug "Backup: $as_target_item"
+				_debug "Backup: $as_target_item"
 				backup_item "$as_target_item"
 				rm -rf "$as_target_item"
 			fi
@@ -495,8 +494,10 @@ link() {
 
 			if [[ -d "$actual_path" ]]; then
 				[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
-				log_debug "Create directory: \"${LOG_CLR["path"]}$as_target_item${CLR["reset"]}\""
-				mkdir "$as_target_item"
+				_debug "Create directory: \"${LOG_C["path"]}$as_target_item${C["0"]}\""
+				# TODO: ignore .config
+				mkdir "$as_target_item" # TODO: install (700)
+
 				if [[ "$item_type" == "union" ]]; then
 					link "$as_target_item" "$as_host_item" "$as_default_item"
 				elif [[ "$item_type" == "host" ]]; then
@@ -506,7 +507,7 @@ link() {
 				fi
 			elif [[ -f "$actual_path" ]]; then
 				[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
-				log_info "New symlink: \"${LOG_CLR["path"]}$as_target_item${CLR["reset"]}\" -> (${item_type^^}) \"${LOG_CLR["path"]}$actual_path${CLR["reset"]}\""
+				_info "New symlink: \"${LOG_C["path"]}$as_target_item${C["0"]}\" -> (${item_type^^}) \"${LOG_C["path"]}$actual_path${C["0"]}\""
 				ln -sf "$actual_path" "$as_target_item"
 			fi
 		done
@@ -519,7 +520,7 @@ link() {
 setup_system() {
 	local template_dir="$1"
 
-	log_info "Installing neovim..."
+	_info "Installing neovim..."
 	install_nvim
 
 	# Generate random SSH port
@@ -544,19 +545,19 @@ setup_system() {
 
 	if [[ "$IS_DOCKER" == "false" ]]; then
 		# Reload sshd config
-		log_info "Restart sshd service"
+		_info "Restart sshd service"
 		$SUDO systemctl restart sshd
 		# Enable iptables-restore.service
-		log_info "Reload systemctl daemon"
+		_info "Reload systemctl daemon"
 		$SUDO systemctl daemon-reload
-		log_info "Enable iptables-restore service"
+		_info "Enable iptables-restore service"
 		$SUDO systemctl enable iptables-restore.service
 	fi
 }
 
 _setup_vultr() {
 	if [[ "$IS_DEBUG" == "true" ]]; then
-		log_debug "New debug symlink: \"${LOG_CLR["path"]}${DF_REPO["_dir"]}${CLR["reset"]}\" -> \"${LOG_CLR["path"]}$DOCKER_VOLUME_DIR${CLR["reset"]}\""
+		_debug "New debug symlink: \"${LOG_C["path"]}${DF_REPO["_dir"]}${C["0"]}\" -> \"${LOG_C["path"]}$DOCKER_VOLUME_DIR${C["0"]}\""
 		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
 	else
 		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
@@ -564,16 +565,16 @@ _setup_vultr() {
 
 	local ssh_port
 	if [[ ! -e "$CUSTOM_SSH_PORT_FILE" ]]; then
-		log_info "New system installation. Setup network config..."
+		_info "New system installation. Setup network config..."
 		ssh_port=$(setup_system "${DF_REPO["template_dir"]}")
 	else
 		ssh_port="$(<"$CUSTOM_SSH_PORT_FILE")"
 	fi
 
-	log_info "Start linking dotfiles"
+	_info "Start linking dotfiles"
 	link "$HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
 
-	log_info "Start package installation"
+	_info "Start package installation"
 	while read -r pkg; do
 		if ! is_cmd_exist "$pkg"; then
 			install_package "$pkg"
@@ -581,12 +582,12 @@ _setup_vultr() {
 	done <"${DF_REPO["package_list"]}"
 
 	if is_cmd_exist ufw; then
-		log_info "Uninstall UFW"
+		_info "Uninstall UFW"
 		$SUDO ufw disable
 		remove_package "ufw"
 	fi
 
-	log_info "Start SSH setup"
+	_info "Start SSH setup"
 	local ssh_dir="$HOME/.ssh"
 	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/authorized_keys"
 	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/config"
@@ -599,7 +600,7 @@ _setup_vultr() {
 	install_starship "$INSTALL_USER"
 
 	if [[ "$IS_DOCKER" == "false" ]]; then
-		log_info "Executing Docker installation script.."
+		_info "Executing Docker installation script.."
 		sh -c "$(curl -fsSL https://get.docker.com)"
 	fi
 
@@ -649,32 +650,32 @@ _setup_vultr() {
 }
 
 _setup_arch() {
-	log_warn "dotfiles for arch - Not implemented yet"
+	_warn "dotfiles for arch - Not implemented yet"
 }
 
-main_() {
+run() {
 	local session_id
 	session_id="$(get_safe_random_str 4)"
-	log_debug "================ Begin $(clr "$CURRENT_USER ($session_id)" "${LOG_CLR["highlight"]}") session ================"
-	log_vars "HOSTNAME" "INSTALL_USER" "CURRENT_USER" "IS_DOCKER" "IS_DEBUG"
+	_debug "================ Begin $(clr "$CURRENT_USER ($session_id)" "${LOG_C["highlight"]}") session ================"
+	_vars "HOSTNAME" "INSTALL_USER" "CURRENT_USER" "IS_DOCKER" "IS_DEBUG"
 
-	log_debug "Bash version: $BASH_VERSION"
+	_debug "Bash version: $BASH_VERSION"
 
 	# Download script
 	if [[ -z "$SCRIPT_NAME" ]]; then
 		[[ -e "$TMP_INSTALL_SCRIPT_FILE" ]] && $SUDO rm -f "$TMP_INSTALL_SCRIPT_FILE"
 
 		if [[ "$IS_DEBUG" == "true" ]]; then
-			log_debug "Copy script from \"${CLR["yellow"]}${DOCKER_VOLUME_DIR}/install.sh${CLR["reset"]}\""
+			_debug "Copy script from \"${C["y"]}${DOCKER_VOLUME_DIR}/install.sh${C["0"]}\""
 			$SUDO install -m 0755 -o root -g root "${DOCKER_VOLUME_DIR}/install.sh" "$TMP_INSTALL_SCRIPT_FILE"
 		else
-			log_debug "Download script from ${CLR["yellow"]}${URL["dotfiles_install_script"]}${CLR["reset"]}"
+			_debug "Download script from ${C["y"]}${URL["dotfiles_install_script"]}${C["0"]}"
 			curl-fsSL "${URL["dotfiles_install_script"]}" -o "$TMP_INSTALL_SCRIPT_FILE"
 			chmod 755 "$TMP_INSTALL_SCRIPT_FILE" && chown root:root "$TMP_INSTALL_SCRIPT_FILE"
 		fi
 
 		get_script_run_cmd "$TMP_INSTALL_SCRIPT_FILE" "run_cmd"
-		log_info "Exit and restarting..."
+		_info "Exit and restarting..."
 		"${run_cmd[@]}"
 		exit 0
 	fi
@@ -688,7 +689,7 @@ main_() {
 			sudo -v
 		fi
 
-		log_info "Create user: ${LOG_CLR["highlight"]}${INSTALL_USER}${CLR["reset"]}"
+		_info "Create user: ${LOG_C["highlight"]}${INSTALL_USER}${C["0"]}"
 
 		# Create user
 		local passwd
@@ -704,7 +705,7 @@ main_() {
 
 		local run_cmd
 		get_script_run_cmd "$(get_script_path)" "run_cmd"
-		log_info "Done user creation. Exit and starting install script as ${LOG_CLR["highlight"]}$INSTALL_USER${CLR["reset"]}..."
+		_info "Done user creation. Exit and starting install script as ${LOG_C["highlight"]}$INSTALL_USER${C["0"]}..."
 		sudo -u "$INSTALL_USER" -- "${run_cmd[@]}"
 		exit 0
 	fi
@@ -712,12 +713,11 @@ main_() {
 	[[ -e "$HOME/.sudo_as_admin_successful" ]] && rm -f "$HOME/.sudo_as_admin_successful"
 
 	if [[ "$IS_DOCKER" == "true" ]]; then
-		log_info "Docker mode is enabled. Keeping docker container running..."
+		_info "Docker mode is enabled. Keeping docker container running..."
 		tail -f /dev/null
 	fi
 
-	log_debug "================ End $(clr "$CURRENT_USER ($session_id)" "${LOG_CLR["highlight"]}") session ================"
+	_debug "================ End $(clr "$CURRENT_USER ($session_id)" "${LOG_C["highlight"]}") session ================"
 }
 
-main_
-# setup_system
+run
