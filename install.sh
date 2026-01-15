@@ -191,6 +191,33 @@ _vars() {
 	_log "debug" "$msg"
 }
 
+draw_line() {
+	# TODO: Refactor
+	local txt="$1"
+
+	local a_bar_min=1
+	local len=80
+	local margin=4
+	local label="="
+
+	local bar_len=$((len - ${#txt} - margin * 2))
+
+	if ((bar_len < (2 * a_bar_min))); then
+		echo "need more len"
+		return 1
+	fi
+
+	local right=$((bar_len / 2))
+	local left=$((bar_len - right))
+
+	printf '%*s' "$right" | tr ' ' "$label"
+	printf '%*s' "$margin"
+	printf "%s" "$txt"
+	printf '%*s' "$margin"
+	printf '%*s' "$left" | tr ' ' "$label"
+	printf "\n"
+}
+
 clr() {
 	local msg="$1"
 	local clr="$2"
@@ -335,6 +362,7 @@ build_home() {
 	$SUDO mkdir -p "$home_dir"/{.cache,.config,.local,.ssh}
 	$SUDO mkdir "$home_dir/.local"/{bin,share,state}
 	$SUDO mkdir "$home_dir/.local/share/"{zsh,man}
+	$SUDO mkdir "$home_dir/.local/share/zsh/plugins"
 
 	$SUDO chown -R "$username:$username" "$home_dir"
 	$SUDO chmod -R 700 "$home_dir"
@@ -592,9 +620,10 @@ _setup_vultr() {
 	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/config"
 
 	# Zsh plugins
-	local z_share_dir="$HOME/.local/share/zsh"
-	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$z_share_dir/zsh-autosuggestions"
-	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$z_share_dir/zsh-syntax-highlighting"
+	local z_plugin_dir="$HOME/.local/share/zsh/plugins"
+	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$z_plugin_dir/zsh-autosuggestions"
+	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$z_plugin_dir/zsh-syntax-highlighting"
+	git clone "https://github.com/sindresorhus/pure.git" "$z_plugin_dir/pure"
 	install_zoxide "$INSTALL_USER"
 	install_starship "$INSTALL_USER"
 
@@ -656,7 +685,7 @@ run() {
 	local session_id
 	session_id="$(get_safe_random_str 4)"
 	# tODO: draw line
-	_debug "================ Begin $(clr "$CURRENT_USER ($session_id)" "${LC["highlight"]}") session ================"
+	draw_line "Begin $(clr "$CURRENT_USER ($session_id)" "${LC["highlight"]}")"
 	_vars "HOSTNAME" "INSTALL_USER" "CURRENT_USER" "IS_DOCKER" "IS_DEBUG"
 
 	_debug "Bash version: $BASH_VERSION"
@@ -717,16 +746,7 @@ run() {
 		tail -f /dev/null
 	fi
 
-	_debug "================ End $(clr "$CURRENT_USER ($session_id)" "${LC["highlight"]}") session ================"
+	draw_line "End $(clr "$CURRENT_USER ($session_id)" "${LC["highlight"]}") session"
 }
 
-# TODO: track dir (depth 1) + symlink (-> .dotfiles)
-# run
-
-draw_line() {
-	local len="${1:-50}"
-
-	echo $len
-}
-
-draw_line
+run

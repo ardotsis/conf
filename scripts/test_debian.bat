@@ -38,6 +38,8 @@ if "%FLAG%"=="--build" (
 )
 
 echo =============== Begin Docker Session ===============
+echo.
+
 docker run ^
 --rm ^
 --interactive ^
