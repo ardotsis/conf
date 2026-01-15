@@ -91,7 +91,6 @@ declare -Ar HOST_OS=(
 declare -r OS="${HOST_OS["$HOSTNAME"]}"
 declare -r PASSWD_LENGTH=72
 declare -r SCRIPT_NAME="${BASH_SOURCE[0]+x}"
-
 declare -r HOME="/home/$INSTALL_USER" # Override $HOME
 declare -r TMP_DIR="/var/tmp"
 declare -r DOCKER_VOLUME_DIR="/app"
@@ -126,14 +125,14 @@ declare -Ar C=(
 	["r"]="\033[0;31m"
 	["g"]="\033[0;32m"
 	["y"]="\033[0;33m"
-	["blue"]="\033[0;34m"
+	["b"]="\033[0;34m"
 	["p"]="\033[0;35m"
 	["c"]="\033[0;36m"
-	["white"]="\033[0;37m"
+	["w"]="\033[0;37m"
 )
 
-declare -Ar LOG_C=(
-	["debug"]="${C["white"]}"
+declare -Ar LC=(
+	["debug"]="${C["w"]}"
 	["info"]="${C["g"]}"
 	["warn"]="${C["y"]}"
 	["error"]="${C["r"]}"
@@ -170,7 +169,7 @@ _log() {
 
 	local timestamp
 	timestamp="$(date "+%Y-%m-%d %H:%M:%S")"
-	printf "[%s] [%b%s%b] [%s:%s] (%s) %b\n" "$timestamp" "${LOG_C["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$CURRENT_USER" "$msg" >&2
+	printf "[%s] [%b%s%b] [%s:%s] (%s) %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$CURRENT_USER" "$msg" >&2
 }
 _debug() { _log "debug" "$1"; }
 _info() { _log "info" "$1"; }
@@ -181,7 +180,7 @@ _vars() {
 
 	local msg=""
 	for var_name in "${var_names[@]}"; do
-		fmt="${LOG_C["var"]}\$$var_name${C["0"]}=\"${LOG_C["value"]}${!var_name}${C["0"]}\""
+		fmt="${LC["var"]}\$$var_name${C["0"]}=\"${LC["value"]}${!var_name}${C["0"]}\""
 		if [[ -z "$msg" ]]; then
 			msg="$fmt"
 		else
@@ -363,7 +362,7 @@ backup_item() {
 	timestamp="$(date "+%Y-%m-%d_%H-%M-%S")"
 	dst="${DF_DATA["backups_dir"]}/${basename}.${timestamp}.tgz"
 
-	_info "Create backup: $(clr "$dst" "${LOG_C["path"]}" "true")"
+	_info "Create backup: $(clr "$dst" "${LC["path"]}" "true")"
 	$SUDO tar czvf "$dst" -C "$parent_dir" "$basename"
 }
 
@@ -399,7 +398,7 @@ install_template() {
 		fi
 	fi
 
-	_info "Create item: \"${LOG_C["path"]}$dst_path${C["0"]}\" (template=\"${LOG_C["path"]}$template_uri${C["0"]}\" owner=$user, group=$group, mode=$num)"
+	_info "Create item: \"${LC["path"]}$dst_path${C["0"]}\" (template=\"${LC["path"]}$template_uri${C["0"]}\" owner=$user, group=$group, mode=$num)"
 	"${install_cmd[@]}"
 
 	if [[ -n "$tmp_path" ]]; then
@@ -494,7 +493,7 @@ link() {
 
 			if [[ -d "$actual_path" ]]; then
 				[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
-				_debug "Create directory: \"${LOG_C["path"]}$as_target_item${C["0"]}\""
+				_debug "Create directory: \"${LC["path"]}$as_target_item${C["0"]}\""
 				# TODO: ignore .config
 				mkdir "$as_target_item" # TODO: install (700)
 
@@ -507,7 +506,7 @@ link() {
 				fi
 			elif [[ -f "$actual_path" ]]; then
 				[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
-				_info "New symlink: \"${LOG_C["path"]}$as_target_item${C["0"]}\" -> (${item_type^^}) \"${LOG_C["path"]}$actual_path${C["0"]}\""
+				_info "New symlink: \"${LC["path"]}$as_target_item${C["0"]}\" -> (${item_type^^}) \"${LC["path"]}$actual_path${C["0"]}\""
 				ln -sf "$actual_path" "$as_target_item"
 			fi
 		done
@@ -557,7 +556,7 @@ setup_system() {
 
 _setup_vultr() {
 	if [[ "$IS_DEBUG" == "true" ]]; then
-		_debug "New debug symlink: \"${LOG_C["path"]}${DF_REPO["_dir"]}${C["0"]}\" -> \"${LOG_C["path"]}$DOCKER_VOLUME_DIR${C["0"]}\""
+		_debug "New debug symlink: \"${LC["path"]}${DF_REPO["_dir"]}${C["0"]}\" -> \"${LC["path"]}$DOCKER_VOLUME_DIR${C["0"]}\""
 		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
 	else
 		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
@@ -656,7 +655,8 @@ _setup_arch() {
 run() {
 	local session_id
 	session_id="$(get_safe_random_str 4)"
-	_debug "================ Begin $(clr "$CURRENT_USER ($session_id)" "${LOG_C["highlight"]}") session ================"
+	# tODO: draw line
+	_debug "================ Begin $(clr "$CURRENT_USER ($session_id)" "${LC["highlight"]}") session ================"
 	_vars "HOSTNAME" "INSTALL_USER" "CURRENT_USER" "IS_DOCKER" "IS_DEBUG"
 
 	_debug "Bash version: $BASH_VERSION"
@@ -689,7 +689,7 @@ run() {
 			sudo -v
 		fi
 
-		_info "Create user: ${LOG_C["highlight"]}${INSTALL_USER}${C["0"]}"
+		_info "Create user: ${LC["highlight"]}${INSTALL_USER}${C["0"]}"
 
 		# Create user
 		local passwd
@@ -705,7 +705,7 @@ run() {
 
 		local run_cmd
 		get_script_run_cmd "$(get_script_path)" "run_cmd"
-		_info "Done user creation. Exit and starting install script as ${LOG_C["highlight"]}$INSTALL_USER${C["0"]}..."
+		_info "Done user creation. Exit and starting install script as ${LC["highlight"]}$INSTALL_USER${C["0"]}..."
 		sudo -u "$INSTALL_USER" -- "${run_cmd[@]}"
 		exit 0
 	fi
@@ -717,7 +717,16 @@ run() {
 		tail -f /dev/null
 	fi
 
-	_debug "================ End $(clr "$CURRENT_USER ($session_id)" "${LOG_C["highlight"]}") session ================"
+	_debug "================ End $(clr "$CURRENT_USER ($session_id)" "${LC["highlight"]}") session ================"
 }
 
-run
+# TODO: track dir (depth 1) + symlink (-> .dotfiles)
+# run
+
+draw_line() {
+	local len="${1:-50}"
+
+	echo $len
+}
+
+draw_line
