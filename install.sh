@@ -585,19 +585,22 @@ setup_system() {
 }
 
 _setup_vultr() {
+	if [[ "$IS_DEBUG" == "true" ]]; then
+		_debug "New debug symlink: \"${LC["path"]}${DF_REPO["_dir"]}${C["0"]}\" -> \"${LC["path"]}$DOCKER_VOLUME_DIR${C["0"]}\""
+		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
+	else
+		if ! is_cmd_exist git; then
+			install_package "git"
+		fi
+		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
+	fi
+
 	_info "Start package installation"
 	while read -r pkg; do
 		if ! is_cmd_exist "$pkg"; then
 			install_package "$pkg"
 		fi
 	done <"${DF_REPO["package_list"]}"
-
-	if [[ "$IS_DEBUG" == "true" ]]; then
-		_debug "New debug symlink: \"${LC["path"]}${DF_REPO["_dir"]}${C["0"]}\" -> \"${LC["path"]}$DOCKER_VOLUME_DIR${C["0"]}\""
-		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
-	else
-		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
-	fi
 
 	local ssh_port
 	if [[ ! -e "$CUSTOM_SSH_PORT_FILE" ]]; then
