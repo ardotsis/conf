@@ -25,5 +25,6 @@ export Z_PLUGIN_DIR="$Z_DATA_DIR/plugins"
 export Z_HIST_FILE="$Z_DATA_DIR/history"
 
 ### Paths
+export PATH="$HOME/.ppl:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="/opt/nvim-linux-x86_64/bin:$PATH"

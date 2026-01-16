@@ -8,7 +8,6 @@ fpath+=("$Z_COMPLETION_DIR" "$Z_PLUGIN_DIR/pure")
 
 ### RC
 source "$Z_RC_DIR/aliase.zsh"
-source "$Z_RC_DIR/ppl.zsh"
 
 ### Completion
 autoload -Uz compinit && compinit -d "$Z_COMPDUMP_FILE"
