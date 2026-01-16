@@ -563,6 +563,7 @@ setup_system() {
 	$SUDO install -m 0755 -o "root" -g "root" "/etc/ssh" -d
 	$SUDO install -m 0600 -o "root" -g "root" "${DF_REPO["template_dir"]}/openssh-server/sshd_config" "/etc/ssh/sshd_config"
 	$SUDO sed -i "s/^Port [0-9]\+/Port $ssh_port/" "/etc/ssh/sshd_config"
+	$SUDO ssh-keygen -A
 
 	# iptables
 	[[ -e "/etc/iptables" ]] && $SUDO rm -rf "/etc/iptables"
