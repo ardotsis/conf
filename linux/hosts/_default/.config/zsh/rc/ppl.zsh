@@ -4,6 +4,6 @@ ppl() {
 	printf "arimura ruka\n"
 	printf "fujinami mizuki\n"
 	printf "yoshida mitsuki\n"
-
-	printf "\nhurry up. u have no time to study.\n"
+	printf "\n"
+	printf "hurry up. u have no time to study.\n"
 }
