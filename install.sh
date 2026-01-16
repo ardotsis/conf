@@ -701,8 +701,8 @@ run() {
 			$SUDO install -m 0755 -o root -g root "${DOCKER_VOLUME_DIR}/install.sh" "$TMP_INSTALL_SCRIPT_FILE"
 		else
 			_debug "Download script from ${C["y"]}${URL["dotfiles_install_script"]}${C["0"]}"
-			curl-fsSL "${URL["dotfiles_install_script"]}" -o "$TMP_INSTALL_SCRIPT_FILE"
-			chmod 755 "$TMP_INSTALL_SCRIPT_FILE" && chown root:root "$TMP_INSTALL_SCRIPT_FILE"
+			curl -fsSL "${URL["dotfiles_install_script"]}" -o "$TMP_INSTALL_SCRIPT_FILE"
+			$SUDO chmod 755 "$TMP_INSTALL_SCRIPT_FILE" && chown root:root "$TMP_INSTALL_SCRIPT_FILE"
 		fi
 
 		get_script_run_cmd "$TMP_INSTALL_SCRIPT_FILE" "run_cmd"

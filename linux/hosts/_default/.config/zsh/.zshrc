@@ -14,6 +14,7 @@ source "$Z_RC_DIR/aliase.zsh"
 autoload -Uz compinit && compinit -d "$Z_COMPDUMP_FILE"
 
 ### Prompt
+# eval "$(starship init zsh)"
 autoload -U promptinit && promptinit
 PURE_CMD_MAX_EXEC_TIME=10
 zstyle ':prompt:pure:prompt:*' color cyan
