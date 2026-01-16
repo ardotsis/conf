@@ -463,7 +463,7 @@ get_mixed_items() {
 
 link() {
 	local target_dir="$1"
-	local host_dir="${2:-}"
+	local host_dir="${2:-}" # Preferer
 	local default_dir="${3:-}"
 	_vars "target_dir" "host_dir" "default_dir"
 
