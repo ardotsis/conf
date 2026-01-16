@@ -7,6 +7,7 @@ HISTFILE="$Z_HIST_FILE"
 fpath+=("$Z_COMPLETION_DIR" "$Z_PLUGIN_DIR/pure")
 
 ### RC
+source "$PPL_DIR/ppl.zsh"
 source "$Z_RC_DIR/aliase.zsh"
 
 ### Completion
