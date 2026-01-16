@@ -1,20 +1,24 @@
+### System
 export LC_ALL="${LC_ALL:-C.UTF-8}"
 export LANG="${LANG:-C.UTF-8}"
 
-# TODO: in zprfile??
-# TODO: create .cache/zsh
-# TODO: zompinit is borkne
-
-# XDG
+### XDG
 export XDG_CONFIG_HOME="$HOME/.config"
 export XDG_CACHE_HOME="$HOME/.cache"
 export XDG_DATA_HOME="$HOME/.local/share"
 export XDG_STATE_HOME="$HOME/.local/state"
 
-# ZSH's environment variables
+## ZSH
 export ZDOTDIR="$HOME/.config/zsh"
-# Custom ZSH environment variables
-export Z_SHARE_DIR="$HOME/.local/share/zsh"
-export Z_PLUGIN_DIR="$Z_SHARE_DIR/plugins"
-export Z_RC_DIR="$ZDOTDIR/rc"
-export Z_COMP_DIR="$XDG_CACHE_HOME"
+
+### ZSH (Custom)
+export Z_CONFIG_DIR="$XDG_CONFIG_HOME/zsh"
+export Z_RC_DIR="$Z_CONFIG_DIR/rc"
+export Z_COMPLETION_DIR="$Z_CONFIG_DIR/completions"
+# Cache
+export Z_CACHE_DIR="$XDG_CACHE_HOME/zsh"
+export Z_COMPDUMP_FILE="$Z_CACHE_DIR/compdump"
+# Data
+export Z_DATA_DIR="$XDG_DATA_HOME/zsh"
+export Z_PLUGIN_DIR="$Z_DATA_DIR/plugins"
+export Z_HIST_FILE="$Z_DATA_DIR/history"

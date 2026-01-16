@@ -44,6 +44,7 @@ docker run ^
 --rm ^
 --interactive ^
 --tty ^
+--hostname=somehost ^
 --mount type=bind,source="%REPO_DIR%",target="%DOTFILES_VOLUME_DIR%",readonly ^
 --env INSTALL_SCRIPT_PARAMS="%INSTALL_SCRIPT_PARAMS%" ^
 --env DOTFILES_VOLUME_DIR="%DOTFILES_VOLUME_DIR%" ^

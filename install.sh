@@ -361,8 +361,11 @@ build_home() {
 	local home_dir="/home/$username"
 	$SUDO mkdir -p "$home_dir"/{.cache,.config,.local,.ssh}
 	$SUDO mkdir "$home_dir/.local"/{bin,share,state}
+
 	$SUDO mkdir "$home_dir/.local/share/"{zsh,man}
 	$SUDO mkdir "$home_dir/.local/share/zsh/plugins"
+
+	$SUDO mkdir "$home_dir/.cache/zsh"
 
 	$SUDO chown -R "$username:$username" "$home_dir"
 	$SUDO chmod -R 700 "$home_dir"
@@ -522,8 +525,7 @@ link() {
 			if [[ -d "$actual_path" ]]; then
 				[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
 				_debug "Create directory: \"${LC["path"]}$as_target_item${C["0"]}\""
-				# TODO: ignore .config
-				mkdir "$as_target_item" # TODO: install (700)
+				$SUDO install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$as_target_item" -d
 
 				if [[ "$item_type" == "union" ]]; then
 					link "$as_target_item" "$as_host_item" "$as_default_item"

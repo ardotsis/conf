@@ -1,8 +1,8 @@
 export PATH="/opt/nvim-linux-x86_64/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 
+fpath+=("$Z_COMPLETION_DIR" "$Z_PLUGIN_DIR/pure")
 # Pure prompt
-fpath+=("$Z_PLUGIN_DIR/pure")
 autoload -U promptinit
 promptinit
 PURE_CMD_MAX_EXEC_TIME=10
@@ -16,11 +16,10 @@ bindkey -e
 
 HISTSIZE=1000
 SAVEHIST=1000
-HISTFILE="$Z_SHARE_DIR/history"
+HISTFILE="$Z_HIST_FILE"
 
-fpath+=("$ZDOTDIR/completions")
 autoload -Uz compinit
-compinit -d "$Z_COMP_DIR" # TODO: broken. they dont output anything
+compinit -d "$Z_COMPDUMP_FILE" # TODO: broken. they dont output anything
 
 # eval "$(starship init zsh)" # https://github.com/starship/starship/issues/6519
 eval "$(zoxide init zsh)" # TODO: fzf
