@@ -585,6 +585,13 @@ setup_system() {
 }
 
 _setup_vultr() {
+	_info "Start package installation"
+	while read -r pkg; do
+		if ! is_cmd_exist "$pkg"; then
+			install_package "$pkg"
+		fi
+	done <"${DF_REPO["package_list"]}"
+
 	if [[ "$IS_DEBUG" == "true" ]]; then
 		_debug "New debug symlink: \"${LC["path"]}${DF_REPO["_dir"]}${C["0"]}\" -> \"${LC["path"]}$DOCKER_VOLUME_DIR${C["0"]}\""
 		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
@@ -602,13 +609,6 @@ _setup_vultr() {
 
 	_info "Start linking dotfiles"
 	link "$HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
-
-	_info "Start package installation"
-	while read -r pkg; do
-		if ! is_cmd_exist "$pkg"; then
-			install_package "$pkg"
-		fi
-	done <"${DF_REPO["package_list"]}"
 
 	if is_cmd_exist ufw; then
 		_info "Uninstall UFW"
@@ -676,7 +676,6 @@ _setup_vultr() {
 	} >>"$ssh_dir/config"
 
 	rm -f "$ssh_dir/${git_filename}.pub"
-
 }
 
 _setup_arch() {
