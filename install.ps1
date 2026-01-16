@@ -60,7 +60,8 @@ function main() {
 
         Set-Symlink -WinDir $winDir -RepoDir $repoDir
     }
+
+    Pause
 }
 
 main
-Pause

@@ -1,2 +1,5 @@
+# General
+.env
+
+# VSCode
 .history/
-.data/

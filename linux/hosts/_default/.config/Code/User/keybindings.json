@@ -133,5 +133,15 @@
   {
     "command": "-workbench.action.toggleSidebarVisibility",
     "key": "ctrl+b"
+  },
+  {
+    "command": "-vscode-neovim.send-cmdline",
+    "key": "ctrl+w",
+    "when": "neovim.init && neovim.mode == 'cmdline'"
+  },
+  {
+    "command": "-vscode-neovim.send",
+    "key": "ctrl+w",
+    "when": "editorTextFocus && neovim.ctrlKeysNormal.w && neovim.init && neovim.mode != 'insert' && editorLangId not in 'neovim.editorLangIdExclusions'"
   }
 ]

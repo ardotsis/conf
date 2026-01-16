@@ -75,6 +75,7 @@
     "shellscript": false
   },
   "inlineChat.lineNaturalLanguageHint": false,
+  "liveServer.settings.donotShowInfoMsg": true,
   "powershell.integratedConsole.showOnStartup": false,
   "powershell.integratedConsole.startInBackground": true,
   "redhat.telemetry.enabled": false,
