@@ -585,9 +585,10 @@ setup_system() {
 }
 
 _setup_vultr() {
-	DEBIAN_FRONTEND=noninteractive
-	$SUDO apt update && $SUDO apt upgrade -y
+	$SUDO apt update
+	$SUDO DEBIAN_FRONTEND=noninteractive apt -o Dpkg::Options::="--force-confnew" upgrade -y
 
+	### Install Git
 	if [[ "$IS_DEBUG" == "true" ]]; then
 		_debug "New debug symlink: \"${LC["path"]}${DF_REPO["_dir"]}${C["0"]}\" -> \"${LC["path"]}$DOCKER_VOLUME_DIR${C["0"]}\""
 		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
