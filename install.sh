@@ -569,7 +569,7 @@ setup_system() {
 	$SUDO install -m 0755 -o "root" -g "root" "/etc/iptables" -d
 	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template_dir"]}/iptables/rules.v4" "/etc/iptables/rules.v4"
 	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template_dir"]}/iptables/rules.v6" "/etc/iptables/rules.v6"
-	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template_dir"]}/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
+	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template_dir"]}/iptables/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
 	$SUDO sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "/etc/iptables/rules.v4"
 
 	if [[ "$IS_DOCKER" == "false" ]]; then
@@ -585,11 +585,14 @@ setup_system() {
 }
 
 _setup_vultr() {
+	_info "Updating package list..."
+	$SUDO apt update && $SUDO apt upgrade -y
+
 	if [[ "$IS_DEBUG" == "true" ]]; then
 		_debug "New debug symlink: \"${LC["path"]}${DF_REPO["_dir"]}${C["0"]}\" -> \"${LC["path"]}$DOCKER_VOLUME_DIR${C["0"]}\""
 		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
 	else
-		if ! is_cmd_exist git; then
+		if ! is_cmd_exist "git"; then
 			install_package "git"
 		fi
 		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
