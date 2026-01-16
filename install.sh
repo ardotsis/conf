@@ -585,15 +585,15 @@ setup_system() {
 }
 
 _setup_vultr() {
-	_info "Updating package list..."
+	DEBIAN_FRONTEND=noninteractive
 	$SUDO apt update && $SUDO apt upgrade -y
 
 	if [[ "$IS_DEBUG" == "true" ]]; then
 		_debug "New debug symlink: \"${LC["path"]}${DF_REPO["_dir"]}${C["0"]}\" -> \"${LC["path"]}$DOCKER_VOLUME_DIR${C["0"]}\""
 		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
 	else
-		if ! is_cmd_exist "git"; then
-			install_package "git"
+		if ! is_cmd_exist git; then
+			install_package git
 		fi
 		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
 	fi
