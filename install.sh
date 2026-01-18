@@ -645,7 +645,7 @@ _setup_vultr() {
 
 	printf "%s" "$ssh_publickey" >>"$ssh_dir/authorized_keys"
 	{
-		printf "# Client's SSH template"
+		printf "# Client's SSH template\n"
 		printf "Host %s\n" "$HOSTNAME"
 		printf "  HostName %s\n" "$(curl -fsSL https://api.ipify.org)"
 		printf "  Port %s\n" "$ssh_port"
