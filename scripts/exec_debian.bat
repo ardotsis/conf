@@ -10,4 +10,4 @@ docker exec ^
 --tty ^
 --workdir "/home/%DEV_USERNAME%" ^
 --user "%DEV_USERNAME%" ^
-"%CONTAINER_NAME%" zsh
+"%CONTAINER_NAME%" zsh --login

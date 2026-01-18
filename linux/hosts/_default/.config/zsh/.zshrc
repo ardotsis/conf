@@ -22,6 +22,6 @@ zstyle :prompt:pure:git:stash show yes
 prompt pure
 
 ### Plugins
-eval "$(zoxide init zsh)" # TODO: fzf
+eval "$(zoxide init zsh)"
 source "$Z_PLUGIN_DIR/zsh-autosuggestions/zsh-autosuggestions.zsh"
 source "$Z_PLUGIN_DIR/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" # MUST BE LAST

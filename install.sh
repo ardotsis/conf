@@ -94,7 +94,7 @@ declare -r SCRIPT_NAME="${BASH_SOURCE[0]+x}"
 declare -r HOME="/home/$INSTALL_USER" # Override $HOME
 declare -r TMP_DIR="/var/tmp"
 declare -r DOCKER_VOLUME_DIR="/app"
-declare -r CUSTOM_SSH_PORT_FILE="/etc/CUSTOM_SSH_PORT"
+declare -r INIT_FLAG_FILE="/etc/DOTFILES_INIT"
 declare -r TMP_INSTALL_SCRIPT_FILE="$TMP_DIR/install_dotfiles.sh"
 
 declare -A DF_REPO
@@ -108,7 +108,7 @@ DF_REPO["current_host"]="${DF_REPO["hosts_dir"]}/$HOSTNAME"
 declare -r DF_REPO
 
 declare -A DF_DATA
-DF_DATA["_dir"]="$HOME/dotfiles-data"
+DF_DATA["_dir"]="${DF_REPO["_dir"]}/dotfiles-data"
 DF_DATA["secret"]="${DF_DATA["_dir"]}/secret"
 DF_DATA["backups_dir"]="${DF_DATA["_dir"]}/backups"
 declare -A DF_DATA
@@ -356,19 +356,21 @@ remove_package() {
 }
 
 build_home() {
-	local username="$1"
+	$SUDO mkdir -p "$HOME"/{.cache,.config,.local,.ssh}
+	$SUDO mkdir "$HOME/.local"/{bin,share,state}
+	$SUDO mkdir "$HOME/.local/share/"{zsh,man}
+	$SUDO mkdir "$HOME/.local/share/zsh/plugins"
+	$SUDO mkdir "$HOME/.cache/zsh"
 
-	local home_dir="/home/$username"
-	$SUDO mkdir -p "$home_dir"/{.cache,.config,.local,.ssh}
-	$SUDO mkdir "$home_dir/.local"/{bin,share,state}
+	$SUDO chown -R "$INSTALL_USER:$INSTALL_USER" "$HOME"
+	$SUDO chmod -R 700 "$HOME"
 
-	$SUDO mkdir "$home_dir/.local/share/"{zsh,man}
-	$SUDO mkdir "$home_dir/.local/share/zsh/plugins"
-
-	$SUDO mkdir "$home_dir/.cache/zsh"
-
-	$SUDO chown -R "$username:$username" "$home_dir"
-	$SUDO chmod -R 700 "$home_dir"
+	if [[ "$IS_DEBUG" == "true" ]]; then
+		_debug "New debug symlink: \"${LC["path"]}${DF_REPO["_dir"]}${C["0"]}\" -> \"${LC["path"]}$DOCKER_VOLUME_DIR${C["0"]}\""
+		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
+	else
+		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
+	fi
 }
 
 add_user() {
@@ -449,22 +451,30 @@ get_items() {
 
 get_mixed_items() {
 	# todo: arr1 arr2
-	local -n arr_name_1="$1"
-	local -n arr_name_2="$2"
+	local -n left_arr="$1"
+	local -n right_arr="$2"
 	local mode="$3"
 	# shellcheck disable=SC2178
-	local -n result_arr_name="$4"
+	local -n result_arr="$4"
+
+	case "$mode" in
+	union) comm_num="-12" ;;
+	left_only) comm_num="-23" ;;
+	right_only) comm_num="-13" ;;
+	*) return 1 ;;
+	esac
 
 	# shellcheck disable=SC2034
-	mapfile -d $'\0' result_arr_name < <(comm "$mode" -z \
-		<(printf "%s\0" "${arr_name_1[@]}" | sort -z) \
-		<(printf "%s\0" "${arr_name_2[@]}" | sort -z))
+	mapfile -d $'\0' result_arr < <(comm "$comm_num" -z \
+		<(printf "%s\0" "${left_arr[@]}" | sort -z) \
+		<(printf "%s\0" "${right_arr[@]}" | sort -z))
 }
 
 link() {
 	local target_dir="$1"
-	local host_dir="${2:-}" # Preferer
+	local host_dir="${2:-}" # Preferrer
 	local default_dir="${3:-}"
+	local is_init="${4:-true}"
 	_vars "target_dir" "host_dir" "default_dir"
 
 	local all_host_items=() all_default_items=()
@@ -474,9 +484,9 @@ link() {
 	# shellcheck disable=SC2034
 	local union_items=() host_items=() default_items=()
 	if [[ -n "$host_dir" && -n "$default_dir" ]]; then
-		get_mixed_items "all_host_items" "all_default_items" "-12" "union_items"
-		get_mixed_items "all_host_items" "all_default_items" "-23" "host_items"
-		get_mixed_items "all_host_items" "all_default_items" "-13" "default_items"
+		get_mixed_items "all_host_items" "all_default_items" "union" "union_items"
+		get_mixed_items "all_host_items" "all_default_items" "left_only" "host_items"
+		get_mixed_items "all_host_items" "all_default_items" "right_only" "default_items"
 	elif [[ -n "$host_dir" ]]; then
 		# shellcheck disable=SC2034
 		local host_items=("${all_host_items[@]}")
@@ -484,7 +494,6 @@ link() {
 		# shellcheck disable=SC2034
 		local default_items=("${all_default_items[@]}")
 	fi
-	# _vars "union_items[@]" "host_items[@]" "default_items[@]" # TODO Ubuntu:jammy -> line 237: !var_name: unbound variable
 
 	local item_type prefixed_items=()
 	for item_type in "host" "union" "default"; do
@@ -500,7 +509,8 @@ link() {
 			[[ -z "$item" ]] && continue
 			# Skip host prefixed item
 			local renamed_item="${item#"${HOST_PREFIX}"}"
-			if [[ "$item_type" == "default" && " ${prefixed_items[*]} " =~ [[:space:]]${renamed_item}[[:space:]] ]]; then
+			# shellcheck disable=SC1087
+			if [[ "$item_type" == "default" && " ${prefixed_items[*]} " =~ [[:space:]]$renamed_item[[:space:]] ]]; then
 				continue
 			fi
 
@@ -525,14 +535,14 @@ link() {
 			if [[ -d "$actual_path" ]]; then
 				[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
 				_debug "Create directory: \"${LC["path"]}$as_target_item${C["0"]}\""
-				$SUDO install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$as_target_item" -d
+				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$as_target_item" -d
 
 				if [[ "$item_type" == "union" ]]; then
-					link "$as_target_item" "$as_host_item" "$as_default_item"
+					link "$as_target_item" "$as_host_item" "$as_default_item" "false"
 				elif [[ "$item_type" == "host" ]]; then
-					link "$as_target_item" "$as_host_item"
+					link "$as_target_item" "$as_host_item" "false"
 				elif [[ "$item_type" == "default" ]]; then
-					link "$as_target_item" "" "$as_default_item"
+					link "$as_target_item" "" "$as_default_item" "false"
 				fi
 			elif [[ -f "$actual_path" ]]; then
 				[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
@@ -541,22 +551,25 @@ link() {
 			fi
 		done
 	done
+
+	if [[ "$is_init" == "true" ]]; then
+		tracks=("${union_items}")
+	fi
+
 }
 
 ##################################################
 #                   Installers                   #
 ##################################################
 setup_system() {
-	local template_dir="$1"
-
 	_info "Installing neovim..."
 	install_nvim
 
 	# Generate random SSH port
 	local ssh_port
 	ssh_port="$((1024 + RANDOM % (65535 - 1024 + 1)))"
-	$SUDO install -m 0755 -o "root" -g "root" "/dev/null" "$CUSTOM_SSH_PORT_FILE"
-	printf "%s" "$ssh_port" | $SUDO tee "$CUSTOM_SSH_PORT_FILE"
+	$SUDO install -m 0755 -o "root" -g "root" "/dev/null" "$INIT_FLAG_FILE"
+	printf "%s" "$ssh_port" | $SUDO tee "$INIT_FLAG_FILE"
 
 	# openssh-server
 	[[ -e "/etc/ssh" ]] && $SUDO rm -rf "/etc/ssh"
@@ -586,16 +599,7 @@ setup_system() {
 }
 
 _setup_vultr() {
-	### Install Git
-	if [[ "$IS_DEBUG" == "true" ]]; then
-		_debug "New debug symlink: \"${LC["path"]}${DF_REPO["_dir"]}${C["0"]}\" -> \"${LC["path"]}$DOCKER_VOLUME_DIR${C["0"]}\""
-		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
-	else
-		if ! is_cmd_exist git; then
-			install_package git
-		fi
-		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
-	fi
+	# Install "~/.dotfiles"
 
 	_info "Start package installation"
 	while read -r pkg; do
@@ -605,11 +609,11 @@ _setup_vultr() {
 	done <"${DF_REPO["package_list"]}"
 
 	local ssh_port
-	if [[ ! -e "$CUSTOM_SSH_PORT_FILE" ]]; then
+	if [[ ! -e "$INIT_FLAG_FILE" ]]; then
 		_info "New system installation. Setup network config..."
 		ssh_port=$(setup_system "${DF_REPO["template_dir"]}")
 	else
-		ssh_port="$(<"$CUSTOM_SSH_PORT_FILE")"
+		ssh_port="$(<"$INIT_FLAG_FILE")"
 	fi
 
 	_info "Start linking dotfiles"
@@ -706,7 +710,7 @@ run() {
 		else
 			_debug "Download script from ${C["y"]}${URL["dotfiles_install_script"]}${C["0"]}"
 			curl -fsSL "${URL["dotfiles_install_script"]}" -o "$TMP_INSTALL_SCRIPT_FILE"
-			$SUDO chmod 755 "$TMP_INSTALL_SCRIPT_FILE" && chown root:root "$TMP_INSTALL_SCRIPT_FILE"
+			$SUDO chmod 0755 "$TMP_INSTALL_SCRIPT_FILE" && chown root:root "$TMP_INSTALL_SCRIPT_FILE"
 		fi
 
 		get_script_run_cmd "$TMP_INSTALL_SCRIPT_FILE" "run_cmd"
@@ -716,12 +720,17 @@ run() {
 	fi
 
 	############### Main Process ###############
+	## TOOD: setup global settings (network, neovim)
 	if is_usr_exist "$INSTALL_USER"; then
 		cd "$HOME"
 		"_setup_$HOSTNAME"
 	else
 		if [[ -n "$SUDO" ]]; then
 			sudo -v
+		fi
+
+		if ! is_cmd_exist git; then
+			install_package git
 		fi
 
 		_info "Create user: ${LC["highlight"]}${INSTALL_USER}${C["0"]}"
@@ -738,14 +747,17 @@ run() {
 		printf "# DELETE this file, once you complete the process.\n\n" >>"${DF_DATA["secret"]}"
 		printf "# Password (%s)\n%s\n\n" "$INSTALL_USER" "$passwd" >>"${DF_DATA["secret"]}"
 
+		if [[ ! -e "$INIT_FLAG_FILE" ]]; then
+			_info "Initializing system..."
+			setup_system
+		fi
+
 		local run_cmd
 		get_script_run_cmd "$(get_script_path)" "run_cmd"
 		_info "Done user creation. Exit and starting install script as ${LC["highlight"]}$INSTALL_USER${C["0"]}..."
 		sudo -u "$INSTALL_USER" -- "${run_cmd[@]}"
 		exit 0
 	fi
-
-	[[ -e "$HOME/.sudo_as_admin_successful" ]] && rm -f "$HOME/.sudo_as_admin_successful"
 
 	if [[ "$IS_DOCKER" == "true" ]]; then
 		_info "Docker mode is enabled. Keeping docker container running..."
