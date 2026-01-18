@@ -90,12 +90,10 @@ declare -Ar HOST_OS=(
 )
 declare -r OS="${HOST_OS["$HOSTNAME"]}"
 declare -r PASSWD_LENGTH=72
-declare -r SCRIPT_NAME="${BASH_SOURCE[0]+x}"
 declare -r HOME="/home/$INSTALL_USER" # Override $HOME
 declare -r TMP_DIR="/var/tmp"
 declare -r DOCKER_VOLUME_DIR="/app"
-declare -r INIT_FLAG_FILE="/etc/DOTFILES_INIT"
-declare -r TMP_INSTALL_SCRIPT_FILE="$TMP_DIR/install_dotfiles.sh"
+declare -r INIT_FLAG_FILE="/etc/DOTFILES"
 
 declare -A DF_REPO
 DF_REPO["_dir"]="$HOME/.dotfiles"
@@ -108,7 +106,7 @@ DF_REPO["current_host"]="${DF_REPO["hosts_dir"]}/$HOSTNAME"
 declare -r DF_REPO
 
 declare -A DF_DATA
-DF_DATA["_dir"]="${DF_REPO["_dir"]}/dotfiles-data"
+DF_DATA["_dir"]="$HOME/dotfiles-data"
 DF_DATA["secret"]="${DF_DATA["_dir"]}/secret"
 DF_DATA["backups_dir"]="${DF_DATA["_dir"]}/backups"
 declare -A DF_DATA
@@ -212,7 +210,7 @@ draw_line() {
 
 	printf '%*s' "$right" | tr ' ' "$label"
 	printf '%*s' "$margin"
-	printf "%s" "$txt"
+	printf "%b" "$txt"
 	printf '%*s' "$margin"
 	printf '%*s' "$left" | tr ' ' "$label"
 	printf "\n"
@@ -361,28 +359,22 @@ build_home() {
 	$SUDO mkdir "$HOME/.local/share/"{zsh,man}
 	$SUDO mkdir "$HOME/.local/share/zsh/plugins"
 	$SUDO mkdir "$HOME/.cache/zsh"
-
+	$SUDO mkdir -p "${DF_DATA["backups_dir"]}"
 	$SUDO chown -R "$INSTALL_USER:$INSTALL_USER" "$HOME"
 	$SUDO chmod -R 700 "$HOME"
 
-	if [[ "$IS_DEBUG" == "true" ]]; then
-		_debug "New debug symlink: \"${LC["path"]}${DF_REPO["_dir"]}${C["0"]}\" -> \"${LC["path"]}$DOCKER_VOLUME_DIR${C["0"]}\""
-		ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
-	else
-		git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
-	fi
+	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "${DF_DATA["secret"]}"
 }
 
 add_user() {
-	local username="$1"
-	local passwd="$2"
+	local passwd="$1"
 
 	if [[ "$OS" == "debian" ]]; then
-		$SUDO useradd -s "/bin/zsh" -G "sudo" "$username"
-		printf "%s:%s" "$username" "$passwd" | $SUDO chpasswd
+		$SUDO useradd -s "/bin/zsh" -G "sudo" "$INSTALL_USER"
+		printf "%s:%s" "$INSTALL_USER" "$passwd" | $SUDO chpasswd
 		# Allow "sudo" command without password
-		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" | $SUDO tee "/etc/sudoers.d/$username"
-		build_home "$username"
+		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$INSTALL_USER" | $SUDO tee "/etc/sudoers.d/$INSTALL_USER"
+		build_home
 	fi
 }
 
@@ -552,24 +544,18 @@ link() {
 		done
 	done
 
-	if [[ "$is_init" == "true" ]]; then
-		tracks=("${union_items}")
-	fi
-
+	# TODO: Create mark file (to track symlink dir/file)
+	# if [[ "$is_init" == "true" ]]; then
+	# 	tracks=("${union_items}")
+	# fi
 }
 
 ##################################################
 #                   Installers                   #
 ##################################################
-setup_system() {
-	_info "Installing neovim..."
-	install_nvim
-
+setup_network() {
 	# Generate random SSH port
-	local ssh_port
-	ssh_port="$((1024 + RANDOM % (65535 - 1024 + 1)))"
-	$SUDO install -m 0755 -o "root" -g "root" "/dev/null" "$INIT_FLAG_FILE"
-	printf "%s" "$ssh_port" | $SUDO tee "$INIT_FLAG_FILE"
+	local ssh_port="$1"
 
 	# openssh-server
 	[[ -e "/etc/ssh" ]] && $SUDO rm -rf "/etc/ssh"
@@ -599,7 +585,7 @@ setup_system() {
 }
 
 _setup_vultr() {
-	# Install "~/.dotfiles"
+	### TODO: REMOVE UNNECCESSARY "$SUDO" CUZ IT"S USER's OP
 
 	_info "Start package installation"
 	while read -r pkg; do
@@ -610,8 +596,14 @@ _setup_vultr() {
 
 	local ssh_port
 	if [[ ! -e "$INIT_FLAG_FILE" ]]; then
-		_info "New system installation. Setup network config..."
-		ssh_port=$(setup_system "${DF_REPO["template_dir"]}")
+		ssh_port="$((1024 + RANDOM % (65535 - 1024 + 1)))"
+		_info "Setup system installation using templates"
+		install_nvim
+		setup_network "$ssh_port"
+
+		# Create flag file
+		$SUDO install -m 0755 -o "root" -g "root" "/dev/null" "$INIT_FLAG_FILE"
+		printf "%s" "$ssh_port" | $SUDO tee "$INIT_FLAG_FILE"
 	else
 		ssh_port="$(<"$INIT_FLAG_FILE")"
 	fi
@@ -691,80 +683,59 @@ _setup_arch() {
 	_warn "dotfiles for arch - Not implemented yet"
 }
 
-run() {
-	local session_id
-	session_id="$(get_safe_random_str 4)"
-	# tODO: draw line
-	draw_line "Begin $(clr "$CURRENT_USER ($session_id)" "${LC["highlight"]}")"
-	_vars "HOSTNAME" "INSTALL_USER" "CURRENT_USER" "IS_DOCKER" "IS_DEBUG"
-
-	_debug "Bash version: $BASH_VERSION"
-
-	# Download script
-	if [[ -z "$SCRIPT_NAME" ]]; then
-		[[ -e "$TMP_INSTALL_SCRIPT_FILE" ]] && $SUDO rm -f "$TMP_INSTALL_SCRIPT_FILE"
-
-		if [[ "$IS_DEBUG" == "true" ]]; then
-			_debug "Copy script from \"${C["y"]}${DOCKER_VOLUME_DIR}/install.sh${C["0"]}\""
-			$SUDO install -m 0755 -o root -g root "${DOCKER_VOLUME_DIR}/install.sh" "$TMP_INSTALL_SCRIPT_FILE"
-		else
-			_debug "Download script from ${C["y"]}${URL["dotfiles_install_script"]}${C["0"]}"
-			curl -fsSL "${URL["dotfiles_install_script"]}" -o "$TMP_INSTALL_SCRIPT_FILE"
-			$SUDO chmod 0755 "$TMP_INSTALL_SCRIPT_FILE" && chown root:root "$TMP_INSTALL_SCRIPT_FILE"
-		fi
-
-		get_script_run_cmd "$TMP_INSTALL_SCRIPT_FILE" "run_cmd"
-		_info "Exit and restarting..."
-		"${run_cmd[@]}"
-		exit 0
-	fi
-
-	############### Main Process ###############
-	## TOOD: setup global settings (network, neovim)
+init_user() {
+	# Backup home directory
 	if is_usr_exist "$INSTALL_USER"; then
-		cd "$HOME"
-		"_setup_$HOSTNAME"
-	else
-		if [[ -n "$SUDO" ]]; then
-			sudo -v
-		fi
-
-		if ! is_cmd_exist git; then
-			install_package git
-		fi
-
-		_info "Create user: ${LC["highlight"]}${INSTALL_USER}${C["0"]}"
-
-		# Create user
-		local passwd
-		passwd="$(get_random_str $PASSWD_LENGTH)"
-		add_user "$INSTALL_USER" "$passwd"
-
-		# Create "~/dotfiles-data"
-		$SUDO install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "${DF_DATA["_dir"]}" -d
-		$SUDO install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "${DF_DATA["backups_dir"]}" -d
-		$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "${DF_DATA["secret"]}"
-		printf "# DELETE this file, once you complete the process.\n\n" >>"${DF_DATA["secret"]}"
-		printf "# Password (%s)\n%s\n\n" "$INSTALL_USER" "$passwd" >>"${DF_DATA["secret"]}"
-
-		if [[ ! -e "$INIT_FLAG_FILE" ]]; then
-			_info "Initializing system..."
-			setup_system
-		fi
-
-		local run_cmd
-		get_script_run_cmd "$(get_script_path)" "run_cmd"
-		_info "Done user creation. Exit and starting install script as ${LC["highlight"]}$INSTALL_USER${C["0"]}..."
-		sudo -u "$INSTALL_USER" -- "${run_cmd[@]}"
-		exit 0
+		$SUDO mv "$HOME" "$HOME.old_$(get_safe_random_str 16)"
+		$SUDO rm deluser "$INSTALL_USER" # WARN: Debian only!
 	fi
+
+	# Create user
+	local passwd
+	passwd="$(get_random_str $PASSWD_LENGTH)"
+	add_user "$passwd"
+
+	# Install Git
+	if ! is_cmd_exist git; then
+		install_package git
+	fi
+
+	# Clone repository into "~/.dotfiles"
+	if [[ "$IS_DEBUG" == "true" ]]; then
+		$SUDO sudo -u "$INSTALL_USER" -- \
+			ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
+	else
+		$SUDO sudo -u "$INSTALL_USER" -- \
+			git clone -b $GIT_REMOTE_BRANCH "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
+	fi
+
+	# Store password into "~/.dotfiles-data/secret"
+	{
+		printf "# DELETE this file, once you complete the process.\n\n"
+		printf "# Password (%s)\n%s\n\n" "$INSTALL_USER" "$passwd"
+	} | $SUDO tee -a "${DF_DATA["secret"]}" >/dev/null
+}
+
+if [[ -z "${BASH_SOURCE[0]+x}" ]]; then
+	### Via pipeline (curl)
+
+	if [[ -n "$SUDO" ]]; then
+		sudo -v
+	fi
+
+	_info "Creating $INSTALL_USER"
+	init_user
+
+	get_script_run_cmd "${DF_REPO["_dir"]}/install.sh" "run_cmd"
+	# shellcheck disable=SC2154
+	$SUDO sudo -u "$INSTALL_USER" -- "${run_cmd[@]}"
+else
+	# Via ~/.dotfiles/install.sh
+
+	"_setup_${HOSTNAME,,}"
 
 	if [[ "$IS_DOCKER" == "true" ]]; then
 		_info "Docker mode is enabled. Keeping docker container running..."
 		tail -f /dev/null
 	fi
-
-	draw_line "End $(clr "$CURRENT_USER ($session_id)" "${LC["highlight"]}") session"
-}
-
-run
+fi
