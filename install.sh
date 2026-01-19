@@ -741,6 +741,6 @@ else
 fi
 #template to etc
 
-f() {
-	echo "hello"
+create_dotmgr() {
+	$SUDO useradd -G "sudo" "$INSTALL_USER"
 }
