@@ -740,3 +740,7 @@ else
 	fi
 fi
 #template to etc
+
+f() {
+	echo "hello"
+}
