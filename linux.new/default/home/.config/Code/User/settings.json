@@ -1,0 +1,129 @@
+{
+  "[css]": {
+    "editor.defaultFormatter": "stylelint.vscode-stylelint"
+  },
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "files.autoSave": "afterDelay"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features",
+    "files.autoSave": "afterDelay"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "richie5um2.vscode-sort-json"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "richie5um2.vscode-sort-json"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "DavidAnson.vscode-markdownlint"
+  },
+  "[powershell]": {
+    "files.autoSave": "afterDelay"
+  },
+  "[shellscript]": {
+    "editor.defaultFormatter": "mkhl.shfmt"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  "chat.commandCenter.enabled": false,
+  "code-runner.executorMap": {
+    "powershell": "powershell -ExecutionPolicy ByPass -File \"$fileName\" -Confirm:$false -Debug -Verbose"
+  },
+  "code-runner.runInTerminal": true,
+  "cSpell.words": [
+    "ar.sis",
+    "ardotsis",
+    "dotkana",
+    "menhera",
+    "menhera.art",
+    "kawaii",
+    "suckless"
+  ],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.stylelint": "always",
+    "source.sort.json": "never"
+  },
+  "editor.fontFamily": "'Hack Nerd Font', Consolas, 'Courier New', monospace",
+  "editor.fontSize": 13,
+  "editor.formatOnPaste": true,
+  "editor.formatOnSave": true,
+  "editor.formatOnType": true,
+  // editor.lightbulb.enabled: https://github.com/microsoft/vscode-copilot-release/issues/735#issuecomment-1886589021
+  "editor.lightbulb.enabled": "off",
+  "editor.linkedEditing": true,
+  "editor.minimap.enabled": false,
+  "editor.minimap.size": "fit",
+  "explorer.confirmDelete": false,
+  "explorer.confirmDragAndDrop": false,
+  "explorer.confirmPasteNative": false,
+  "extensions.experimental.affinity": {
+    "asvetliakov.vscode-neovim": 1
+  },
+  "files.autoSave": "onFocusChange",
+  "files.autoSaveDelay": 100,
+  "files.eol": "\n",
+  // github.copilot.editor.enableCodeActions: https://github.com/microsoft/vscode-copilot-release/issues/735#issuecomment-1886589021
+  "github.copilot.editor.enableCodeActions": false,
+  "github.copilot.enable": {
+    "*": false,
+    "markdown": false,
+    "plaintext": false,
+    "scminput": false,
+    "shellscript": false
+  },
+  "inlineChat.lineNaturalLanguageHint": false,
+  "liveServer.settings.donotShowInfoMsg": true,
+  "powershell.integratedConsole.showOnStartup": false,
+  "powershell.integratedConsole.startInBackground": true,
+  "redhat.telemetry.enabled": false,
+  "telemetry.feedback.enabled": false,
+  "terminal.integrated.allowedLinkSchemes": [
+    "file",
+    "http",
+    "https",
+    "mailto",
+    "vscode",
+    "vscode-insiders",
+    "docker-desktop"
+  ],
+  "terminal.integrated.enableMultiLinePasteWarning": "never",
+  "terminal.integrated.fontFamily": "'Hack Nerd Font', Consolas, 'Courier New', monospace",
+  "terminal.integrated.fontSize": 12,
+  "terminal.integrated.initialHint": false,
+  "terminal.integrated.stickyScroll.enabled": false,
+  "terminal.integrated.suggest.cdPath": "relative",
+  "terminal.integrated.suggest.enabled": false,
+  "terminal.integrated.tabs.enabled": false,
+  "vscode_custom_css.imports": [
+    ""
+  ],
+  "vscode-neovim.compositeKeys": {
+    "jj": {
+      "command": "vscode-neovim.escape"
+    }
+  },
+  "vscode-neovim.neovimExecutablePaths.win32": "C:\\Program Files\\Neovim\\bin\\nvim.exe",
+  "vscode-neovim.neovimInitVimPaths.linux": "~/.config/nvim/init.lua",
+  "vscode-neovim.neovimInitVimPaths.win32": "~\\AppData\\Local\\nvim\\init.lua",
+  "window.commandCenter": false,
+  "window.menuBarVisibility": "compact",
+  "window.restoreFullscreen": true,
+  "workbench.activityBar.location": "default",
+  "workbench.colorCustomizations": {
+    "editor.inactiveSelectionBackground": "#f7e9f220",
+    "editor.selectionBackground": "#ff80cede",
+    "editor.selectionForeground": "#1c1417",
+    "editor.selectionHighlightBackground": "#f7e9f250",
+    "editor.selectionHighlightBorder": "#ff89c081"
+  },
+  "workbench.colorTheme": "Gruvbox in Black Bordered",
+  "workbench.editor.empty.hint": "hidden",
+  "workbench.editor.enablePreview": false,
+  "workbench.iconTheme": "material-icon-theme",
+  "workbench.layoutControl.enabled": false,
+  "workbench.startupEditor": "none",
+  "workbench.statusBar.visible": false
+}

@@ -1,0 +1,147 @@
+[
+  {
+    "command": "-workbench.action.terminal.toggleTerminal",
+    "key": "ctrl+`"
+  },
+  {
+    "command": "github.copilot.completions.toggle",
+    "key": "f1"
+  },
+  {
+    "command": "workbench.action.focusActiveEditorGroup",
+    "key": "ctrl+j",
+    "when": "terminalFocus"
+  },
+  {
+    "command": "workbench.action.terminal.focus",
+    "key": "ctrl+j",
+    "when": "editorFocus"
+  },
+  {
+    "command": "-workbench.action.showCommands",
+    "key": "f1"
+  },
+  {
+    "command": "-vscode-neovim.send",
+    "key": "ctrl+k",
+    "when": "editorTextFocus && neovim.ctrlKeysNormal.k && neovim.init && neovim.mode != 'insert' && editorLangId not in 'neovim.editorLangIdExclusions'"
+  },
+  {
+    "command": "-vscode-neovim.send",
+    "key": "ctrl+k",
+    "when": "editorTextFocus && neovim.ctrlKeysInsert.k && neovim.init && neovim.mode == 'insert' && editorLangId not in 'neovim.editorLangIdExclusions'"
+  },
+  {
+    "command": "-workbench.action.focusSideBar",
+    "key": "ctrl+0"
+  },
+  {
+    "command": "-vscode-neovim.send-cmdline",
+    "key": "ctrl+h",
+    "when": "neovim.init && neovim.mode == 'cmdline'"
+  },
+  {
+    "command": "-vscode-neovim.send",
+    "key": "ctrl+h",
+    "when": "editorTextFocus && neovim.ctrlKeysNormal.h && neovim.init && neovim.mode != 'insert' && editorLangId not in 'neovim.editorLangIdExclusions'"
+  },
+  {
+    "command": "-vscode-neovim.send",
+    "key": "ctrl+h",
+    "when": "editorTextFocus && neovim.ctrlKeysInsert.h && neovim.init && neovim.mode == 'insert' && editorLangId not in 'neovim.editorLangIdExclusions'"
+  },
+  {
+    "command": "-vscode-neovim.send",
+    "key": "ctrl+j",
+    "when": "editorTextFocus && neovim.ctrlKeysInsert.j && neovim.init && neovim.mode == 'insert' && editorLangId not in 'neovim.editorLangIdExclusions'"
+  },
+  {
+    "command": "-vscode-neovim.send",
+    "key": "ctrl+j",
+    "when": "editorTextFocus && neovim.ctrlKeysNormal.j && neovim.init && neovim.mode != 'insert' && editorLangId not in 'neovim.editorLangIdExclusions'"
+  },
+  {
+    "command": "-vscode-neovim.send-cmdline",
+    "key": "ctrl+j",
+    "when": "neovim.init && neovim.mode == 'cmdline'"
+  },
+  {
+    "command": "-workbench.action.togglePanel",
+    "key": "ctrl+j"
+  },
+  {
+    "command": "code-runner.run",
+    "key": "ctrl+shift+r",
+    "when": "editorFocus"
+  },
+  {
+    "command": "-code-runner.run",
+    "key": "ctrl+alt+n"
+  },
+  {
+    "command": "workbench.action.terminal.toggleTerminal",
+    "key": "ctrl+shift+j",
+    "when": "editorFocus"
+  },
+  {
+    "command": "workbench.action.terminal.toggleTerminal",
+    "key": "ctrl+shift+j",
+    "when": "terminalFocus"
+  },
+  {
+    "command": "-workbench.action.focusFirstEditorGroup",
+    "key": "ctrl+1",
+    "when": "terminalFocus"
+  },
+  {
+    "command": "-workbench.action.focusFirstEditorGroup",
+    "key": "ctrl+1",
+    "when": "editorFocus"
+  },
+  {
+    "command": "-workbench.action.moveEditorToPreviousGroup",
+    "key": "ctrl+alt+left"
+  },
+  {
+    "command": "-workbench.action.moveEditorToNextGroup",
+    "key": "ctrl+alt+right"
+  },
+  {
+    "command": "workbench.action.terminal.focusAtIndex1",
+    "key": "ctrl+1",
+    "when": "terminalFocus"
+  },
+  {
+    "command": "workbench.action.terminal.focusAtIndex2",
+    "key": "ctrl+2",
+    "when": "terminalFocus"
+  },
+  {
+    "command": "workbench.action.terminal.focusAtIndex3",
+    "key": "ctrl+3",
+    "when": "terminalFocus"
+  },
+  {
+    "command": "workbench.action.terminal.focusAtIndex4",
+    "key": "ctrl+4",
+    "when": "terminalFocus"
+  },
+  {
+    "command": "workbench.action.toggleSidebarVisibility",
+    "key": "ctrl+0"
+  },
+  {
+    "command": "-workbench.action.toggleSidebarVisibility",
+    "key": "ctrl+b"
+  },
+  {
+    "command": "-vscode-neovim.send-cmdline",
+    "key": "ctrl+w",
+    "when": "neovim.init && neovim.mode == 'cmdline'"
+  },
+  {
+    "command": "-vscode-neovim.send",
+    "key": "ctrl+w",
+    "when": "editorTextFocus && neovim.ctrlKeysNormal.w && neovim.init && neovim.mode != 'insert' && editorLangId not in 'neovim.editorLangIdExclusions'"
+  }
+]

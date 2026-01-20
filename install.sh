@@ -741,11 +741,37 @@ init_user() {
 # fi
 # #template to etc
 
-apply_home() {
-	local host="$1"
-	local user="$2"
-	local default_dir="$2"
-	local hostr_dir="$3"
-	local user_dir="$4"
+declare -r DEFAULT_DIR_NAME='default'
+declare -r ID_SEP='@'
+
+############## Low Level APIs ##############
+_copy() {
 
 }
+
+_link() {
+	local default_dir="$1"
+	local host_dir="$2"
+	local user_dir="$3"
+	local output_dir="$4"
+}
+
+_cleanup() {
+	local -n tracks
+}
+
+############## High level APIs ##############
+apply() {
+	# type: "copy", "link"
+	local type="$1"
+
+	# _clean_old
+
+	"_apply_$type" ""
+}
+
+testmain() {
+	apply "link"
+}
+
+testmain
