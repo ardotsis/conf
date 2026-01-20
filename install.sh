@@ -716,31 +716,36 @@ init_user() {
 	} | $SUDO tee -a "${DF_DATA["secret"]}" >/dev/null
 }
 
-if [[ -z "${BASH_SOURCE[0]+x}" ]]; then
-	### Via pipeline (curl)
+# if [[ -z "${BASH_SOURCE[0]+x}" ]]; then
+# 	### Via pipeline (curl)
 
-	if [[ -n "$SUDO" ]]; then
-		sudo -v
-	fi
+# 	if [[ -n "$SUDO" ]]; then
+# 		sudo -v
+# 	fi
 
-	_info "Creating $INSTALL_USER"
-	init_user
+# 	_info "Creating $INSTALL_USER"
+# 	init_user
 
-	get_script_run_cmd "${DF_REPO["_dir"]}/install.sh" "run_cmd"
-	# shellcheck disable=SC2154
-	$SUDO sudo -u "$INSTALL_USER" -- "${run_cmd[@]}"
-else
-	# Via ~/.dotfiles/install.sh
+# 	get_script_run_cmd "${DF_REPO["_dir"]}/install.sh" "run_cmd"
+# 	# shellcheck disable=SC2154
+# 	$SUDO sudo -u "$INSTALL_USER" -- "${run_cmd[@]}"
+# else
+# 	# Via ~/.dotfiles/install.sh
 
-	"_setup_${HOSTNAME,,}"
+# 	"_setup_${HOSTNAME,,}"
 
-	if [[ "$IS_DOCKER" == "true" ]]; then
-		_info "Docker mode is enabled. Keeping docker container running..."
-		tail -f /dev/null
-	fi
-fi
-#template to etc
+# 	if [[ "$IS_DOCKER" == "true" ]]; then
+# 		_info "Docker mode is enabled. Keeping docker container running..."
+# 		tail -f /dev/null
+# 	fi
+# fi
+# #template to etc
 
-create_dotmgr() {
-	$SUDO useradd -G "sudo" "$INSTALL_USER"
+apply_home() {
+	local host="$1"
+	local user="$2"
+	local default_dir="$2"
+	local hostr_dir="$3"
+	local user_dir="$4"
+
 }

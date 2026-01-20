@@ -1,7 +1,7 @@
 @echo off
 
 set "DEV_USERNAME=%~1"
-set "IMAGE_NAME=dotfiles-debian"
+set "IMAGE_NAME=conf"
 set "CONTAINER_NAME=%IMAGE_NAME%-container"
 set "DOCKER_CLI_HINTS=false"
 
