@@ -685,9 +685,12 @@ _setup_arch() {
 
 init_user() {
 	# Backup home directory
-	if is_usr_exist "$INSTALL_USER"; then
+	if [[ -e "$HOME" ]]; then
 		$SUDO mv "$HOME" "$HOME.old_$(get_safe_random_str 16)"
-		$SUDO rm deluser "$INSTALL_USER" # WARN: Debian only!
+	fi
+
+	if is_usr_exist "$INSTALL_USER"; then
+		$SUDO deluser "$INSTALL_USER" # WARN: Debian only!
 	fi
 
 	# Create user
