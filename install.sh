@@ -673,6 +673,7 @@ _setup_vultr() {
 		printf "  User git\n"
 		printf "  IdentityFile ~/.ssh/%s\n" "$git_filename"
 		printf "  IdentitiesOnly yes\n"
+		printf "  AddKeysToAgent yes\n"
 		printf "\n"
 	} >>"$ssh_dir/config"
 
