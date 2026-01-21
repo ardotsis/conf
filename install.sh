@@ -543,11 +543,6 @@ link() {
 			fi
 		done
 	done
-
-	# TODO: Create mark file (to track symlink dir/file)
-	# if [[ "$is_init" == "true" ]]; then
-	# 	tracks=("${union_items}")
-	# fi
 }
 
 ##################################################
@@ -772,7 +767,9 @@ apply() {
 }
 
 testmain() {
-	apply "link"
+	# apply "link"
 }
 
 testmain
+
+# 最小構成でテストする環境を整える　ダミーすくりぷとをつかう
