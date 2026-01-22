@@ -6,3 +6,4 @@ vim.opt.number = true
 vim.opt.relativenumber = true
 vim.keymap.set("x", "p", "P")
 vim.keymap.set("x", "P", "p")
+vim.keymap.set("i", "jj", "<ESC>")
