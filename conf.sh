@@ -96,7 +96,7 @@ declare -r DOCKER_VOLUME_DIR="/app"
 declare -r INIT_FLAG_FILE="/etc/DOTFILES"
 
 declare -A DF_REPO
-DF_REPO["_dir"]="$HOME/.dotfiles"
+DF_REPO["_dir"]="/usr/local/src"
 DF_REPO["linux_dir"]="${DF_REPO["_dir"]}/linux"
 DF_REPO["package_list"]="${DF_REPO["linux_dir"]}/packages.txt"
 DF_REPO["template_dir"]="${DF_REPO["linux_dir"]}/template"
