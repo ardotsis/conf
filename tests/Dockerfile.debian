@@ -12,4 +12,4 @@ RUN apt-get update && \
     zsh
 
 # Simulate run script via pipeline (curl)
-CMD ["bash", "-c", "cat $DOTFILES_VOLUME_DIR/install.sh | bash -s -- $INSTALL_SCRIPT_PARAMS"]
+CMD ["bash", "-c", "cat $DOTFILES_VOLUME_DIR/conf.sh | bash -s -- $INSTALL_SCRIPT_PARAMS"]

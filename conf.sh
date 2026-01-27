@@ -1,20 +1,38 @@
 #!/bin/bash
 set -e -u -o pipefail -C
 
-declare -ar _PARAM_0=("--host" "-h" "value" "")
-declare -ar _PARAM_1=("--username" "-u" "value" "ardotsis")
-declare -ar _PARAM_2=("--docker" "-d" "flag" "false")
-declare -ar _PARAM_3=("--debug" "-de" "flag" "false")
-declare -A _PARAMS=()
+is_contain() {
+	local value="$1"
+	local -n arr_ref="$2"
+
+	if [[ " ${arr_ref[*]} " =~ [[:space:]]$value[[:space:]] ]]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
 declare -a _ARGS=("$@")
+declare -ar _MODES=("init" "update" "apply")
+declare MODE="${_ARGS[0]}"
+declare -ar _PARAM_0=("--username" "-u" "value" "ardotsis")
+declare -ar _PARAM_1=("--docker" "-d" "flag" "false")
+declare -ar _PARAM_2=("--debug" "-de" "flag" "false")
+declare -A _PARAMS=()
 declare _IS_ARGS_PARSED="false"
 
-_parse_args() {
-	show_missing_param_err() {
-		printf "Please provide a value for '%s' (%s) parameter.\n" "$1" "$2"
-		exit 1
-	}
+if ! is_contain "${_ARGS[0]}" "_MODES"; then
+	printf "Available mode: %s\n" "${_MODES[*]}" >&2
+	exit 1
+fi
+shift
 
+_show_missing_param_err() {
+	printf "Please provide a value for '%s' (%s) parameter.\n" "$1" "$2" >&2
+	exit 1
+}
+
+_parse_args() {
 	local i=0
 	while :; do
 		local param_var="_PARAM_${i}"
@@ -37,7 +55,7 @@ _parse_args() {
 					if ((value_index < ${#_ARGS[@]})); then
 						value="${_ARGS[$value_index]}"
 					else
-						show_missing_param_err "$long_name" "$short_name"
+						_show_missing_param_err "$long_name" "$short_name"
 					fi
 					_PARAMS["$key"]="$value"
 					_ARGS=("${_ARGS[@]:0:$arg_index}" "${_ARGS[@]:$arg_index+2}")
@@ -53,7 +71,7 @@ _parse_args() {
 			if [[ -n "$default_value" ]]; then
 				_PARAMS["$key"]="$default_value"
 			else
-				show_missing_param_err "$long_name" "$short_name"
+				_show_missing_param_err "$long_name" "$short_name"
 			fi
 		fi
 		i=$((i + 1))
@@ -64,14 +82,14 @@ _parse_args() {
 
 get_arg() {
 	local name="$1"
+
 	if [[ "$_IS_ARGS_PARSED" == "false" ]]; then
 		_parse_args
 	fi
-	printf %s "${_PARAMS[$name]}"
+
+	printf "%s" "${_PARAMS[$name]}"
 }
 
-HOSTNAME=$(get_arg "host")
-declare -r HOSTNAME
 INSTALL_USER=$(get_arg "username")
 declare -r INSTALL_USER
 IS_DOCKER=$(get_arg "docker")
@@ -88,15 +106,15 @@ declare -Ar HOST_OS=(
 	["arch"]="arch"
 	["mc"]="ubuntu"
 )
-declare -r OS="${HOST_OS["$HOSTNAME"]}"
+# declare -r OS="${HOST_OS["$HOSTNAME"]}"
 declare -r PASSWD_LENGTH=72
-declare -r HOME="/home/$INSTALL_USER" # Override $HOME
+declare -r HOME="/home/$INSTALL_USER" # Override
 declare -r TMP_DIR="/var/tmp"
 declare -r DOCKER_VOLUME_DIR="/app"
 declare -r INIT_FLAG_FILE="/etc/DOTFILES"
 
 declare -A DF_REPO
-DF_REPO["_dir"]="/usr/local/src"
+DF_REPO["_dir"]="/usr/local/src/conf"
 DF_REPO["linux_dir"]="${DF_REPO["_dir"]}/linux"
 DF_REPO["package_list"]="${DF_REPO["linux_dir"]}/packages.txt"
 DF_REPO["template_dir"]="${DF_REPO["linux_dir"]}/template"
@@ -113,8 +131,8 @@ declare -A DF_DATA
 
 # TODO: Deprecated
 declare -Ar URL=(
-	["dotfiles_repo"]="https://github.com/ardotsis/dotfiles.git"
-	["dotfiles_install_script"]="https://raw.githubusercontent.com/ardotsis/dotfiles/refs/heads/main/install.sh"
+	["dotfiles_repo"]="https://github.com/ardotsis/conf.git"
+	["dotfiles_install_script"]="https://raw.githubusercontent.com/ardotsis/conf/refs/heads/main/install.sh"
 )
 
 declare -Ar C=(
@@ -159,7 +177,7 @@ _log() {
 	local -r ignore="_log _debug _info _warn _error _vars main"
 	for funcname in "${FUNCNAME[@]}"; do
 		i=$((i + 1))
-		[[ $ignore =~ (^|[[:space:]])$funcname($|[[:space:]]) ]] && continue
+		[[ $ignore =~ (^|[[:space:]])$funcname($|[[:space:]]) ]] && continue # TODO: use is_contain
 		lineno="${BASH_LINENO[$((i - 2))]}"
 		caller="$funcname"
 		break
@@ -711,65 +729,38 @@ init_user() {
 	} | $SUDO tee -a "${DF_DATA["secret"]}" >/dev/null
 }
 
-# if [[ -z "${BASH_SOURCE[0]+x}" ]]; then
-# 	### Via pipeline (curl)
+init() {
+	if [[ -n "$SUDO" ]]; then
+		printf "Require sudo credential"
+		sudo -v
+	fi
 
-# 	if [[ -n "$SUDO" ]]; then
-# 		sudo -v
-# 	fi
+	if ! is_cmd_exist "git"; then
+		install_package "git"
+	fi
 
-# 	_info "Creating $INSTALL_USER"
-# 	init_user
+	if [[ ! -e "${DF_REPO["_dir"]}" ]]; then
+		_info "Clone repository"
+		$SUDO git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
+	fi
 
-# 	get_script_run_cmd "${DF_REPO["_dir"]}/install.sh" "run_cmd"
-# 	# shellcheck disable=SC2154
-# 	$SUDO sudo -u "$INSTALL_USER" -- "${run_cmd[@]}"
-# else
-# 	# Via ~/.dotfiles/install.sh
-
-# 	"_setup_${HOSTNAME,,}"
-
-# 	if [[ "$IS_DOCKER" == "true" ]]; then
-# 		_info "Docker mode is enabled. Keeping docker container running..."
-# 		tail -f /dev/null
-# 	fi
-# fi
-# #template to etc
-
-declare -r DEFAULT_DIR_NAME='default'
-declare -r ID_SEP='@'
-
-############## Low Level APIs ##############
-_copy() {
-
+	if [[ "$IS_DOCKER" == "true" ]]; then
+		printf "Docker mode is enabled. Keeping docker container running..."
+		tail -f /dev/null
+	fi
 }
 
-_link() {
-	local default_dir="$1"
-	local host_dir="$2"
-	local user_dir="$3"
-	local output_dir="$4"
-
+update() {
+	echo
 }
 
-_cleanup() {
-	local -n tracks
-}
-
-############## High level APIs ##############
 apply() {
-	# type: "copy", "link"
-	local type="$1"
-
-	# _clean_old
-
-	"_apply_$type" ""
+	echo
 }
 
-testmain() {
-	# apply "link"
-}
-
-testmain
-
-# 最小構成でテストする環境を整える　ダミーすくりぷとをつかう
+case "$MODE" in
+init) init ;;
+update) update ;;
+apply) apply ;;
+*) exit 1 ;;
+esac
