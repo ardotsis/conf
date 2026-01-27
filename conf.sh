@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e -u -o pipefail -C
 
+if [[ "$(id -u)" == "0" ]]; then
+	declare -r SUDO=""
+else
+	declare -r SUDO="sudo"
+fi
+
 is_contain() {
 	local value="$1"
 	local -n arr_ref="$2"
@@ -9,6 +15,15 @@ is_contain() {
 		return 0
 	else
 		return 1
+	fi
+}
+
+get_os_name() {
+	if [[ -f "/etc/os-release" ]]; then
+		source "/etc/os-release"
+		if [[ "$NAME" == "Debian"* ]]; then
+			printf "%s" "debian"
+		fi
 	fi
 }
 
@@ -90,23 +105,19 @@ get_arg() {
 	printf "%s" "${_PARAMS[$name]}"
 }
 
-INSTALL_USER=$(get_arg "username")
-declare -r INSTALL_USER
 IS_DOCKER=$(get_arg "docker")
 declare -r IS_DOCKER
 IS_DEBUG=$(get_arg "debug")
 declare -r IS_DEBUG
-CURRENT_USER="$(whoami)"
-
+INSTALL_USER=$(get_arg "username")
+declare -r INSTALL_USER
+CURRENT_USER=$(whoami)
 declare -r CURRENT_USER
+
 declare -r GIT_REMOTE_BRANCH="main"
 declare -r HOST_PREFIX="${HOSTNAME^^}##"
-declare -Ar HOST_OS=(
-	["vultr"]="debian"
-	["arch"]="arch"
-	["mc"]="ubuntu"
-)
-# declare -r OS="${HOST_OS["$HOSTNAME"]}"
+OS="$(get_os_name)"
+declare -r OS
 declare -r PASSWD_LENGTH=72
 declare -r HOME="/home/$INSTALL_USER" # Override
 declare -r TMP_DIR="/var/tmp"
@@ -157,13 +168,6 @@ declare -Ar LC=(
 	["path"]="${C["y"]}"
 	["highlight"]="${C["r"]}"
 )
-
-if [[ "$(id -u)" == "0" ]]; then
-	declare -r SUDO=""
-else
-	declare -r SUDO="sudo"
-fi
-
 ##################################################
 #                 Pure Functions                 #
 ##################################################
@@ -378,6 +382,7 @@ build_home() {
 	$SUDO mkdir "$HOME/.local/share/zsh/plugins"
 	$SUDO mkdir "$HOME/.cache/zsh"
 	$SUDO mkdir -p "${DF_DATA["backups_dir"]}"
+
 	$SUDO chown -R "$INSTALL_USER:$INSTALL_USER" "$HOME"
 	$SUDO chmod -R 700 "$HOME"
 
@@ -696,9 +701,10 @@ _setup_arch() {
 	_warn "dotfiles for arch - Not implemented yet"
 }
 
-init_user() {
+init() {
 	# Backup home directory
 	if is_usr_exist "$INSTALL_USER"; then
+		_info "Backup current home directory"
 		$SUDO mv "$HOME" "$HOME.old_$(get_safe_random_str 16)"
 		$SUDO rm deluser "$INSTALL_USER" # WARN: Debian only!
 	fi
@@ -713,14 +719,16 @@ init_user() {
 		install_package git
 	fi
 
-	# Clone repository into "~/.dotfiles"
+	# Clone repository into "/usr/local/src/conf"
 	if [[ "$IS_DEBUG" == "true" ]]; then
-		$SUDO sudo -u "$INSTALL_USER" -- \
-			ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
+		$SUDO ln -sf "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
 	else
 		$SUDO sudo -u "$INSTALL_USER" -- \
 			git clone -b $GIT_REMOTE_BRANCH "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
 	fi
+
+	$SUDO ln -sf "${DF_REPO["_dir"]}/conf.sh" "/usr/local/bin/conf.sh"
+	chmod +x "${DF_REPO["_dir"]}/conf.sh"
 
 	# Store password into "~/.dotfiles-data/secret"
 	{
@@ -729,38 +737,30 @@ init_user() {
 	} | $SUDO tee -a "${DF_DATA["secret"]}" >/dev/null
 }
 
-init() {
+update() {
+	echo "updating $CURRENT_USER"
+}
+
+apply() {
+	echo "applying to $CURRENT_USER"
+}
+
+main_() {
 	if [[ -n "$SUDO" ]]; then
-		printf "Require sudo credential"
 		sudo -v
 	fi
 
-	if ! is_cmd_exist "git"; then
-		install_package "git"
-	fi
-
-	if [[ ! -e "${DF_REPO["_dir"]}" ]]; then
-		_info "Clone repository"
-		$SUDO git clone -b "$GIT_REMOTE_BRANCH" "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
-	fi
+	case "$MODE" in
+	init) init ;;
+	update) update ;;
+	apply) apply ;;
+	*) exit 1 ;;
+	esac
 
 	if [[ "$IS_DOCKER" == "true" ]]; then
-		printf "Docker mode is enabled. Keeping docker container running..."
+		printf "Docker mode is enabled. Keeping docker container running...\n"
 		tail -f /dev/null
 	fi
 }
 
-update() {
-	echo
-}
-
-apply() {
-	echo
-}
-
-case "$MODE" in
-init) init ;;
-update) update ;;
-apply) apply ;;
-*) exit 1 ;;
-esac
+main_
