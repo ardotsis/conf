@@ -29,18 +29,18 @@ get_os_name() {
 
 declare -a _ARGS=("$@")
 declare -ar _MODES=("init" "update" "apply")
-declare MODE="${_ARGS[0]}"
 declare -ar _PARAM_0=("--username" "-u" "value" "ardotsis")
 declare -ar _PARAM_1=("--docker" "-d" "flag" "false")
 declare -ar _PARAM_2=("--debug" "-de" "flag" "false")
 declare -A _PARAMS=()
 declare _IS_ARGS_PARSED="false"
 
-if ! is_contain "${_ARGS[0]}" "_MODES"; then
-	printf "Available mode: %s\n" "${_MODES[*]}" >&2
+if [[ -z "${1+x}" ]] || ! is_contain "$1" "_MODES"; then
+	printf "Please specify the option: %s\n" "${_MODES[*]}" >&2
 	exit 1
 fi
-shift
+
+declare MODE="${_ARGS[0]}"
 
 _show_missing_param_err() {
 	printf "Please provide a value for '%s' (%s) parameter.\n" "$1" "$2" >&2
@@ -702,6 +702,10 @@ _setup_arch() {
 }
 
 init() {
+	if [[ -n "$SUDO" ]]; then
+		sudo -v
+	fi
+
 	# Backup home directory
 	if is_usr_exist "$INSTALL_USER"; then
 		_info "Backup current home directory"
@@ -727,7 +731,7 @@ init() {
 			git clone -b $GIT_REMOTE_BRANCH "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
 	fi
 
-	$SUDO ln -sf "${DF_REPO["_dir"]}/conf.sh" "/usr/local/bin/conf.sh"
+	$SUDO ln -sf "${DF_REPO["_dir"]}/conf.sh" "/usr/local/bin/conf"
 	chmod +x "${DF_REPO["_dir"]}/conf.sh"
 
 	# Store password into "~/.dotfiles-data/secret"
@@ -742,14 +746,10 @@ update() {
 }
 
 apply() {
-	echo "applying to $CURRENT_USER"
+	link
 }
 
 main_() {
-	if [[ -n "$SUDO" ]]; then
-		sudo -v
-	fi
-
 	case "$MODE" in
 	init) init ;;
 	update) update ;;

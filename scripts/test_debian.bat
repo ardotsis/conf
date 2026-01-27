@@ -42,7 +42,7 @@ docker run ^
 --interactive ^
 --tty ^
 --hostname=somehost ^
---mount type=bind,source="%REPO_DIR%",target="%DOTFILES_VOLUME_DIR%",readonly ^
+--mount type=bind,source="%REPO_DIR%",target="%DOTFILES_VOLUME_DIR%" ^
 --env INSTALL_SCRIPT_PARAMS="%INSTALL_SCRIPT_PARAMS%" ^
 --env DOTFILES_VOLUME_DIR="%DOTFILES_VOLUME_DIR%" ^
 --name "%CONTAINER_NAME%" "%IMAGE%"
