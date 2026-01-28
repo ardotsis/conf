@@ -27,27 +27,42 @@ get_os_name() {
 	fi
 }
 
-declare -a _ARGS=("$@")
-declare -ar _MODES=("init" "update" "apply")
-declare -ar _PARAM_0=("--username" "-u" "value" "ardotsis")
-declare -ar _PARAM_1=("--docker" "-d" "flag" "false")
-declare -ar _PARAM_2=("--debug" "-de" "flag" "false")
-declare -A _PARAMS=()
-declare _IS_ARGS_PARSED="false"
+### Parse Mode
+declare -ar _MODES=("init" "adduser" "apply" "update")
+declare -ar _WITH_USERNAME_MODES=("init" "adduser")
 
 if [[ -z "${1+x}" ]] || ! is_contain "$1" "_MODES"; then
 	printf "Please specify the option: %s\n" "${_MODES[*]}" >&2
 	exit 1
 fi
 
-declare MODE="${_ARGS[0]}"
+declare MODE="$1"
+shift
 
+if is_contain "$MODE" "_WITH_USERNAME_MODES"; then
+	if [[ -z "${1+x}" ]]; then
+		printf "Please specify the username" >&2
+		exit 1
+	fi
+	declare -r INSTALL_USER="$1"
+	shift
+else
+	INSTALL_USER=$(whoami)
+	declare -r INSTALL_USER
+fi
+
+### Parse Optional Arguments
+declare -a _ARGS=("$@")
+declare -ar _PARAM_0=("--docker" "-d" "flag" "false")
+declare -ar _PARAM_1=("--debug" "-de" "flag" "false")
+declare -A _PARAMS=()
+declare _IS_OPTIONAL_ARGS_PARSED="false"
 _show_missing_param_err() {
 	printf "Please provide a value for '%s' (%s) parameter.\n" "$1" "$2" >&2
 	exit 1
 }
 
-_parse_args() {
+_parse_optional_args() {
 	local i=0
 	while :; do
 		local param_var="_PARAM_${i}"
@@ -92,34 +107,28 @@ _parse_args() {
 		i=$((i + 1))
 	done
 
-	declare -r _IS_ARGS_PARSED="true"
+	declare -r _IS_OPTIONAL_ARGS_PARSED="true"
 }
 
-get_arg() {
+get_optional_arg() {
 	local name="$1"
-
-	if [[ "$_IS_ARGS_PARSED" == "false" ]]; then
-		_parse_args
+	if [[ "$_IS_OPTIONAL_ARGS_PARSED" == "false" ]]; then
+		_parse_optional_args
 	fi
-
 	printf "%s" "${_PARAMS[$name]}"
 }
 
-IS_DOCKER=$(get_arg "docker")
+IS_DOCKER=$(get_optional_arg "docker")
 declare -r IS_DOCKER
-IS_DEBUG=$(get_arg "debug")
+IS_DEBUG=$(get_optional_arg "debug")
 declare -r IS_DEBUG
-INSTALL_USER=$(get_arg "username")
-declare -r INSTALL_USER
-CURRENT_USER=$(whoami)
-declare -r CURRENT_USER
 
 declare -r GIT_REMOTE_BRANCH="main"
 declare -r HOST_PREFIX="${HOSTNAME^^}##"
 OS="$(get_os_name)"
 declare -r OS
 declare -r PASSWD_LENGTH=72
-declare -r HOME="/home/$INSTALL_USER" # Override
+declare -r INSTALL_USER_HOME="/home/$INSTALL_USER"
 declare -r TMP_DIR="/var/tmp"
 declare -r DOCKER_VOLUME_DIR="/app"
 declare -r INIT_FLAG_FILE="/etc/DOTFILES"
@@ -135,7 +144,7 @@ DF_REPO["current_host"]="${DF_REPO["hosts_dir"]}/$HOSTNAME"
 declare -r DF_REPO
 
 declare -A DF_DATA
-DF_DATA["_dir"]="$HOME/dotfiles-data"
+DF_DATA["_dir"]="$INSTALL_USER_HOME/dotfiles-data"
 DF_DATA["secret"]="${DF_DATA["_dir"]}/secret"
 DF_DATA["backups_dir"]="${DF_DATA["_dir"]}/backups"
 declare -A DF_DATA
@@ -189,7 +198,7 @@ _log() {
 
 	local timestamp
 	timestamp="$(date "+%Y-%m-%d %H:%M:%S")"
-	printf "[%s] [%b%s%b] [%s:%s] (%s) %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$CURRENT_USER" "$msg" >&2
+	printf "[%s] [%b%s%b] [%s:%s] %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$msg" >&2
 }
 _debug() { _log "debug" "$1"; }
 _info() { _log "info" "$1"; }
@@ -250,28 +259,6 @@ clr() {
 	fi
 
 	printf "%b" "${q}${clr}${msg}${C["0"]}${q}"
-}
-
-get_script_path() {
-	printf "%s" "$(readlink -f "$0")"
-}
-
-get_script_run_cmd() {
-	local script_path="$1"
-	local -n arr_ref="$2"
-
-	arr_ref=(
-		"$script_path"
-		"--host"
-		"$HOSTNAME"
-		"--username"
-		"$INSTALL_USER"
-	)
-	# TODO: Detect flag(s) automatically
-	[[ "$IS_DOCKER" == "true" ]] && arr_ref+=("--docker") || true
-	[[ "$IS_DEBUG" == "true" ]] && arr_ref+=("--debug") || true
-
-	_vars "arr_ref[@]"
 }
 
 is_cmd_exist() {
@@ -376,15 +363,15 @@ remove_package() {
 }
 
 build_home() {
-	$SUDO mkdir -p "$HOME"/{.cache,.config,.local,.ssh}
-	$SUDO mkdir "$HOME/.local"/{bin,share,state}
-	$SUDO mkdir "$HOME/.local/share/"{zsh,man}
-	$SUDO mkdir "$HOME/.local/share/zsh/plugins"
-	$SUDO mkdir "$HOME/.cache/zsh"
+	$SUDO mkdir -p "$INSTALL_USER_HOME"/{.cache,.config,.local,.ssh}
+	$SUDO mkdir "$INSTALL_USER_HOME/.local"/{bin,share,state}
+	$SUDO mkdir "$INSTALL_USER_HOME/.local/share/"{zsh,man}
+	$SUDO mkdir "$INSTALL_USER_HOME/.local/share/zsh/plugins"
+	$SUDO mkdir "$INSTALL_USER_HOME/.cache/zsh"
 	$SUDO mkdir -p "${DF_DATA["backups_dir"]}"
 
-	$SUDO chown -R "$INSTALL_USER:$INSTALL_USER" "$HOME"
-	$SUDO chmod -R 700 "$HOME"
+	$SUDO chown -R "$INSTALL_USER:$INSTALL_USER" "$INSTALL_USER_HOME"
+	$SUDO chmod -R 700 "$INSTALL_USER_HOME"
 
 	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "${DF_DATA["secret"]}"
 }
@@ -627,7 +614,7 @@ _setup_vultr() {
 	fi
 
 	_info "Start linking dotfiles"
-	link "$HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
+	link "$INSTALL_USER_HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
 
 	if is_cmd_exist ufw; then
 		_info "Uninstall UFW"
@@ -636,12 +623,12 @@ _setup_vultr() {
 	fi
 
 	_info "Start SSH setup"
-	local ssh_dir="$HOME/.ssh"
+	local ssh_dir="$INSTALL_USER_HOME/.ssh"
 	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/authorized_keys"
 	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/config"
 
 	# Zsh plugins
-	local z_plugin_dir="$HOME/.local/share/zsh/plugins"
+	local z_plugin_dir="$INSTALL_USER_HOME/.local/share/zsh/plugins"
 	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$z_plugin_dir/zsh-autosuggestions"
 	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$z_plugin_dir/zsh-syntax-highlighting"
 	git clone "https://github.com/sindresorhus/pure.git" "$z_plugin_dir/pure"
@@ -697,11 +684,7 @@ _setup_vultr() {
 	rm -f "$ssh_dir/${git_filename}.pub"
 }
 
-_setup_arch() {
-	_warn "dotfiles for arch - Not implemented yet"
-}
-
-init() {
+_init() {
 	if [[ -n "$SUDO" ]]; then
 		sudo -v
 	fi
@@ -709,7 +692,7 @@ init() {
 	# Backup home directory
 	if is_usr_exist "$INSTALL_USER"; then
 		_info "Backup current home directory"
-		$SUDO mv "$HOME" "$HOME.old_$(get_safe_random_str 16)"
+		$SUDO mv "$INSTALL_USER_HOME" "$INSTALL_USER_HOME.old_$(get_safe_random_str 16)"
 		$SUDO rm deluser "$INSTALL_USER" # WARN: Debian only!
 	fi
 
@@ -741,21 +724,20 @@ init() {
 	} | $SUDO tee -a "${DF_DATA["secret"]}" >/dev/null
 }
 
-update() {
-	echo "updating $CURRENT_USER"
+_adduser() {
+	echo "adduser $INSTALL_USER"
 }
 
-apply() {
-	link
+_apply() {
+	link "$INSTALL_USER_HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
 }
 
-main_() {
-	case "$MODE" in
-	init) init ;;
-	update) update ;;
-	apply) apply ;;
-	*) exit 1 ;;
-	esac
+_update() {
+	printf "%b%s%b\n" "${C[y]}" "Updating..." "${C[0]}"
+}
+
+run() {
+	"_$MODE"
 
 	if [[ "$IS_DOCKER" == "true" ]]; then
 		printf "Docker mode is enabled. Keeping docker container running...\n"
@@ -763,4 +745,4 @@ main_() {
 	fi
 }
 
-main_
+run

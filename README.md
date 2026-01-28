@@ -8,5 +8,5 @@
 ### `ardotsis@vultr`
 
 ```sh
-curl -fsSL get.ardotsis.com/conf | bash -s -- -u ardotsis -h vultr
+curl -fsSL get.ardotsis.com/conf | bash -s -- install
 ```
