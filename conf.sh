@@ -131,7 +131,7 @@ DF_REPO["current_host"]="${DF_REPO["hosts_dir"]}/$HOSTNAME"
 declare -r DF_REPO
 
 declare -A DF_DATA
-DF_DATA["_dir"]="$INSTALL_USER_HOME/dotfiles-data"
+DF_DATA["_dir"]="$INSTALL_USER_HOME/.conf"
 DF_DATA["secret"]="${DF_DATA["_dir"]}/secret"
 DF_DATA["backups_dir"]="${DF_DATA["_dir"]}/backups"
 declare -A DF_DATA
@@ -185,7 +185,9 @@ _log() {
 
 	local timestamp
 	timestamp="$(date "+%Y-%m-%d %H:%M:%S")"
-	printf "[%s] [%b%s%b] [%s:%s] %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$msg" >&2
+	if [[ "$IS_DEBUG" == "true" ]]; then
+		printf "[%s] [%b%s%b] [%s:%s] %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$msg" >&2
+	fi
 }
 _debug() { _log "debug" "$1"; }
 _info() { _log "info" "$1"; }
@@ -313,28 +315,30 @@ install_nvim() {
 }
 
 install_zoxide() {
-	local username="$1"
+	# Run As: 'root'
 
-	local home_dir="/home/$username"
+	local bin_dir="$1"
+	local man1_dir="$2"
 
 	local tgz_path
 	tgz_path=$(get_tmp_curl_file "https://github.com/ajeetdsouza/zoxide/releases/latest/download/zoxide-0.9.8-x86_64-unknown-linux-musl.tar.gz")
+
 	local tmp_dir="$TMP_DIR/zoxide"
 	$SUDO mkdir $tmp_dir
 	$SUDO tar -C "$tmp_dir" -xzf "$tgz_path"
-	$SUDO cp -R "$tmp_dir/man/man1" "$home_dir/.local/share/man"
-	$SUDO mv "$tmp_dir/zoxide" "$home_dir/.local/bin"
+	$SUDO cp "$tmp_dir/man/man1/"* "$man1_dir"
+	$SUDO mv "$tmp_dir/zoxide" "$bin_dir"
 	$SUDO rm -rf "$tmp_dir" "$tgz_path"
 }
 
 install_starship() {
-	local username="$1"
+	local bin_dir="$1"
 
-	local home_dir="/home/$username"
 	local tgz_path
 	tgz_path=$(get_tmp_curl_file "https://github.com/starship/starship/releases/download/v1.24.2/starship-x86_64-unknown-linux-musl.tar.gz")
+
 	$SUDO tar -C "$TMP_DIR" -xzf "$tgz_path"
-	$SUDO mv "$TMP_DIR/starship" "$home_dir/.local/bin"
+	$SUDO mv "$TMP_DIR/starship" "$bin_dir"
 	$SUDO rm -rf "$tgz_path"
 }
 
@@ -352,8 +356,6 @@ remove_package() {
 build_home() {
 	$SUDO mkdir -p "$INSTALL_USER_HOME"/{.cache,.config,.local,.ssh}
 	$SUDO mkdir "$INSTALL_USER_HOME/.local"/{bin,share,state}
-	$SUDO mkdir "$INSTALL_USER_HOME/.local/share/"{zsh,man}
-	$SUDO mkdir "$INSTALL_USER_HOME/.local/share/zsh/plugins"
 	$SUDO mkdir "$INSTALL_USER_HOME/.cache/zsh"
 	$SUDO mkdir -p "${DF_DATA["backups_dir"]}"
 
@@ -463,7 +465,7 @@ link() {
 	local target_dir="$1"
 	local host_dir="${2:-}" # Preferrer
 	local default_dir="${3:-}"
-	local is_init="${4:-true}"
+
 	_vars "target_dir" "host_dir" "default_dir"
 
 	local all_host_items=() all_default_items=()
@@ -508,13 +510,6 @@ link() {
 			local as_default_item="${default_dir}/${item}"
 			local actual_path="${!as_var}"
 
-			# Backup home exists item
-			if [[ -e "$as_target_item" ]]; then
-				_debug "Backup: $as_target_item"
-				backup_item "$as_target_item"
-				rm -rf "$as_target_item"
-			fi
-
 			local fixed_target_path=""
 			if [[ "$item_type" == "host" && "$item" == "$HOST_PREFIX"* ]]; then
 				fixed_target_path="${target_dir}/${renamed_item}"
@@ -523,8 +518,8 @@ link() {
 
 			if [[ -d "$actual_path" ]]; then
 				[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
-				_debug "Create directory: \"${LC["path"]}$as_target_item${C["0"]}\""
 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$as_target_item" -d
+				_debug "Created: \"${LC["path"]}$as_target_item${C["0"]}\""
 
 				if [[ "$item_type" == "union" ]]; then
 					link "$as_target_item" "$as_host_item" "$as_default_item" "false"
@@ -535,8 +530,8 @@ link() {
 				fi
 			elif [[ -f "$actual_path" ]]; then
 				[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
-				_info "New symlink: \"${LC["path"]}$as_target_item${C["0"]}\" -> (${item_type^^}) \"${LC["path"]}$actual_path${C["0"]}\""
-				ln -sf "$actual_path" "$as_target_item"
+				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$actual_path" "$as_target_item"
+				_debug "Created: \"${LC["path"]}$as_target_item${C["0"]}\""
 			fi
 		done
 	done
@@ -614,14 +609,6 @@ _setup_vultr() {
 	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/authorized_keys"
 	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/config"
 
-	# Zsh plugins
-	local z_plugin_dir="$INSTALL_USER_HOME/.local/share/zsh/plugins"
-	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$z_plugin_dir/zsh-autosuggestions"
-	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$z_plugin_dir/zsh-syntax-highlighting"
-	git clone "https://github.com/sindresorhus/pure.git" "$z_plugin_dir/pure"
-	install_zoxide "$INSTALL_USER"
-	install_starship "$INSTALL_USER"
-
 	if [[ "$IS_DOCKER" == "false" ]]; then
 		_info "Executing Docker installation script.."
 		sh -c "$(curl -fsSL https://get.docker.com)"
@@ -671,27 +658,12 @@ _setup_vultr() {
 	rm -f "$ssh_dir/${git_filename}.pub"
 }
 
-cmd_init() {
+_init() {
+	# Run As: 'root'
+
 	if [[ -n "$SUDO" ]]; then
 		sudo -v
 	fi
-
-	if [[ -z "$INSTALL_USER" ]]; then
-		echo "Please specify username using --user (-u) parameter"
-		exit 1
-	fi
-
-	# Backup home directory
-	if is_usr_exist "$INSTALL_USER"; then
-		_info "Backup current home directory"
-		$SUDO mv "$INSTALL_USER_HOME" "$INSTALL_USER_HOME.old_$(get_safe_random_str 16)"
-		$SUDO rm deluser "$INSTALL_USER" # WARN: Debian only!
-	fi
-
-	# Create user
-	local passwd
-	passwd="$(get_random_str $PASSWD_LENGTH)"
-	add_user "$passwd"
 
 	# Install Git
 	if ! is_cmd_exist git; then
@@ -709,18 +681,57 @@ cmd_init() {
 	$SUDO ln -sf "${DF_REPO["_dir"]}/conf.sh" "/usr/local/bin/conf"
 	chmod +x "${DF_REPO["_dir"]}/conf.sh"
 
+	### User data
+	local data_dir="/usr/local"
+
+	local zsh_plugins_dir="$data_dir/share/zsh/plugins"
+	[[ ! -e "$zsh_plugins_dir" ]] && $SUDO mkdir -p "$zsh_plugins_dir"
+	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$zsh_plugins_dir/zsh-autosuggestions"
+	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$zsh_plugins_dir/zsh-syntax-highlighting"
+	git clone "https://github.com/sindresorhus/pure.git" "$zsh_plugins_dir/pure"
+
+	local man1_dir="$data_dir/share/man/man1"
+	[[ ! -e "$man1_dir" ]] && $SUDO mkdir -p "$man1_dir"
+	install_zoxide "$data_dir/bin" "$man1_dir"
+
+	install_starship "$data_dir/bin"
+
+	if [[ -n "$INSTALL_USER" ]]; then
+		_info "Initializing user (additional)"
+		_adduser
+	fi
+
+	printf "%b%s%b\n" "${C[g]}" "conf has installed" "${C[0]}"
+}
+
+_adduser() {
+	if [[ -z "$INSTALL_USER" ]]; then
+		echo "Please specify username using --user (-u) parameter"
+		exit 1
+	fi
+
+	# Backup home directory
+	if is_usr_exist "$INSTALL_USER"; then
+		_info "Backup current home directory"
+		$SUDO mv "$INSTALL_USER_HOME" "$INSTALL_USER_HOME.old_$(get_safe_random_str 16)"
+		$SUDO rm deluser "$INSTALL_USER" # WARN: Debian only!
+	fi
+
+	# Create user
+	local passwd
+	passwd="$(get_random_str $PASSWD_LENGTH)"
+	add_user "$passwd"
+
 	# Store password into "~/.dotfiles-data/secret"
 	{
 		printf "# DELETE this file, once you complete the process.\n\n"
 		printf "# Password (%s)\n%s\n\n" "$INSTALL_USER" "$passwd"
 	} | $SUDO tee -a "${DF_DATA["secret"]}" >/dev/null
+
+	_apply
 }
 
-cmd_adduser() {
-	echo "adduser $INSTALL_USER"
-}
-
-cmd_apply() {
+_apply() {
 	if [[ -z "$INSTALL_USER" ]]; then
 		INSTALL_USER=$CURRENT_USER
 	fi
@@ -728,12 +739,12 @@ cmd_apply() {
 	link "/home/$INSTALL_USER" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
 }
 
-cmd_update() {
+_update() {
 	printf "%b%s%b\n" "${C[y]}" "Updating..." "${C[0]}"
 }
 
 run() {
-	"cmd_$MODE"
+	"_$MODE"
 
 	if [[ "$IS_DOCKER" == "true" ]]; then
 		printf "Docker mode is enabled. Keeping docker container running...\n"
@@ -745,3 +756,4 @@ run
 
 # TODO: separete root/user func -> root_build_home, user_get_random_str
 # To reduce $SUDO confusing
+# Or REMOVE $SUDO entirly. always root (change w/ chmod chown) IT"S SO CLEAN RIGHT?
