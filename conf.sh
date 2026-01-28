@@ -41,7 +41,7 @@ shift
 
 if is_contain "$MODE" "_WITH_USERNAME_MODES"; then
 	if [[ -z "${1+x}" ]]; then
-		printf "Please specify the username" >&2
+		printf "Please specify the username\n" >&2
 		exit 1
 	fi
 	declare -r INSTALL_USER="$1"
