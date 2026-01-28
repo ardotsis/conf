@@ -1,9 +1,8 @@
 #!/bin/bash
 set -e -u -o pipefail -C
 
+declare -r SUDO=""
 if [[ "$(id -u)" == "0" ]]; then
-	declare -r SUDO=""
-else
 	declare -r SUDO="sudo"
 fi
 
@@ -27,6 +26,7 @@ get_os_name() {
 	fi
 }
 
+### Parse Mode
 declare -ar _MODES=("init" "adduser" "apply" "update")
 if [[ -z "${1+x}" ]] || ! is_contain "$1" "_MODES"; then
 	printf "Please specify the option: %s\n" "${_MODES[*]}" >&2
@@ -735,3 +735,6 @@ run() {
 }
 
 run
+
+# TODO: separete root/user func -> root_build_home, user_get_random_str
+# To reduce $SUDO confusion
