@@ -1,9 +1,10 @@
 #!/bin/bash
 set -e -u -o pipefail -C
 
-declare -r SUDO=""
 if [[ "$(id -u)" == "0" ]]; then
 	declare -r SUDO="sudo"
+else
+	declare -r SUDO=""
 fi
 
 is_contain() {
@@ -104,8 +105,10 @@ IS_DOCKER=$(get_optional_arg "docker")
 declare -r IS_DOCKER
 IS_DEBUG=$(get_optional_arg "debug")
 declare -r IS_DEBUG
+CURRENT_USER=$(whoami)
+declare -r CURRENT_USER
 INSTALL_USER=$(get_optional_arg "user")
-declare -r INSTALL_USER
+# declare -r INSTALL_USER
 
 declare -r GIT_REMOTE_BRANCH="main"
 declare -r HOST_PREFIX="${HOSTNAME^^}##"
@@ -718,7 +721,11 @@ cmd_adduser() {
 }
 
 cmd_apply() {
-	link "$INSTALL_USER_HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
+	if [[ -z "$INSTALL_USER" ]]; then
+		INSTALL_USER=$CURRENT_USER
+	fi
+
+	link "/home/$INSTALL_USER" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
 }
 
 cmd_update() {
@@ -737,4 +744,4 @@ run() {
 run
 
 # TODO: separete root/user func -> root_build_home, user_get_random_str
-# To reduce $SUDO confusion
+# To reduce $SUDO confusing
