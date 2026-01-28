@@ -40,8 +40,9 @@ shift
 ### Parse Optional Arguments
 declare -a _ARGS=("$@")
 declare -ar _PARAM_0=("--user" "-u" "value" "")
-declare -ar _PARAM_1=("--docker" "-d" "flag" "false")
-declare -ar _PARAM_2=("--debug" "-de" "flag" "false")
+declare -ar _PARAM_1=("--host" "-h" "value" "")
+declare -ar _PARAM_2=("--docker" "-d" "flag" "false")
+declare -ar _PARAM_3=("--debug" "-de" "flag" "false")
 declare -A _PARAMS=()
 declare _IS_OPTIONAL_ARGS_PARSED="false"
 _show_missing_param_err() {
@@ -101,6 +102,8 @@ get_optional_arg() {
 	printf "%s" "${_PARAMS[$name]}"
 }
 
+HOSTNAME=$(get_optional_arg "host")
+declare -r HOSTNAME
 IS_DOCKER=$(get_optional_arg "docker")
 declare -r IS_DOCKER
 IS_DEBUG=$(get_optional_arg "debug")
@@ -121,13 +124,13 @@ declare -r DOCKER_VOLUME_DIR="/app"
 declare -r INIT_FLAG_FILE="/etc/DOTFILES"
 
 declare -A DF_REPO
-DF_REPO["_dir"]="/usr/local/src/conf"
+DF_REPO["_dir"]="/usr/local/share/conf"
 DF_REPO["linux_dir"]="${DF_REPO["_dir"]}/linux"
 DF_REPO["package_list"]="${DF_REPO["linux_dir"]}/packages.txt"
 DF_REPO["template_dir"]="${DF_REPO["linux_dir"]}/template"
 DF_REPO["hosts_dir"]="${DF_REPO["linux_dir"]}/hosts"
 DF_REPO["default_host"]="${DF_REPO["hosts_dir"]}/_default"
-DF_REPO["current_host"]="${DF_REPO["hosts_dir"]}/$HOSTNAME"
+DF_REPO["current_host"]="${DF_REPO["hosts_dir"]}/${HOSTNAME,,}"
 declare -r DF_REPO
 
 declare -A DF_DATA
@@ -723,7 +726,7 @@ _adduser() {
 	# Store password into "~/.dotfiles-data/secret"
 	{
 		printf "# DELETE this file, once you complete the process.\n\n"
-		printf "# Password (%s)\n%s\n\n" "$INSTALL_USER" "$passwd"
+		printf "# User password: %s\n" "$passwd"
 	} | $SUDO tee -a "${DF_DATA["secret"]}" >/dev/null
 
 	_apply
@@ -734,6 +737,7 @@ _apply() {
 		INSTALL_USER=$CURRENT_USER
 	fi
 
+	printf "H: ${DF_REPO["current_host"]}" >&2
 	link "/home/$INSTALL_USER" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
 }
 
