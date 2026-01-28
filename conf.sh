@@ -138,7 +138,7 @@ declare -A DF_DATA
 
 # TODO: Deprecated
 declare -Ar URL=(
-	["dotfiles_repo"]="https://github.com/ardotsis/conf.git"
+	["conf_repo"]="https://github.com/ardotsis/conf.git"
 	["dotfiles_install_script"]="https://raw.githubusercontent.com/ardotsis/conf/refs/heads/main/install.sh"
 )
 
@@ -185,9 +185,7 @@ _log() {
 
 	local timestamp
 	timestamp="$(date "+%Y-%m-%d %H:%M:%S")"
-	if [[ "$IS_DEBUG" == "true" ]]; then
-		printf "[%s] [%b%s%b] [%s:%s] %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$msg" >&2
-	fi
+	printf "[%s] [%b%s%b] [%s:%s] %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$msg" >&2
 }
 _debug() { _log "debug" "$1"; }
 _info() { _log "info" "$1"; }
@@ -357,6 +355,7 @@ build_home() {
 	$SUDO mkdir -p "$INSTALL_USER_HOME"/{.cache,.config,.local,.ssh}
 	$SUDO mkdir "$INSTALL_USER_HOME/.local"/{bin,share,state}
 	$SUDO mkdir "$INSTALL_USER_HOME/.cache/zsh"
+	$SUDO mkdir "$INSTALL_USER_HOME/.local/share/zsh"
 	$SUDO mkdir -p "${DF_DATA["backups_dir"]}"
 
 	$SUDO chown -R "$INSTALL_USER:$INSTALL_USER" "$INSTALL_USER_HOME"
@@ -674,8 +673,7 @@ _init() {
 	if [[ "$IS_DEBUG" == "true" ]]; then
 		$SUDO ln -sf "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
 	else
-		$SUDO sudo -u "$INSTALL_USER" -- \
-			git clone -b $GIT_REMOTE_BRANCH "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
+		git clone -b $GIT_REMOTE_BRANCH "${URL["conf_repo"]}" "${DF_REPO["_dir"]}"
 	fi
 
 	$SUDO ln -sf "${DF_REPO["_dir"]}/conf.sh" "/usr/local/bin/conf"
