@@ -17,6 +17,13 @@ $SymlinkDirPairs = @(
     # CAUTION: Do NOT forget to add a "comma (,)" for each array.
 )
 
+function Set-XdgEnvVars {
+    [Environment]::SetEnvironmentVariable("XDG_CONFIG_HOME", "$env:USERPROFILE\.config", "User")
+    [Environment]::SetEnvironmentVariable("XDG_DATA_HOME", "$env:USERPROFILE\.local\share", "User")
+    [Environment]::SetEnvironmentVariable("XDG_CACHE_HOME", "$env:USERPROFILE\.cache", "User")
+    [Environment]::SetEnvironmentVariable("XDG_STATE_HOME", "$env:USERPROFILE\.local\state", "User")
+}
+
 
 function Set-Symlink([string] $WinDir, [string] $RepoDir) {
     if (-not (Test-Path -Path $WinDir)) {
@@ -63,11 +70,5 @@ function main() {
 
     Pause
 }
-
-# TODO: SET XDG
-# [Environment]::SetEnvironmentVariable("XDG_CONFIG_HOME", "$env:USERPROFILE\.config", "User")
-# [Environment]::SetEnvironmentVariable("XDG_DATA_HOME", "$env:USERPROFILE\.local\share", "User")
-# [Environment]::SetEnvironmentVariable("XDG_CACHE_HOME", "$env:USERPROFILE\.cache", "User")
-# [Environment]::SetEnvironmentVariable("XDG_STATE_HOME", "$env:USERPROFILE\.local\state", "User")
 
 main

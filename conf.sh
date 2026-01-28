@@ -27,34 +27,20 @@ get_os_name() {
 	fi
 }
 
-### Parse Mode
 declare -ar _MODES=("init" "adduser" "apply" "update")
-declare -ar _WITH_USERNAME_MODES=("init" "adduser")
-
 if [[ -z "${1+x}" ]] || ! is_contain "$1" "_MODES"; then
 	printf "Please specify the option: %s\n" "${_MODES[*]}" >&2
 	exit 1
 fi
 
-declare MODE="$1"
+declare -r MODE="$1"
 shift
-
-if is_contain "$MODE" "_WITH_USERNAME_MODES"; then
-	if [[ -z "${1+x}" ]]; then
-		printf "Please specify the username\n" >&2
-		exit 1
-	fi
-	declare -r INSTALL_USER="$1"
-	shift
-else
-	INSTALL_USER=$(whoami)
-	declare -r INSTALL_USER
-fi
 
 ### Parse Optional Arguments
 declare -a _ARGS=("$@")
-declare -ar _PARAM_0=("--docker" "-d" "flag" "false")
-declare -ar _PARAM_1=("--debug" "-de" "flag" "false")
+declare -ar _PARAM_0=("--user" "-u" "value" "")
+declare -ar _PARAM_1=("--docker" "-d" "flag" "false")
+declare -ar _PARAM_2=("--debug" "-de" "flag" "false")
 declare -A _PARAMS=()
 declare _IS_OPTIONAL_ARGS_PARSED="false"
 _show_missing_param_err() {
@@ -98,11 +84,7 @@ _parse_optional_args() {
 		done
 
 		if [[ -z "${_PARAMS["$key"]+x}" ]]; then
-			if [[ -n "$default_value" ]]; then
-				_PARAMS["$key"]="$default_value"
-			else
-				_show_missing_param_err "$long_name" "$short_name"
-			fi
+			_PARAMS["$key"]="$default_value"
 		fi
 		i=$((i + 1))
 	done
@@ -122,6 +104,8 @@ IS_DOCKER=$(get_optional_arg "docker")
 declare -r IS_DOCKER
 IS_DEBUG=$(get_optional_arg "debug")
 declare -r IS_DEBUG
+INSTALL_USER=$(get_optional_arg "user")
+declare -r INSTALL_USER
 
 declare -r GIT_REMOTE_BRANCH="main"
 declare -r HOST_PREFIX="${HOSTNAME^^}##"
@@ -684,9 +668,14 @@ _setup_vultr() {
 	rm -f "$ssh_dir/${git_filename}.pub"
 }
 
-_init() {
+cmd_init() {
 	if [[ -n "$SUDO" ]]; then
 		sudo -v
+	fi
+
+	if [[ -z "$INSTALL_USER" ]]; then
+		echo "Please specify username using --user (-u) parameter"
+		exit 1
 	fi
 
 	# Backup home directory
@@ -724,20 +713,20 @@ _init() {
 	} | $SUDO tee -a "${DF_DATA["secret"]}" >/dev/null
 }
 
-_adduser() {
+cmd_adduser() {
 	echo "adduser $INSTALL_USER"
 }
 
-_apply() {
+cmd_apply() {
 	link "$INSTALL_USER_HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
 }
 
-_update() {
+cmd_update() {
 	printf "%b%s%b\n" "${C[y]}" "Updating..." "${C[0]}"
 }
 
 run() {
-	"_$MODE"
+	"cmd_$MODE"
 
 	if [[ "$IS_DOCKER" == "true" ]]; then
 		printf "Docker mode is enabled. Keeping docker container running...\n"
