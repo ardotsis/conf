@@ -750,7 +750,7 @@ run() {
 	"cmd_$MODE"
 
 	if [[ "$IS_DOCKER" == "true" ]]; then
-		printf "Docker mode is enabled. Keeping docker container running...\n"
+		printf "Keeping docker container running...\n"
 		tail -f /dev/null
 	fi
 }
