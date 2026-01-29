@@ -1,4 +1,4 @@
-printf "conf profile: vultr\n"
+printf "conf profile: default\n"
 
 sudo_flag="$HOME/.sudo_as_admin_successful"
 if [[ -e "$sudo_flag" ]]; then

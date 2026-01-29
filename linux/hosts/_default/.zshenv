@@ -22,11 +22,8 @@ export Z_COMPDUMP_FILE="$Z_CACHE_DIR/compdump"
 # Data
 export Z_DATA_DIR="$XDG_DATA_HOME/zsh"
 export Z_HIST_FILE="$Z_DATA_DIR/history"
-# Share data
+# (Share) Data
 export Z_PLUGIN_DIR="/usr/local/share/zsh/plugins"
-
-### ppl
-export PPL_DIR="$HOME/.ppl"
 
 ### Paths
 export PATH="$HOME/.local/bin:$PATH"
