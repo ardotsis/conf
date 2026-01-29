@@ -659,9 +659,18 @@ _setup_vultr() {
 	rm -f "$ssh_dir/${git_filename}.pub"
 }
 
-cmd_init() {
+check_is_root() {
 	if ! is_root; then
-		printf "%b%s%b\n" "${C[r]}" "conf: need root privilege to run 'init' command" "${C[0]}"
+		printf "%b%s%b\n" "${C[r]}" "conf: need root privilege to run this command" "${C[0]}"
+		exit 1
+	fi
+}
+
+cmd_init() {
+	check_is_root
+
+	if [[ -e "${DF_REPO["_dir"]}" ]]; then
+		printf "%b%s\n%s%b\n" "${C[y]}" "conf is already installed." "Use 'adduser' command to create new user." "${C[0]}"
 		exit 1
 	fi
 
@@ -680,6 +689,8 @@ cmd_init() {
 	chmod +x "${DF_REPO["_dir"]}/conf.sh"
 
 	# Install binaries
+	install_nvim
+
 	local data_dir="/usr/local"
 	local zsh_plugins_dir="$data_dir/share/zsh/plugins"
 
@@ -699,10 +710,12 @@ cmd_init() {
 		cmd_adduser
 	fi
 
-	printf "%b%s%b\n" "${C[g]}" "conf has installed!" "${C[0]}"
+	printf "%b%s%b\n" "${C[g]}" "conf has installed." "${C[0]}"
 }
 
 cmd_adduser() {
+	check_is_root
+
 	if [[ -z "$INSTALL_USER" ]]; then
 		echo "Please specify username using --user (-u) parameter"
 		exit 1
@@ -730,6 +743,8 @@ cmd_adduser() {
 }
 
 cmd_apply() {
+	check_is_root
+
 	if [[ -z "$INSTALL_USER" ]]; then
 		INSTALL_USER=$CURRENT_USER
 	fi
