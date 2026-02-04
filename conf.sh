@@ -29,36 +29,110 @@ get_os_name() {
 	fi
 }
 
-### Parse Mode
-declare -ar _MODES=("init" "adduser" "apply" "update")
-if [[ -z "${1+x}" ]] || ! is_contain "$1" "_MODES"; then
-	printf "Please specify the option: %s\n" "${_MODES[*]}" >&2
-	exit 1
-fi
+# Commands
+declare -Ar CMD=(
+	[init]="0"
+	[add]="0"
+	[apply]="1"
+	[pull]="1"
+)
 
-declare -r MODE="$1"
-shift
+# Options
+declare -Ar OPTION=(
+	[debug]="flag:false"
+	[d]="--debug"
 
-### Parse Optional Arguments
-declare -a _ARGS=("$@")
-declare -ar _PARAM_0=("--user" "-u" "value" "")
-declare -ar _PARAM_1=("--host" "-h" "value" "")
-declare -ar _PARAM_2=("--docker" "-d" "flag" "false")
-declare -ar _PARAM_3=("--debug" "-de" "flag" "false")
-declare -A _PARAMS=()
-declare _IS_OPTIONAL_ARGS_PARSED="false"
-_show_missing_param_err() {
-	printf "Please provide a value for '%s' (%s) parameter.\n" "$1" "$2" >&2
+	[docker]="flag:false"
+	[dk]="--docker"
+
+	[username]="value:ardotsis"
+	[u]="--username"
+
+	[hostname]="value:"
+	[h]="--hostname"
+)
+
+_show_help() {
+	local indent="    "
+	local col_width="14"
+	local fmt="${indent}%-${col_width}s %s\n"
+
+	printf "Usage:\n"
+	printf "${indent}%s\n" "conf [option] <command> [<args>]"
+	printf "\n"
+
+	printf "Commands:\n"
+	printf "$fmt" "init" "init description"
+	printf "$fmt" "add" "add description"
+	printf "$fmt" "apply" "apply description"
+	printf "$fmt" "pull" "pull description"
+	printf "\n"
+
+	printf "Options:\n"
+	printf "$fmt" "-h,  --help" "Show this message"
+	printf "$fmt" "-d,  --debug" "Enable debug mode"
+	printf "$fmt" "-dk, --docker" "Enable Docker mode"
+	printf "\n"
+	exit 0
+}
+
+_show_err() {
+	printf "conf: %s\n" "$1" >&2
 	exit 1
 }
 
-_parse_optional_args() {
+_parse_args() {
+	local args=("$@")
+
+	_is_help_arg() {
+		if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+			return 0
+		fi
+		return 1
+	}
+
+	# Valid first argument to show help
+	local first_arg="${args[0]:-}"
+
+	if [[ -z "$first_arg" ]] || _is_help_arg "$first_arg"; then
+		_show_help
+	fi
+
+	for opt in "${args[@]}"; do
+		if [[ -z "${OPTION[$opt]+x}" ]]; then
+			if [[ "$opt" == "-"* ]]; then
+				if _is_help_arg "$opt"; then
+					_show_help
+				else
+					_show_err "'$opt' is not a conf option. See 'conf --help'."
+				fi
+			fi
+		fi
+	done
+
+	# Invalid command
+	if [[ -z "${CMD[$first_arg]+x}" ]]; then
+		_show_err "'$first_arg' is not a conf command. See 'conf --help'."
+	fi
+
+	if [[ "${MODE[$1]}" == "0" ]] && ! is_root; then
+		_show_err "conf: Require root privilege\n"
+	fi
+
+}
+
+_parse_args "$@"
+exit 1
+
+_parse_dashes() {
+
 	local i=0
+
 	while :; do
-		local param_var="_PARAM_${i}"
+		local param_var="_DASH_${i}"
 		[[ -z "${!param_var+x}" ]] && break
 
-		declare -n a_param="$param_var"
+		local -n a_param="$param_var"
 		local long_name="${a_param[0]}"
 		local short_name="${a_param[1]}"
 		local type="${a_param[2]}"
@@ -75,45 +149,49 @@ _parse_optional_args() {
 					if ((value_index < ${#_ARGS[@]})); then
 						value="${_ARGS[$value_index]}"
 					else
-						_show_missing_param_err "$long_name" "$short_name"
+						printf "Please provide a value for '%s' (%s) parameter.\n" "$1" "$2" >&2
+						exit 1
 					fi
-					_PARAMS["$key"]="$value"
+					_DASHES["$key"]="$value"
 					_ARGS=("${_ARGS[@]:0:$arg_index}" "${_ARGS[@]:$arg_index+2}")
 				elif [[ "$type" == "flag" ]]; then
-					_PARAMS["$key"]="true"
+					_DASHES["$key"]="true"
 				fi
 				break
 			fi
 			arg_index=$((arg_index + 1))
 		done
 
-		if [[ -z "${_PARAMS["$key"]+x}" ]]; then
-			_PARAMS["$key"]="$default_value"
+		if [[ -z "${_DASHES["$key"]+x}" ]]; then
+			_DASHES["$key"]="$default_value"
 		fi
 		i=$((i + 1))
 	done
 
-	declare -r _IS_OPTIONAL_ARGS_PARSED="true"
+	declare -r _IS_DASHES_PARSED="true"
 }
 
-get_optional_arg() {
+get_dash() {
 	local name="$1"
-	if [[ "$_IS_OPTIONAL_ARGS_PARSED" == "false" ]]; then
-		_parse_optional_args
+	if [[ "$_IS_DASHES_PARSED" == "false" ]]; then
+		_parse_dashes
 	fi
-	printf "%s" "${_PARAMS[$name]}"
+	printf "%s" "${_DASHES[$name]}"
 }
 
-HOSTNAME=$(get_optional_arg "host")
-declare -r HOSTNAME
-IS_DOCKER=$(get_optional_arg "docker")
+# HOSTNAME=$(get_dash "host")
+# declare -r HOSTNAME
+IS_DOCKER=$(get_dash "docker")
 declare -r IS_DOCKER
-IS_DEBUG=$(get_optional_arg "debug")
+IS_DEBUG=$(get_dash "debug")
 declare -r IS_DEBUG
 CURRENT_USER=$(whoami)
 declare -r CURRENT_USER
-INSTALL_USER=$(get_optional_arg "user")
+# INSTALL_USER=$(get_dash "user")
 # declare -r INSTALL_USER
+
+HOSTNAME="vultr"
+INSTALL_USER="kana"
 
 declare -r GIT_REMOTE_BRANCH="main"
 declare -r HOST_PREFIX="${HOSTNAME^^}##"
@@ -148,26 +226,26 @@ declare -Ar URL=(
 )
 
 declare -Ar C=(
-	["0"]="\033[0m"
-	["k"]="\033[0;30m"
-	["r"]="\033[0;31m"
-	["g"]="\033[0;32m"
-	["y"]="\033[0;33m"
-	["b"]="\033[0;34m"
-	["p"]="\033[0;35m"
-	["c"]="\033[0;36m"
-	["w"]="\033[0;37m"
+	[0]="\033[0m"
+	[k]="\033[0;30m"
+	[r]="\033[0;31m"
+	[g]="\033[0;32m"
+	[y]="\033[0;33m"
+	[b]="\033[0;34m"
+	[p]="\033[0;35m"
+	[c]="\033[0;36m"
+	[w]="\033[0;37m"
 )
 
 declare -Ar LC=(
-	["debug"]="${C["w"]}"
-	["info"]="${C["g"]}"
-	["warn"]="${C["y"]}"
-	["error"]="${C["r"]}"
-	["var"]="${C["p"]}"
-	["value"]="${C["c"]}"
-	["path"]="${C["y"]}"
-	["highlight"]="${C["r"]}"
+	[debug]="${C["w"]}"
+	[info]="${C["g"]}"
+	[warn]="${C["y"]}"
+	[error]="${C["r"]}"
+	[var]="${C["p"]}"
+	[value]="${C["c"]}"
+	[path]="${C["y"]}"
+	[highlight]="${C["r"]}"
 )
 ##################################################
 #                 Pure Functions                 #
@@ -770,7 +848,4 @@ run() {
 	fi
 }
 
-run
-
-# Or REMOVE $SUDO entirly. always root (change w/ chmod chown) IT"S SO CLEAN RIGHT?
-# TODO: remove INFO log (use debug only, use PRINTF for user info prompt)
+# run

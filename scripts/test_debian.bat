@@ -28,7 +28,7 @@ if "%FLAG%"=="--cleanup" (
 
 if "%FLAG%"=="--build" (
   docker build --no-cache -f "%DOCKERFILE%" -t "%IMAGE%" "%REPO_DIR%"
-  
+
   echo Cleaning up dangling images...
   for /f "tokens=*" %%i in ('docker images -f "dangling=true" -q') do (
     docker rmi -f %%i
