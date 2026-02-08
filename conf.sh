@@ -124,16 +124,13 @@ _parse_args() {
 	i=0
 	last_i=$(("${#args[@]}" - 1))
 	skip_index="false"
-
 	for input in "${args[@]}"; do
 		if [[ "$skip_index" == "true" ]]; then
 			skip_index="false"
 			i=$((i + 1))
 			continue
 		fi
-
 		if [[ "$input" == "-"* ]]; then
-
 			local pure
 			pure=$(rm_hyphen "$input")
 			if [[ -n "${OPTION["$pure"]+x}" ]]; then
@@ -149,7 +146,6 @@ _parse_args() {
 				elif [[ "$input" != "--"* ]]; then
 					show_err "Use '--$pure' instead of '$input'."
 				fi
-
 				local insert_val
 				if [[ "$option_type" == "flag" ]]; then
 					insert_val="true"
@@ -161,7 +157,6 @@ _parse_args() {
 					fi
 					insert_val="${args["$val_i"]}"
 				fi
-
 				if [[ -n "$restored_option" ]]; then
 					OPTIONS["$restored_option"]="$insert_val"
 				else
@@ -176,29 +171,20 @@ _parse_args() {
 		i=$((i + 1))
 	done
 
-	for key in "${!OPTIONS[@]}"; do
-		printf "key: '%s' -> '%s'\n" "$key" "${OPTIONS[$key]}"
-	done
-
 	if [[ "${OPTIONS["help"]}" == "true" ]]; then
 		show_help
 	fi
-
 	if [[ "${OPTIONS["version"]}" == "true" ]]; then
 		show_version
 	fi
 
 	local cmd="${args[$i]}"
-
-	# Unknown Command
 	if [[ -z "${CMD["$cmd"]+x}" ]]; then
 		show_err "'$cmd' is not a conf command. See 'conf --help'."
 	fi
-
 	if [[ "${args[$cmd]}" == "0" ]] && ! is_root; then
 		show_err "conf: Require root for this command. Run 'sudo conf $1 ..'\n"
 	fi
-
 }
 
 # HOSTNAME=$(get_dash "host")
