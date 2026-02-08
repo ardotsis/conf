@@ -8,5 +8,5 @@
 ### `ardotsis@vultr`
 
 ```sh
-curl -fsSL get.ardotsis.com/conf | bash -s -- init -u kana
+curl -fsSL get.ardotsis.com/conf | bash -s -- init kana
 ```

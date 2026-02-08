@@ -39,26 +39,46 @@ declare -Ar CMD=(
 
 # Options
 declare -Ar OPTION=(
+	[help]="flag:false"
+	[h]="_help"
+
+	[version]="flag:false"
+	[v]="_version"
+
 	[debug]="flag:false"
-	[d]="--debug"
+	[d]="_debug"
 
 	[docker]="flag:false"
-	[dk]="--docker"
+	[dk]="_docker"
 
 	[username]="value:ardotsis"
-	[u]="--username"
+	[us]="_username"
 
 	[hostname]="value:"
-	[h]="--hostname"
+	[ho]="_hostname"
+
+	[kawaii]="value:kawaiiiiii!!!"
+	[k]="_kawaii"
 )
 
-_show_help() {
+declare -A OPTIONS
+
+for option in "${!OPTION[@]}"; do
+	if [[ "${OPTION["$option"]}" != "_"* ]]; then
+		IFS=":" read -r _ default_value <<<"${OPTION[$option]}"
+		OPTIONS["$option"]="$default_value"
+	fi
+done
+
+show_help() {
 	local indent="    "
 	local col_width="14"
 	local fmt="${indent}%-${col_width}s %s\n"
 
 	printf "Usage:\n"
 	printf "${indent}%s\n" "conf [option] <command> [<args>]"
+	printf "${indent}%s\n" "conf [-v | --version]"
+	printf "${indent}%s\n" "conf [-h | --help]"
 	printf "\n"
 
 	printf "Commands:\n"
@@ -69,56 +89,106 @@ _show_help() {
 	printf "\n"
 
 	printf "Options:\n"
-	printf "$fmt" "-h,  --help" "Show this message"
 	printf "$fmt" "-d,  --debug" "Enable debug mode"
 	printf "$fmt" "-dk, --docker" "Enable Docker mode"
 	printf "\n"
 	exit 0
 }
 
-_show_err() {
-	printf "conf: %s\n" "$1" >&2
+show_version() {
+	printf "conf version 1.0\n"
+	exit 0
+}
+
+show_err() {
+	local msg="$1"
+	local with_tip="${2:-false}"
+
+	local tip=""
+	if [[ "$with_tip" == "true" ]]; then
+		tip=" See 'conf --help'."
+	fi
+	printf "conf: %s%s\n" "$msg" "$tip" >&2
 	exit 1
+}
+
+rm_hyphen() {
+	printf "%s" "${1#"${1%%[!-]*}"}"
 }
 
 _parse_args() {
 	local args=("$@")
 
-	_is_help_arg() {
-		if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-			return 0
-		fi
-		return 1
-	}
+	local i last_i input
+	i=0
+	last_i=$(("${#args[@]}" - 1))
 
-	# Valid first argument to show help
-	local first_arg="${args[0]:-}"
+	for input in "${args[@]}"; do
+		if [[ "$input" == "-"* ]]; then
 
-	if [[ -z "$first_arg" ]] || _is_help_arg "$first_arg"; then
-		_show_help
-	fi
-
-	for opt in "${args[@]}"; do
-		if [[ -z "${OPTION[$opt]+x}" ]]; then
-			if [[ "$opt" == "-"* ]]; then
-				if _is_help_arg "$opt"; then
-					_show_help
-				else
-					_show_err "'$opt' is not a conf option. See 'conf --help'."
+			local pure
+			pure=$(rm_hyphen "$input")
+			if [[ -n "${OPTION["$pure"]+x}" ]]; then
+				local option_type default_value restored_option=""
+				IFS=":" read -r option_type default_value <<<"${OPTION[$pure]}"
+				if [[ "$option_type" == "--"* ]]; then
+					if [[ "$input" =~ ^-[^-] ]]; then
+						restored_option="$(rm_hyphen "$option_type")"
+						IFS=":" read -r option_type default_value <<<"${OPTION[$restored_option]}"
+					else
+						show_err "Use '-$pure' instead of '$input'."
+					fi
 				fi
+
+				local insert_val
+				if [[ "$option_type" == "flag" ]]; then
+					insert_val="true"
+				elif [[ "$option_type" == "value" ]]; then
+					local val_i=$((i + 1))
+					if ((val_i > last_i)); then
+						show_err "'$input' require a value." "true"
+					fi
+					insert_val="${args["$val_i"]}"
+				fi
+
+				if [[ -z "$restored_option" ]]; then
+					OPTIONS["$pure"]="$insert_val"
+				else
+					OPTIONS["$restored_option"]="$insert_val"
+				fi
+
+				if [[ "$option_type" == "value" ]]; then
+					continue 2
+				fi
+			else
+				show_err "'$input' is not a conf option." "true"
 			fi
+		else
+			break
 		fi
+		i=$((i + 1))
 	done
 
-	# Invalid command
-	if [[ -z "${CMD[$first_arg]+x}" ]]; then
-		_show_err "'$first_arg' is not a conf command. See 'conf --help'."
+	if [[ "${OPTIONS["help"]}" == "true" ]]; then
+		show_help
 	fi
 
-	if [[ "${MODE[$1]}" == "0" ]] && ! is_root; then
-		_show_err "conf: Require root privilege\n"
+	if [[ "${OPTIONS["version"]}" == "true" ]]; then
+		show_version
 	fi
 
+	printf "%s\n" "${OPTIONS[@]}"
+
+	# Unknown Command
+	# if [[ -z "${CMD[$first_arg]+x}" ]]; then
+	# 	show_err "'$first_arg' is not a conf command. See 'conf --help'."
+	# fi
+
+	# if [[ "${CMD[$1]}" == "0" ]] && ! is_root; then
+	# 	show_err "conf: Require root for this command. Run 'sudo conf $1 ..'\n"
+	# fi
+
+	echo '---parsed---'
 }
 
 _parse_args "$@"
