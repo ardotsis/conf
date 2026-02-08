@@ -54,8 +54,8 @@ declare -Ar OPTION=(
 	[username]="value:ardotsis"
 	[us]="_username"
 
-	[hostname]="value:"
-	[ho]="_hostname"
+	[profile]="value:"
+	[p]="_profile"
 
 	[kawaii]="value:kawaiiiiii!!!"
 	[k]="_kawaii"
@@ -63,10 +63,10 @@ declare -Ar OPTION=(
 
 declare -A OPTIONS
 
-for a in "${!OPTION[@]}"; do
-	if [[ "${OPTION["$a"]}" != "_"* ]]; then
-		IFS=":" read -r _ default_value <<<"${OPTION[$a]}"
-		OPTIONS["$a"]="$default_value"
+for _option in "${!OPTION[@]}"; do
+	if [[ "${OPTION["$_option"]}" != "_"* ]]; then
+		IFS=":" read -r _ _default_value <<<"${OPTION[$_option]}"
+		OPTIONS["$_option"]="$_default_value"
 	fi
 done
 
@@ -81,6 +81,11 @@ show_help() {
 	printf "${indent}%s\n" "conf [-h | --help]"
 	printf "\n"
 
+	printf "Options:\n"
+	printf "$fmt" "-d,  --debug" "Enable debug mode"
+	printf "$fmt" "-dk, --docker" "Enable Docker mode"
+	printf "\n"
+
 	printf "Commands:\n"
 	printf "$fmt" "init" "init description"
 	printf "$fmt" "add" "add description"
@@ -88,10 +93,6 @@ show_help() {
 	printf "$fmt" "pull" "pull description"
 	printf "\n"
 
-	printf "Options:\n"
-	printf "$fmt" "-d,  --debug" "Enable debug mode"
-	printf "$fmt" "-dk, --docker" "Enable Docker mode"
-	printf "\n"
 	exit 0
 }
 
@@ -122,28 +123,38 @@ _parse_args() {
 	local i last_i input
 	i=0
 	last_i=$(("${#args[@]}" - 1))
+	skip_index="false"
 
 	for input in "${args[@]}"; do
+		if [[ "$skip_index" == "true" ]]; then
+			skip_index="false"
+			i=$((i + 1))
+			continue
+		fi
+
 		if [[ "$input" == "-"* ]]; then
 
 			local pure
 			pure=$(rm_hyphen "$input")
 			if [[ -n "${OPTION["$pure"]+x}" ]]; then
-				local option_type default_value restored_option=""
-				IFS=":" read -r option_type default_value <<<"${OPTION[$pure]}"
-				if [[ "$option_type" == "--"* ]]; then
+				local option_type restored_option=""
+				IFS=":" read -r option_type _ <<<"${OPTION[$pure]}"
+				if [[ "$option_type" == "_"* ]]; then
 					if [[ "$input" =~ ^-[^-] ]]; then
-						restored_option="$(rm_hyphen "$option_type")"
-						IFS=":" read -r option_type default_value <<<"${OPTION[$restored_option]}"
+						restored_option="${option_type:1}"
+						IFS=":" read -r option_type _ <<<"${OPTION[$restored_option]}"
 					else
 						show_err "Use '-$pure' instead of '$input'."
 					fi
+				elif [[ "$input" != "--"* ]]; then
+					show_err "Use '--$pure' instead of '$input'."
 				fi
 
 				local insert_val
 				if [[ "$option_type" == "flag" ]]; then
 					insert_val="true"
 				elif [[ "$option_type" == "value" ]]; then
+					skip_index="true"
 					local val_i=$((i + 1))
 					if ((val_i > last_i)); then
 						show_err "'$input' require a value." "true"
@@ -151,14 +162,10 @@ _parse_args() {
 					insert_val="${args["$val_i"]}"
 				fi
 
-				if [[ -z "$restored_option" ]]; then
-					OPTIONS["$pure"]="$insert_val"
-				else
+				if [[ -n "$restored_option" ]]; then
 					OPTIONS["$restored_option"]="$insert_val"
-				fi
-
-				if [[ "$option_type" == "value" ]]; then
-					continue 2
+				else
+					OPTIONS["$pure"]="$insert_val"
 				fi
 			else
 				show_err "'$input' is not a conf option." "true"
@@ -169,6 +176,10 @@ _parse_args() {
 		i=$((i + 1))
 	done
 
+	for key in "${!OPTIONS[@]}"; do
+		printf "key: '%s' -> '%s'\n" "$key" "${OPTIONS[$key]}"
+	done
+
 	if [[ "${OPTIONS["help"]}" == "true" ]]; then
 		show_help
 	fi
@@ -177,91 +188,31 @@ _parse_args() {
 		show_version
 	fi
 
-	printf "%s\n" "${OPTIONS[@]}"
+	local cmd="${args[$i]}"
 
 	# Unknown Command
-	# if [[ -z "${CMD[$first_arg]+x}" ]]; then
-	# 	show_err "'$first_arg' is not a conf command. See 'conf --help'."
-	# fi
-
-	# if [[ "${CMD[$1]}" == "0" ]] && ! is_root; then
-	# 	show_err "conf: Require root for this command. Run 'sudo conf $1 ..'\n"
-	# fi
-
-	echo '---parsed---'
-}
-
-_parse_args "$@"
-exit 1
-
-_parse_dashes() {
-
-	local i=0
-
-	while :; do
-		local param_var="_DASH_${i}"
-		[[ -z "${!param_var+x}" ]] && break
-
-		local -n a_param="$param_var"
-		local long_name="${a_param[0]}"
-		local short_name="${a_param[1]}"
-		local type="${a_param[2]}"
-		local default_value="${a_param[3]}"
-		local key="${long_name#--}" # 1. "--my-name" -> "my-name"
-		key="${key//-/_}"           # 2. "my-name" -> "my_name"
-
-		local arg_index=0
-		while ((arg_index < ${#_ARGS[@]})); do
-			local some_arg="${_ARGS[$arg_index]}"
-			if [[ "$some_arg" == "$long_name" || "$some_arg" == "$short_name" ]]; then
-				if [[ "$type" == "value" ]]; then
-					local value_index=$((arg_index + 1))
-					if ((value_index < ${#_ARGS[@]})); then
-						value="${_ARGS[$value_index]}"
-					else
-						printf "Please provide a value for '%s' (%s) parameter.\n" "$1" "$2" >&2
-						exit 1
-					fi
-					_DASHES["$key"]="$value"
-					_ARGS=("${_ARGS[@]:0:$arg_index}" "${_ARGS[@]:$arg_index+2}")
-				elif [[ "$type" == "flag" ]]; then
-					_DASHES["$key"]="true"
-				fi
-				break
-			fi
-			arg_index=$((arg_index + 1))
-		done
-
-		if [[ -z "${_DASHES["$key"]+x}" ]]; then
-			_DASHES["$key"]="$default_value"
-		fi
-		i=$((i + 1))
-	done
-
-	declare -r _IS_DASHES_PARSED="true"
-}
-
-get_dash() {
-	local name="$1"
-	if [[ "$_IS_DASHES_PARSED" == "false" ]]; then
-		_parse_dashes
+	if [[ -z "${CMD["$cmd"]+x}" ]]; then
+		show_err "'$cmd' is not a conf command. See 'conf --help'."
 	fi
-	printf "%s" "${_DASHES[$name]}"
+
+	if [[ "${args[$cmd]}" == "0" ]] && ! is_root; then
+		show_err "conf: Require root for this command. Run 'sudo conf $1 ..'\n"
+	fi
+
 }
 
 # HOSTNAME=$(get_dash "host")
 # declare -r HOSTNAME
-IS_DOCKER=$(get_dash "docker")
-declare -r IS_DOCKER
-IS_DEBUG=$(get_dash "debug")
-declare -r IS_DEBUG
-CURRENT_USER=$(whoami)
-declare -r CURRENT_USER
+# IS_DOCKER=$(get_dash "docker")
+# declare -r IS_DOCKER
+# IS_DEBUG=$(get_dash "debug")
+# declare -r IS_DEBUG
+# CURRENT_USER=$(whoami)
+# declare -r CURRENT_USER
 # INSTALL_USER=$(get_dash "user")
 # declare -r INSTALL_USER
-
-HOSTNAME="vultr"
-INSTALL_USER="kana"
+# HOSTNAME="vultr"
+# INSTALL_USER="kana"
 
 declare -r GIT_REMOTE_BRANCH="main"
 declare -r HOST_PREFIX="${HOSTNAME^^}##"
