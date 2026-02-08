@@ -843,7 +843,7 @@ cmd_update() {
 }
 
 run() {
-	echo "$CMDS"
+	echo "${CMDS[@]}"
 
 	if [[ "$IS_DOCKER" == "true" ]]; then
 		printf "Keeping docker container running...\n"
