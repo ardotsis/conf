@@ -29,15 +29,13 @@ get_os_name() {
 	fi
 }
 
-# Commands
-declare -Ar CMD=(
+declare -Ar COMMAND=(
 	[init]="0"
 	[add]="0"
 	[apply]="1"
 	[pull]="1"
 )
 
-# Options
 declare -Ar OPTION=(
 	[help]="flag:false"
 	[h]="_help"
@@ -60,15 +58,6 @@ declare -Ar OPTION=(
 	[kawaii]="value:kawaiiiiii!!!"
 	[k]="_kawaii"
 )
-
-declare -A OPTIONS
-
-for _option in "${!OPTION[@]}"; do
-	if [[ "${OPTION["$_option"]}" != "_"* ]]; then
-		IFS=":" read -r _ _default_value <<<"${OPTION[$_option]}"
-		OPTIONS["$_option"]="$_default_value"
-	fi
-done
 
 show_help() {
 	local indent="    "
@@ -118,7 +107,18 @@ rm_hyphen() {
 }
 
 _parse_args() {
+	local -n options_hash="$1"
+	local -n commands_arr="$2"
+	shift 2
 	local args=("$@")
+
+	local options
+	for option in "${!OPTION[@]}"; do
+		if [[ "${OPTION["$option"]}" != "_"* ]]; then
+			IFS=":" read -r _ _default_value <<<"${OPTION[$option]}"
+			options["$option"]="$_default_value"
+		fi
+	done
 
 	local i last_i input
 	i=0
@@ -158,9 +158,9 @@ _parse_args() {
 					insert_val="${args["$val_i"]}"
 				fi
 				if [[ -n "$restored_option" ]]; then
-					OPTIONS["$restored_option"]="$insert_val"
+					options["$restored_option"]="$insert_val"
 				else
-					OPTIONS["$pure"]="$insert_val"
+					options["$pure"]="$insert_val"
 				fi
 			else
 				show_err "'$input' is not a conf option." "true"
@@ -171,20 +171,20 @@ _parse_args() {
 		i=$((i + 1))
 	done
 
-	if [[ "${OPTIONS["help"]}" == "true" ]]; then
-		show_help
-	fi
-	if [[ "${OPTIONS["version"]}" == "true" ]]; then
-		show_version
-	fi
+	# if [[ "${OPTIONS["help"]}" == "true" ]]; then
+	# 	show_help
+	# fi
+	# if [[ "${OPTIONS["version"]}" == "true" ]]; then
+	# 	show_version
+	# fi
 
-	local cmd="${args[$i]}"
-	if [[ -z "${CMD["$cmd"]+x}" ]]; then
-		show_err "'$cmd' is not a conf command. See 'conf --help'."
-	fi
-	if [[ "${args[$cmd]}" == "0" ]] && ! is_root; then
-		show_err "conf: Require root for this command. Run 'sudo conf $1 ..'\n"
-	fi
+	# local cmd="${args[$i]}"
+	# if [[ -z "${COMMAND["$cmd"]+x}" ]]; then
+	# 	show_err "'$cmd' is not a conf command. See 'conf --help'."
+	# fi
+	# if [[ "${args[$cmd]}" == "0" ]] && ! is_root; then
+	# 	show_err "conf: Require root for this command. Run 'sudo conf $1 ..'\n"
+	# fi
 }
 
 # HOSTNAME=$(get_dash "host")
