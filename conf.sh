@@ -29,36 +29,6 @@ get_os_name() {
 	fi
 }
 
-declare -Ar COMMAND=(
-	[init]="0"
-	[add]="0"
-	[apply]="1"
-	[pull]="1"
-)
-
-declare -Ar OPTION=(
-	[help]="flag:false"
-	[h]="_help"
-
-	[version]="flag:false"
-	[v]="_version"
-
-	[debug]="flag:false"
-	[d]="_debug"
-
-	[docker]="flag:false"
-	[dk]="_docker"
-
-	[username]="value:ardotsis"
-	[us]="_username"
-
-	[profile]="value:"
-	[p]="_profile"
-
-	[kawaii]="value:kawaiiiiii!!!"
-	[k]="_kawaii"
-)
-
 show_help() {
 	local indent="    "
 	local col_width="14"
@@ -102,9 +72,40 @@ show_err() {
 	exit 1
 }
 
+# TODO: remove
 rm_hyphen() {
 	printf "%s" "${1#"${1%%[!-]*}"}"
 }
+
+declare -Ar OPTION=(
+	[help]="flag:false"
+	[h]="_help"
+
+	[version]="flag:false"
+	[v]="_version"
+
+	[debug]="flag:false"
+	[d]="_debug"
+
+	[docker]="flag:false"
+	[dk]="_docker"
+
+	[username]="value:ardotsis"
+	[us]="_username"
+
+	[profile]="value:"
+	[p]="_profile"
+
+	[kawaii]="value:kawaiiiiii!!!"
+	[k]="_kawaii"
+)
+
+declare -Ar COMMAND=(
+	[init]="0"
+	[add]="0"
+	[apply]="1"
+	[pull]="1"
+)
 
 _parse_args() {
 	local -n options_hash="$1"
@@ -112,11 +113,10 @@ _parse_args() {
 	shift 2
 	local args=("$@")
 
-	local options
-	for option in "${!OPTION[@]}"; do
-		if [[ "${OPTION["$option"]}" != "_"* ]]; then
-			IFS=":" read -r _ _default_value <<<"${OPTION[$option]}"
-			options["$option"]="$_default_value"
+	for option_name in "${!OPTION[@]}"; do
+		if [[ "${OPTION["$option_name"]}" != "_"* ]]; then
+			IFS=":" read -r _ _default_value <<<"${OPTION[$option_name]}"
+			options_hash["$option_name"]="$_default_value"
 		fi
 	done
 
@@ -158,9 +158,9 @@ _parse_args() {
 					insert_val="${args["$val_i"]}"
 				fi
 				if [[ -n "$restored_option" ]]; then
-					options["$restored_option"]="$insert_val"
+					options_hash["$restored_option"]="$insert_val"
 				else
-					options["$pure"]="$insert_val"
+					options_hash["$pure"]="$insert_val"
 				fi
 			else
 				show_err "'$input' is not a conf option." "true"
@@ -170,6 +170,7 @@ _parse_args() {
 		fi
 		i=$((i + 1))
 	done
+	my_cmds=("${args[@]:$i}")
 
 	# if [[ "${OPTIONS["help"]}" == "true" ]]; then
 	# 	show_help
@@ -187,13 +188,20 @@ _parse_args() {
 	# fi
 }
 
-declare my_options my_cmds
+declare -A my_options
+declare -a my_cmds
 
 _parse_args "my_options" "my_cmds" "$@"
+
+echo "${!my_options[@]}"
+echo "${my_cmds[@]}"
+
+HOSTNAME="${my_options["hostname"]}"
+declare -r HOSTNAME
+
+echo "$HOSTNAME"
 exit
 
-# HOSTNAME=$(get_dash "host")
-# declare -r HOSTNAME
 # IS_DOCKER=$(get_dash "docker")
 # declare -r IS_DOCKER
 # IS_DEBUG=$(get_dash "debug")
