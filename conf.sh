@@ -187,6 +187,11 @@ _parse_args() {
 	# fi
 }
 
+declare my_options my_cmds
+
+_parse_args "my_options" "my_cmds" "$@"
+exit
+
 # HOSTNAME=$(get_dash "host")
 # declare -r HOSTNAME
 # IS_DOCKER=$(get_dash "docker")
