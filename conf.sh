@@ -63,10 +63,10 @@ declare -Ar OPTION=(
 
 declare -A OPTIONS
 
-for option in "${!OPTION[@]}"; do
-	if [[ "${OPTION["$option"]}" != "_"* ]]; then
-		IFS=":" read -r _ default_value <<<"${OPTION[$option]}"
-		OPTIONS["$option"]="$default_value"
+for a in "${!OPTION[@]}"; do
+	if [[ "${OPTION["$a"]}" != "_"* ]]; then
+		IFS=":" read -r _ default_value <<<"${OPTION[$a]}"
+		OPTIONS["$a"]="$default_value"
 	fi
 done
 
