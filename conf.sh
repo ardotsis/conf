@@ -100,7 +100,7 @@ declare -Ar OPTION=(
 	[k]="_kawaii"
 )
 
-declare -Ar COMMAND=(
+declare -Ar CMD=(
 	[init]="0"
 	[add]="0"
 	[apply]="1"
@@ -170,7 +170,7 @@ _parse_args() {
 		fi
 		i=$((i + 1))
 	done
-	my_cmds=("${args[@]:$i}")
+	commands_arr=("${args[@]:$i}")
 
 	# if [[ "${OPTIONS["help"]}" == "true" ]]; then
 	# 	show_help
@@ -188,35 +188,18 @@ _parse_args() {
 	# fi
 }
 
-declare -A my_options
-declare -a my_cmds
-
-_parse_args "my_options" "my_cmds" "$@"
-
-echo "${!my_options[@]}"
-echo "${my_cmds[@]}"
-
-HOSTNAME="${my_options["hostname"]}"
-declare -r HOSTNAME
-
-echo "$HOSTNAME"
-exit
-
-# IS_DOCKER=$(get_dash "docker")
-# declare -r IS_DOCKER
-# IS_DEBUG=$(get_dash "debug")
-# declare -r IS_DEBUG
-# CURRENT_USER=$(whoami)
-# declare -r CURRENT_USER
-# INSTALL_USER=$(get_dash "user")
-# declare -r INSTALL_USER
-# HOSTNAME="vultr"
-# INSTALL_USER="kana"
+declare -A OPTIONS
+declare -a CMDS
+_parse_args "OPTIONS" "CMDS" "$@"
+declare -r PROFILE="${OPTIONS["profile"]}"
+declare -r IS_DOCKER="${OPTIONS["docker"]}"
+declare -r IS_DEBUG="${OPTIONS["debug"]}"
+declare -r CURRENT_USER="$(whoami)"
+declare -r INSTALL_USER="${OPTIONS["username"]}"
 
 declare -r GIT_REMOTE_BRANCH="main"
 declare -r HOST_PREFIX="${HOSTNAME^^}##"
-OS="$(get_os_name)"
-declare -r OS
+declare -r OS="$(get_os_name)"
 declare -r PASSWD_LENGTH=72
 declare -r INSTALL_USER_HOME="/home/$INSTALL_USER"
 declare -r TMP_DIR="/var/tmp"
@@ -860,7 +843,7 @@ cmd_update() {
 }
 
 run() {
-	"cmd_$MODE"
+	echo "$CMDS"
 
 	if [[ "$IS_DOCKER" == "true" ]]; then
 		printf "Keeping docker container running...\n"
@@ -868,4 +851,4 @@ run() {
 	fi
 }
 
-# run
+run
