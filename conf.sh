@@ -29,7 +29,7 @@ get_os_name() {
 	fi
 }
 
-show_help() {
+print_help() {
 	local indent="    "
 	local col_width="14"
 	local fmt="${indent}%-${col_width}s %s\n"
@@ -51,30 +51,10 @@ show_help() {
 	printf "$fmt" "apply" "apply description"
 	printf "$fmt" "pull" "pull description"
 	printf "\n"
-
-	exit 0
 }
 
-show_version() {
+print_version() {
 	printf "conf version 1.0\n"
-	exit 0
-}
-
-show_err() {
-	local msg="$1"
-	local with_tip="${2:-false}"
-
-	local tip=""
-	if [[ "$with_tip" == "true" ]]; then
-		tip=" See 'conf --help'."
-	fi
-	printf "conf: %s%s\n" "$msg" "$tip" >&2
-	exit 1
-}
-
-# TODO: remove
-rm_hyphen() {
-	printf "%s" "${1#"${1%%[!-]*}"}"
 }
 
 declare -Ar OPTION=(
@@ -91,23 +71,25 @@ declare -Ar OPTION=(
 	[dk]="_docker"
 
 	[username]="value:ardotsis"
-	[us]="_username"
+	[u]="_username"
 
 	[profile]="value:"
 	[p]="_profile"
-
-	[kawaii]="value:kawaiiiiii!!!"
-	[k]="_kawaii"
 )
 
-declare -Ar CMD=(
-	[init]="0"
-	[add]="0"
-	[apply]="1"
-	[pull]="1"
-)
+parse_args() {
+	_show_parse_err() {
+		local msg="$1"
+		local with_tip="${2:-false}"
 
-_parse_args() {
+		local tip=""
+		if [[ "$with_tip" == "true" ]]; then
+			tip=" See 'conf --help'."
+		fi
+		printf "conf: %s%s\n" "$msg" "$tip" >&2
+		exit 1
+	}
+
 	local -n options_hash="$1"
 	local -n commands_arr="$2"
 	shift 2
@@ -131,8 +113,7 @@ _parse_args() {
 			continue
 		fi
 		if [[ "$input" == "-"* ]]; then
-			local pure
-			pure=$(rm_hyphen "$input")
+			local pure="${input#"${input%%[!-]*}"}"
 			if [[ -n "${OPTION["$pure"]+x}" ]]; then
 				local option_type restored_option=""
 				IFS=":" read -r option_type _ <<<"${OPTION[$pure]}"
@@ -141,10 +122,10 @@ _parse_args() {
 						restored_option="${option_type:1}"
 						IFS=":" read -r option_type _ <<<"${OPTION[$restored_option]}"
 					else
-						show_err "Use '-$pure' instead of '$input'."
+						_show_parse_err "Use '-$pure' instead of '$input'."
 					fi
 				elif [[ "$input" != "--"* ]]; then
-					show_err "Use '--$pure' instead of '$input'."
+					_show_parse_err "Use '--$pure' instead of '$input'."
 				fi
 				local insert_val
 				if [[ "$option_type" == "flag" ]]; then
@@ -153,44 +134,31 @@ _parse_args() {
 					skip_index="true"
 					local val_i=$((i + 1))
 					if ((val_i > last_i)); then
-						show_err "'$input' require a value." "true"
+						_show_parse_err "'$input' require a value." "true"
 					fi
 					insert_val="${args["$val_i"]}"
 				fi
 				if [[ -n "$restored_option" ]]; then
 					options_hash["$restored_option"]="$insert_val"
 				else
+					# shellcheck disable=SC2034
 					options_hash["$pure"]="$insert_val"
 				fi
 			else
-				show_err "'$input' is not a conf option." "true"
+				_show_parse_err "'$input' is not a conf option." "true"
 			fi
 		else
 			break
 		fi
 		i=$((i + 1))
 	done
+	# shellcheck disable=SC2034
 	commands_arr=("${args[@]:$i}")
-
-	# if [[ "${OPTIONS["help"]}" == "true" ]]; then
-	# 	show_help
-	# fi
-	# if [[ "${OPTIONS["version"]}" == "true" ]]; then
-	# 	show_version
-	# fi
-
-	# local cmd="${args[$i]}"
-	# if [[ -z "${COMMAND["$cmd"]+x}" ]]; then
-	# 	show_err "'$cmd' is not a conf command. See 'conf --help'."
-	# fi
-	# if [[ "${args[$cmd]}" == "0" ]] && ! is_root; then
-	# 	show_err "conf: Require root for this command. Run 'sudo conf $1 ..'\n"
-	# fi
 }
 
 declare -A OPTIONS
 declare -a CMDS
-_parse_args "OPTIONS" "CMDS" "$@"
+parse_args "OPTIONS" "CMDS" "$@"
 declare -r PROFILE="${OPTIONS["profile"]}"
 declare -r IS_DOCKER="${OPTIONS["docker"]}"
 declare -r IS_DEBUG="${OPTIONS["debug"]}"
@@ -204,7 +172,8 @@ declare -r PASSWD_LENGTH=72
 declare -r INSTALL_USER_HOME="/home/$INSTALL_USER"
 declare -r TMP_DIR="/var/tmp"
 declare -r DOCKER_VOLUME_DIR="/app"
-declare -r INIT_FLAG_FILE="/etc/DOTFILES"
+declare -r CONF_REPO_URL="https://github.com/ardotsis/conf.git"
+declare -r CONF_INSTALLER_URL="https://raw.githubusercontent.com/ardotsis/conf/refs/heads/main/install.sh"
 
 declare -A DF_REPO
 DF_REPO["_dir"]="/usr/local/share/conf"
@@ -221,12 +190,6 @@ DF_DATA["_dir"]="$INSTALL_USER_HOME/conf"
 DF_DATA["secret"]="${DF_DATA["_dir"]}/secret"
 DF_DATA["backups_dir"]="${DF_DATA["_dir"]}/backups"
 declare -A DF_DATA
-
-# TODO: Deprecated
-declare -Ar URL=(
-	["conf_repo"]="https://github.com/ardotsis/conf.git"
-	["dotfiles_install_script"]="https://raw.githubusercontent.com/ardotsis/conf/refs/heads/main/install.sh"
-)
 
 declare -Ar C=(
 	[0]="\033[0m"
@@ -747,7 +710,7 @@ check_is_root() {
 	fi
 }
 
-cmd_init() {
+_init() {
 	check_is_root
 
 	if [[ -e "${DF_REPO["_dir"]}" ]]; then
@@ -763,7 +726,7 @@ cmd_init() {
 	if [[ "$IS_DEBUG" == "true" ]]; then
 		ln -sf "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
 	else
-		git clone -b $GIT_REMOTE_BRANCH "${URL["conf_repo"]}" "${DF_REPO["_dir"]}"
+		git clone -b "$GIT_REMOTE_BRANCH" "$CONF_INSTALLER_URL" "${DF_REPO["_dir"]}"
 	fi
 
 	ln -sf "${DF_REPO["_dir"]}/conf.sh" "/usr/local/bin/conf"
@@ -845,6 +808,11 @@ cmd_update() {
 run() {
 	echo "${CMDS[@]}"
 
+	if [[ "${OPTIONS["help"]}" == "true" ]]; then
+		print_help
+		exit 1
+	fi
+
 	if [[ "$IS_DOCKER" == "true" ]]; then
 		printf "Keeping docker container running...\n"
 		tail -f /dev/null
@@ -852,3 +820,18 @@ run() {
 }
 
 run
+
+# if [[ "${OPTIONS["help"]}" == "true" ]]; then
+# 	show_help
+# fi
+# if [[ "${OPTIONS["version"]}" == "true" ]]; then
+# 	show_version
+# fi
+
+# local cmd="${args[$i]}"
+# if [[ -z "${COMMAND["$cmd"]+x}" ]]; then
+# 	show_err "'$cmd' is not a conf command. See 'conf --help'."
+# fi
+# if [[ "${args[$cmd]}" == "0" ]] && ! is_root; then
+# 	show_err "conf: Require root for this command. Run 'sudo conf $1 ..'\n"
+# fi
