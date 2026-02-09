@@ -29,7 +29,7 @@ get_os_name() {
 	fi
 }
 
-print_help() {
+show_help() {
 	local indent="    "
 	local col_width="14"
 	local fmt="${indent}%-${col_width}s %s\n"
@@ -51,13 +51,16 @@ print_help() {
 	printf "$fmt" "apply" "apply description"
 	printf "$fmt" "pull" "pull description"
 	printf "\n"
+
+	exit 0
 }
 
-print_version() {
+show_version() {
 	printf "conf version 1.0\n"
+	exit 0
 }
 
-declare -Ar OPTION=(
+declare -Ar _OPTION=(
 	[help]="flag:false"
 	[h]="_help"
 
@@ -77,28 +80,32 @@ declare -Ar OPTION=(
 	[p]="_profile"
 )
 
+_show_parse_err() {
+	local msg="$1"
+	local with_tip="${2:-false}"
+
+	local tip=""
+	if [[ "$with_tip" == "true" ]]; then
+		tip=" See 'conf --help'."
+	fi
+	printf "conf: %s%s\n" "$msg" "$tip" >&2
+	exit 1
+}
+
 parse_args() {
-	_show_parse_err() {
-		local msg="$1"
-		local with_tip="${2:-false}"
-
-		local tip=""
-		if [[ "$with_tip" == "true" ]]; then
-			tip=" See 'conf --help'."
-		fi
-		printf "conf: %s%s\n" "$msg" "$tip" >&2
-		exit 1
-	}
-
-	local -n options_hash="$1"
+	local -n option_hash="$1"
 	local -n commands_arr="$2"
 	shift 2
 	local args=("$@")
 
-	for option_name in "${!OPTION[@]}"; do
-		if [[ "${OPTION["$option_name"]}" != "_"* ]]; then
-			IFS=":" read -r _ _default_value <<<"${OPTION[$option_name]}"
-			options_hash["$option_name"]="$_default_value"
+	if [[ -z "${args[@]+x}" ]]; then
+		show_help
+	fi
+
+	for option_name in "${!_OPTION[@]}"; do
+		if [[ "${_OPTION["$option_name"]}" != "_"* ]]; then
+			IFS=":" read -r _ _default_value <<<"${_OPTION[$option_name]}"
+			option_hash["$option_name"]="$_default_value"
 		fi
 	done
 
@@ -114,13 +121,13 @@ parse_args() {
 		fi
 		if [[ "$input" == "-"* ]]; then
 			local pure="${input#"${input%%[!-]*}"}"
-			if [[ -n "${OPTION["$pure"]+x}" ]]; then
+			if [[ -n "${_OPTION["$pure"]+x}" ]]; then
 				local option_type restored_option=""
-				IFS=":" read -r option_type _ <<<"${OPTION[$pure]}"
+				IFS=":" read -r option_type _ <<<"${_OPTION[$pure]}"
 				if [[ "$option_type" == "_"* ]]; then
 					if [[ "$input" =~ ^-[^-] ]]; then
 						restored_option="${option_type:1}"
-						IFS=":" read -r option_type _ <<<"${OPTION[$restored_option]}"
+						IFS=":" read -r option_type _ <<<"${_OPTION[$restored_option]}"
 					else
 						_show_parse_err "Use '-$pure' instead of '$input'."
 					fi
@@ -139,10 +146,10 @@ parse_args() {
 					insert_val="${args["$val_i"]}"
 				fi
 				if [[ -n "$restored_option" ]]; then
-					options_hash["$restored_option"]="$insert_val"
+					option_hash["$restored_option"]="$insert_val"
 				else
 					# shellcheck disable=SC2034
-					options_hash["$pure"]="$insert_val"
+					option_hash["$pure"]="$insert_val"
 				fi
 			else
 				_show_parse_err "'$input' is not a conf option." "true"
@@ -154,16 +161,23 @@ parse_args() {
 	done
 	# shellcheck disable=SC2034
 	commands_arr=("${args[@]:$i}")
+
+	if [[ "${option_hash["help"]}" == "true" ]]; then
+		show_help
+	fi
+	if [[ "${option_hash["version"]}" == "true" ]]; then
+		show_version
+	fi
 }
 
-declare -A OPTIONS
+declare -A OPTION
 declare -a CMDS
-parse_args "OPTIONS" "CMDS" "$@"
-declare -r PROFILE="${OPTIONS["profile"]}"
-declare -r IS_DOCKER="${OPTIONS["docker"]}"
-declare -r IS_DEBUG="${OPTIONS["debug"]}"
+parse_args "OPTION" "CMDS" "$@"
+declare -r PROFILE="${OPTION["profile"]}"
+declare -r IS_DOCKER="${OPTION["docker"]}"
+declare -r IS_DEBUG="${OPTION["debug"]}"
 declare -r CURRENT_USER="$(whoami)"
-declare -r INSTALL_USER="${OPTIONS["username"]}"
+declare -r INSTALL_USER="${OPTION["username"]}"
 
 declare -r GIT_REMOTE_BRANCH="main"
 declare -r HOST_PREFIX="${HOSTNAME^^}##"
@@ -806,12 +820,7 @@ cmd_update() {
 }
 
 run() {
-	echo "${CMDS[@]}"
-
-	if [[ "${OPTIONS["help"]}" == "true" ]]; then
-		print_help
-		exit 1
-	fi
+	local mode="${CMDS[0]}"
 
 	if [[ "$IS_DOCKER" == "true" ]]; then
 		printf "Keeping docker container running...\n"
@@ -820,13 +829,6 @@ run() {
 }
 
 run
-
-# if [[ "${OPTIONS["help"]}" == "true" ]]; then
-# 	show_help
-# fi
-# if [[ "${OPTIONS["version"]}" == "true" ]]; then
-# 	show_version
-# fi
 
 # local cmd="${args[$i]}"
 # if [[ -z "${COMMAND["$cmd"]+x}" ]]; then
