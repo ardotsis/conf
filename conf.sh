@@ -31,7 +31,7 @@ get_os_name() {
 
 show_help() {
 	local indent="    "
-	local col_width="14"
+	local col_width="18"
 	local fmt="${indent}%-${col_width}s %s\n"
 
 	printf "Usage:\n"
@@ -43,6 +43,8 @@ show_help() {
 	printf "Options:\n"
 	printf "$fmt" "-d,  --debug" "Enable debug mode"
 	printf "$fmt" "-dk, --docker" "Enable Docker mode"
+	printf "$fmt" "-u,  --username" "Set username"
+	printf "$fmt" "-p,  --profile" "Set profile"
 	printf "\n"
 
 	printf "Commands:\n"
@@ -80,7 +82,7 @@ declare -Ar _OPTION=(
 	[p]="_profile"
 )
 
-_show_parse_err() {
+_get_parse_err() {
 	local msg="$1"
 	local with_tip="${2:-false}"
 
@@ -88,19 +90,15 @@ _show_parse_err() {
 	if [[ "$with_tip" == "true" ]]; then
 		tip=" See 'conf --help'."
 	fi
-	printf "conf: %s%s\n" "$msg" "$tip" >&2
-	exit 1
+	printf "conf: %s%s\n" "$msg" "$tip"
 }
 
 parse_args() {
 	local -n option_hash="$1"
 	local -n commands_arr="$2"
-	shift 2
+	local -n err_msg="$3"
+	shift 3
 	local args=("$@")
-
-	if [[ -z "${args[@]+x}" ]]; then
-		show_help
-	fi
 
 	for option_name in "${!_OPTION[@]}"; do
 		if [[ "${_OPTION["$option_name"]}" != "_"* ]]; then
@@ -129,10 +127,10 @@ parse_args() {
 						restored_option="${option_type:1}"
 						IFS=":" read -r option_type _ <<<"${_OPTION[$restored_option]}"
 					else
-						_show_parse_err "Use '-$pure' instead of '$input'."
+						err_msg=$(_get_parse_err "Use '-$pure' instead of '$input'.")
 					fi
 				elif [[ "$input" != "--"* ]]; then
-					_show_parse_err "Use '--$pure' instead of '$input'."
+					err_msg=$(_get_parse_err "Use '--$pure' instead of '$input'.")
 				fi
 				local insert_val
 				if [[ "$option_type" == "flag" ]]; then
@@ -141,7 +139,7 @@ parse_args() {
 					skip_index="true"
 					local val_i=$((i + 1))
 					if ((val_i > last_i)); then
-						_show_parse_err "'$input' require a value." "true"
+						err_msg=$(_get_parse_err "'$input' require a value." "true")
 					fi
 					insert_val="${args["$val_i"]}"
 				fi
@@ -152,7 +150,7 @@ parse_args() {
 					option_hash["$pure"]="$insert_val"
 				fi
 			else
-				_show_parse_err "'$input' is not a conf option." "true"
+				err_msg=(_get_parse_err "'$input' is not a conf option." "true")
 			fi
 		else
 			break
@@ -161,29 +159,13 @@ parse_args() {
 	done
 	# shellcheck disable=SC2034
 	commands_arr=("${args[@]:$i}")
-
-	if [[ "${option_hash["help"]}" == "true" ]]; then
-		show_help
-	fi
-	if [[ "${option_hash["version"]}" == "true" ]]; then
-		show_version
-	fi
 }
 
-declare -A OPTION
-declare -a CMDS
-parse_args "OPTION" "CMDS" "$@"
-declare -r PROFILE="${OPTION["profile"]}"
-declare -r IS_DOCKER="${OPTION["docker"]}"
-declare -r IS_DEBUG="${OPTION["debug"]}"
 declare -r CURRENT_USER="$(whoami)"
-declare -r INSTALL_USER="${OPTION["username"]}"
-
 declare -r GIT_REMOTE_BRANCH="main"
 declare -r HOST_PREFIX="${HOSTNAME^^}##"
 declare -r OS="$(get_os_name)"
 declare -r PASSWD_LENGTH=72
-declare -r INSTALL_USER_HOME="/home/$INSTALL_USER"
 declare -r TMP_DIR="/var/tmp"
 declare -r DOCKER_VOLUME_DIR="/app"
 declare -r CONF_REPO_URL="https://github.com/ardotsis/conf.git"
@@ -198,12 +180,6 @@ DF_REPO["hosts_dir"]="${DF_REPO["linux_dir"]}/hosts"
 DF_REPO["default_host"]="${DF_REPO["hosts_dir"]}/_default"
 DF_REPO["current_host"]="${DF_REPO["hosts_dir"]}/${HOSTNAME,,}"
 declare -r DF_REPO
-
-declare -A DF_DATA
-DF_DATA["_dir"]="$INSTALL_USER_HOME/conf"
-DF_DATA["secret"]="${DF_DATA["_dir"]}/secret"
-DF_DATA["backups_dir"]="${DF_DATA["_dir"]}/backups"
-declare -A DF_DATA
 
 declare -Ar C=(
 	[0]="\033[0m"
@@ -819,16 +795,41 @@ cmd_update() {
 	printf "%b%s%b\n" "${C[y]}" "Updating..." "${C[0]}"
 }
 
-run() {
-	local mode="${CMDS[0]}"
+main_() {
+	local -A opt
+	local -a cmds
+	local parse_err
 
-	if [[ "$IS_DOCKER" == "true" ]]; then
-		printf "Keeping docker container running...\n"
-		tail -f /dev/null
-	fi
+	parse_args "opt" "cmds" "parse_err" "$@"
+
+	for i in "${opt[@]}"; do
+		echo "$i"
+	done
+
+	# declare -A OPTION
+	# declare -a CMDS
+	# declare -r PROFILE="${OPTION["profile"]}"
+	# declare -r IS_DOCKER="${OPTION["docker"]}"
+	# declare -r IS_DEBUG="${OPTION["debug"]}"
+	# declare -r INSTALL_USER="${OPTION["username"]}"
+
+	# if [[ "${OPTION["help"]}" == "true" ]]; then
+	# 	show_help
+	# fi
+
+	# if [[ "${OPTION["version"]}" == "true" ]]; then
+	# 	show_version
+	# fi
+
+	# "_${CMDS[0]}"
+
+	# if [[ "$IS_DOCKER" == "true" ]]; then
+	# 	printf "Keeping docker container running...\n"
+	# 	tail -f /dev/null
+	# fi
 }
 
-run
+main_ "$@"
 
 # local cmd="${args[$i]}"
 # if [[ -z "${COMMAND["$cmd"]+x}" ]]; then
