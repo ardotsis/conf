@@ -127,10 +127,12 @@ parse_args() {
 						restored_option="${option_type:1}"
 						IFS=":" read -r option_type _ <<<"${_OPTION[$restored_option]}"
 					else
-						err_msg=$(_get_parse_err "Use '-$pure' instead of '$input'.")
+						err_msg="$(_get_parse_err "Use '-$pure' instead of '$input'.")"
+						return 1
 					fi
 				elif [[ "$input" != "--"* ]]; then
-					err_msg=$(_get_parse_err "Use '--$pure' instead of '$input'.")
+					err_msg="$(_get_parse_err "Use '--$pure' instead of '$input'.")"
+					return 1
 				fi
 				local insert_val
 				if [[ "$option_type" == "flag" ]]; then
@@ -139,7 +141,8 @@ parse_args() {
 					skip_index="true"
 					local val_i=$((i + 1))
 					if ((val_i > last_i)); then
-						err_msg=$(_get_parse_err "'$input' require a value." "true")
+						err_msg="$(_get_parse_err "'$input' require a value." "true")"
+						return 1
 					fi
 					insert_val="${args["$val_i"]}"
 				fi
@@ -150,7 +153,8 @@ parse_args() {
 					option_hash["$pure"]="$insert_val"
 				fi
 			else
-				err_msg=(_get_parse_err "'$input' is not a conf option." "true")
+				err_msg="$(_get_parse_err "'$input' is not a conf option." "true")"
+				return 1
 			fi
 		else
 			break
@@ -159,6 +163,7 @@ parse_args() {
 	done
 	# shellcheck disable=SC2034
 	commands_arr=("${args[@]:$i}")
+	return 0
 }
 
 declare -r CURRENT_USER="$(whoami)"
@@ -800,11 +805,10 @@ main_() {
 	local -a cmds
 	local parse_err
 
-	parse_args "opt" "cmds" "parse_err" "$@"
-
-	for i in "${opt[@]}"; do
-		echo "$i"
-	done
+	if ! parse_args "opt" "cmds" "parse_err" "$@"; then
+		printf "%s\n" "$parse_err" >&2
+		exit 1
+	fi
 
 	# declare -A OPTION
 	# declare -a CMDS
