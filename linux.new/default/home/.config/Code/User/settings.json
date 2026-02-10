@@ -11,7 +11,7 @@
     "files.autoSave": "afterDelay"
   },
   "[json]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "richie5um2.vscode-sort-json"
   },
   "[jsonc]": {
     "editor.defaultFormatter": "richie5um2.vscode-sort-json"

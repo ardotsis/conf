@@ -3,19 +3,26 @@ param()
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$DotfilesRepoDir = $PSScriptRoot
+$ConfRepoDir = $PSScriptRoot
 $SymlinkDirPairs = @(
     # FORMAT : [Windows directory],  [Dotfiles directory]
 
     # VSCode
-    @("${Env:APPDATA}\Code\User", "$DotfilesRepoDir\linux\hosts\_default\.config\Code\User"),
+    @("${Env:APPDATA}\Code\User", "$ConfRepoDir\linux\hosts\_default\.config\Code\User"),
     # PowerShell
-    @("${Env:USERPROFILE}\Documents\PowerShell", "$DotfilesRepoDir\win\config\PowerShell"),
+    @("${Env:USERPROFILE}\Documents\PowerShell", "$ConfRepoDir\win\config\PowerShell"),
     # NeoVim
-    @("${Env:LOCALAPPDATA}\nvim", "$DotfilesRepoDir\linux\hosts\_default\.config\nvim")
+    @("${Env:LOCALAPPDATA}\nvim", "$ConfRepoDir\linux\hosts\_default\.config\nvim")
 
     # CAUTION: Do NOT forget to add a "comma (,)" for each array.
 )
+
+function Set-XdgEnvVars {
+    [Environment]::SetEnvironmentVariable("XDG_CONFIG_HOME", "$env:USERPROFILE\.config", "User")
+    [Environment]::SetEnvironmentVariable("XDG_DATA_HOME", "$env:USERPROFILE\.local\share", "User")
+    [Environment]::SetEnvironmentVariable("XDG_CACHE_HOME", "$env:USERPROFILE\.cache", "User")
+    [Environment]::SetEnvironmentVariable("XDG_STATE_HOME", "$env:USERPROFILE\.local\state", "User")
+}
 
 
 function Set-Symlink([string] $WinDir, [string] $RepoDir) {
@@ -63,11 +70,5 @@ function main() {
 
     Pause
 }
-
-# TODO: SET XDG
-# [Environment]::SetEnvironmentVariable("XDG_CONFIG_HOME", "$env:USERPROFILE\.config", "User")
-# [Environment]::SetEnvironmentVariable("XDG_DATA_HOME", "$env:USERPROFILE\.local\share", "User")
-# [Environment]::SetEnvironmentVariable("XDG_CACHE_HOME", "$env:USERPROFILE\.cache", "User")
-# [Environment]::SetEnvironmentVariable("XDG_STATE_HOME", "$env:USERPROFILE\.local\state", "User")
 
 main

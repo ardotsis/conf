@@ -8,24 +8,5 @@
 ### `ardotsis@vultr`
 
 ```sh
-curl -fsSL get.ardotsis.com/df | bash -s -- -h vultr
-```
-
-> [!NOTE]
-> After installation, check the `~/dotfiles-data/secret` file to configure the client's settings.
-
-### `ardotsis@windows`
-
-```batch
-git clone https://github.com/ardotsis/dotfiles ~\.dotfiles
-cd ~\.dotfiles
-.\install.ps1
-```
-
-## Test
-
-### Test `install.sh` on Docker (Windows)
-
-```powershell
-.\scripts\test_debian.bat "--host vultr --debug --docker" --build
+curl -fsSL get.ardotsis.com/conf | bash -s -- init kana
 ```

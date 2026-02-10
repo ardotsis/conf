@@ -1,6 +1,5 @@
 param (
-    [string]$msg,
-    [switch]$main = $false
+    [string]$msg = ""
 )
 
 if (-not $msg) {
@@ -11,19 +10,4 @@ git fetch
 git merge
 git add -A
 git commit -m "$msg"
-# TODO: you cant update if working tree is clean
-if (-not $?) {
-    exit 1
-}
-
 git push
-
-if ($main) {
-    $currentBranch = git branch --show-current
-    if ($currentBranch -ne "main") {
-        git checkout main
-        git merge $currentBranch
-        git push
-        git checkout $currentBranch
-    }
-}

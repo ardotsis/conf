@@ -1,150 +1,217 @@
 #!/bin/bash
 set -e -u -o pipefail -C
 
-declare -ar _PARAM_0=("--host" "-h" "value" "")
-declare -ar _PARAM_1=("--username" "-u" "value" "ardotsis")
-declare -ar _PARAM_2=("--docker" "-d" "flag" "false")
-declare -ar _PARAM_3=("--debug" "-de" "flag" "false")
-declare -A _PARAMS=()
-declare -a _ARGS=("$@")
-declare _IS_ARGS_PARSED="false"
+declare -r REPO_URL="https://github.com/ardotsis/conf.git"
+declare -r REPO_INSTALL_DIR="/usr/local/share/conf"
+declare -r TMP_DIR="/var/tmp"
+declare -r DOCKER_VOLUME_DIR="/app"
+declare -r SECRET_FILENAME="conf-secret"
+# shellcheck disable=SC2155
+declare -r CURRENT_USER="$(whoami)"
+declare -r PASSWD_LENGTH=72
 
-_parse_args() {
-	show_missing_param_err() {
-		printf "Please provide a value for '%s' (%s) parameter.\n" "$1" "$2"
-		exit 1
+declare -A CONF_REPO
+CONF_REPO["data"]="$REPO_INSTALL_DIR/data"
+CONF_REPO["etc"]="${CONF_REPO["data"]}/etc"
+CONF_REPO["profiles"]="${CONF_REPO["data"]}/profiles"
+declare -r CONF_REPO
+
+declare -Ar C=(
+	[0]="\033[0m"
+	[k]="\033[0;30m"
+	[r]="\033[0;31m"
+	[g]="\033[0;32m"
+	[y]="\033[0;33m"
+	[b]="\033[0;34m"
+	[p]="\033[0;35m"
+	[c]="\033[0;36m"
+	[w]="\033[0;37m"
+)
+
+declare -Ar LC=(
+	[debug]="${C["w"]}"
+	[info]="${C["g"]}"
+	[warn]="${C["y"]}"
+	[error]="${C["r"]}"
+	[var]="${C["p"]}"
+	[value]="${C["c"]}"
+	[path]="${C["y"]}"
+	[highlight]="${C["r"]}"
+)
+
+declare -Ar _OPTION_MAP=(
+	[--help]="flag:false"
+	[-h]="help"
+
+	[--version]="flag:false"
+	[-v]="version"
+
+	[--debug]="flag:false"
+	[-d]="debug"
+
+	[--docker]="flag:false"
+	[-dk]="docker"
+
+	[--love]="value:"
+	[-l]="love"
+)
+
+is_root() {
+	if [[ "$(id -u)" == "0" ]]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+is_contain() {
+	local value="$1"
+	local -n arr_ref="$2"
+
+	# shellcheck disable=SC1087
+	if [[ " ${arr_ref[*]} " =~ [[:space:]]$value[[:space:]] ]]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+get_os_name() {
+	if [[ -f "/etc/os-release" ]]; then
+		source "/etc/os-release"
+		if [[ "$NAME" == "Debian"* ]]; then
+			printf "%s" "debian"
+		fi
+	fi
+}
+
+print_help() {
+	local indent="    "
+	local col_width="18"
+	local fmt="${indent}%-${col_width}s %s\n"
+
+	printf "Usage:\n"
+	printf "${indent}%s\n" "conf [option] <command> [<args>]"
+	printf "${indent}%s\n" "conf [-v | --version]"
+	printf "${indent}%s\n" "conf [-h | --help]"
+	printf "\n"
+
+	printf "Options:\n"
+	printf "$fmt" "-d,  --debug" "Enable debug mode"
+	printf "$fmt" "-dk, --docker" "Enable Docker mode"
+	printf "\n"
+
+	printf "Commands:\n"
+	printf "$fmt" "install" "install description"
+	printf "$fmt" "adduser" "adduser description"
+	printf "$fmt" "apply" "apply description"
+	printf "$fmt" "pull" "pull description"
+	printf "\n"
+}
+
+print_version() {
+	printf "conf version 1.0\n"
+}
+
+get_err_msg() {
+	local msg="$1"
+	local with_tip="${2:-false}"
+
+	local tip=""
+	if [[ "$with_tip" == "true" ]]; then
+		tip=" See 'conf --help'."
+	fi
+	printf "conf: %s%s\n" "$msg" "$tip"
+}
+
+parse_args() {
+	local -n option_hash="$1"
+	local -n commands_arr="$2"
+	local -n err_msg="$3"
+	shift 3
+	local args=("$@")
+
+	_rm_hyphen() {
+		printf "%s" "${1#"${1%%[!-]*}"}"
 	}
 
-	local i=0
-	while :; do
-		local param_var="_PARAM_${i}"
-		[[ -z "${!param_var+x}" ]] && break
+	for hyphen_option in "${!_OPTION_MAP[@]}"; do
+		if [[ "$hyphen_option" == "--"* ]]; then
+			IFS=":" read -r _ _default_value <<<"${_OPTION_MAP[$hyphen_option]}"
+			option_hash["$(_rm_hyphen "$hyphen_option")"]="$_default_value"
+		fi
+	done
 
-		declare -n a_param="$param_var"
-		local long_name="${a_param[0]}"
-		local short_name="${a_param[1]}"
-		local type="${a_param[2]}"
-		local default_value="${a_param[3]}"
-		local key="${long_name#--}" # 1. "--my-name" -> "my-name"
-		key="${key//-/_}"           # 2. "my-name" -> "my_name"
+	local i last_i input
+	i=0
+	last_i=$(("${#args[@]}" - 1))
+	skip_index="false"
 
-		local arg_index=0
-		while ((arg_index < ${#_ARGS[@]})); do
-			local some_arg="${_ARGS[$arg_index]}"
-			if [[ "$some_arg" == "$long_name" || "$some_arg" == "$short_name" ]]; then
-				if [[ "$type" == "value" ]]; then
-					local value_index=$((arg_index + 1))
-					if ((value_index < ${#_ARGS[@]})); then
-						value="${_ARGS[$value_index]}"
-					else
-						show_missing_param_err "$long_name" "$short_name"
-					fi
-					_PARAMS["$key"]="$value"
-					_ARGS=("${_ARGS[@]:0:$arg_index}" "${_ARGS[@]:$arg_index+2}")
-				elif [[ "$type" == "flag" ]]; then
-					_PARAMS["$key"]="true"
-				fi
-				break
+	for input in "${args[@]}"; do
+		if [[ "$skip_index" == "true" ]]; then
+			skip_index="false"
+			i=$((i + 1))
+			continue
+		fi
+
+		if [[ -n "${_OPTION_MAP["$input"]+x}" ]]; then
+			local option_type restored_option=""
+			IFS=":" read -r option_type _ <<<"${_OPTION_MAP["$input"]}"
+			if [[ "$input" =~ ^-[^-] ]]; then
+				restored_option="$option_type"
+				IFS=":" read -r option_type _ <<<"${_OPTION_MAP["--$option_type"]}"
 			fi
-			arg_index=$((arg_index + 1))
-		done
 
-		if [[ -z "${_PARAMS["$key"]+x}" ]]; then
-			if [[ -n "$default_value" ]]; then
-				_PARAMS["$key"]="$default_value"
+			local insert_val
+			if [[ "$option_type" == "flag" ]]; then
+				insert_val="true"
+			elif [[ "$option_type" == "value" ]]; then
+				skip_index="true"
+				local val_i=$((i + 1))
+				if ((val_i > last_i)); then
+					err_msg="$(get_err_msg "'$input' require a value." "true")"
+					return 1
+				fi
+				insert_val="${args["$val_i"]}"
+			fi
+
+			if [[ -z "$restored_option" ]]; then
+				option_hash["$(_rm_hyphen "$input")"]="$insert_val"
 			else
-				show_missing_param_err "$long_name" "$short_name"
+				# shellcheck disable=SC2034
+				option_hash["$restored_option"]="$insert_val"
+			fi
+		else
+			if [[ "$input" == "-"* ]]; then
+				# shellcheck disable=SC2034
+				err_msg="$(get_err_msg "'$input' is not a conf option." "true")"
+				return 1
+			else
+				break
 			fi
 		fi
 		i=$((i + 1))
 	done
-
-	declare -r _IS_ARGS_PARSED="true"
+	# shellcheck disable=SC2034
+	commands_arr=("${args[@]:$i}")
+	return 0
 }
 
-get_arg() {
-	local name="$1"
-	if [[ "$_IS_ARGS_PARSED" == "false" ]]; then
-		_parse_args
-	fi
-	printf %s "${_PARAMS[$name]}"
-}
+declare -A _OPTION=()
+declare _PARSE_ERR_MSG=""
+declare -a CMDS=()
 
-HOSTNAME=$(get_arg "host")
-declare -r HOSTNAME
-INSTALL_USER=$(get_arg "username")
-declare -r INSTALL_USER
-IS_DOCKER=$(get_arg "docker")
-declare -r IS_DOCKER
-IS_DEBUG=$(get_arg "debug")
-declare -r IS_DEBUG
-CURRENT_USER="$(whoami)"
-
-declare -r CURRENT_USER
-declare -r GIT_REMOTE_BRANCH="main"
-declare -r HOST_PREFIX="${HOSTNAME^^}##"
-declare -Ar HOST_OS=(
-	["vultr"]="debian"
-	["arch"]="arch"
-	["mc"]="ubuntu"
-)
-declare -r OS="${HOST_OS["$HOSTNAME"]}"
-declare -r PASSWD_LENGTH=72
-declare -r HOME="/home/$INSTALL_USER" # Override $HOME
-declare -r TMP_DIR="/var/tmp"
-declare -r DOCKER_VOLUME_DIR="/app"
-declare -r INIT_FLAG_FILE="/etc/DOTFILES"
-
-declare -A DF_REPO
-DF_REPO["_dir"]="$HOME/.dotfiles"
-DF_REPO["linux_dir"]="${DF_REPO["_dir"]}/linux"
-DF_REPO["package_list"]="${DF_REPO["linux_dir"]}/packages.txt"
-DF_REPO["template_dir"]="${DF_REPO["linux_dir"]}/template"
-DF_REPO["hosts_dir"]="${DF_REPO["linux_dir"]}/hosts"
-DF_REPO["default_host"]="${DF_REPO["hosts_dir"]}/_default"
-DF_REPO["current_host"]="${DF_REPO["hosts_dir"]}/$HOSTNAME"
-declare -r DF_REPO
-
-declare -A DF_DATA
-DF_DATA["_dir"]="$HOME/dotfiles-data"
-DF_DATA["secret"]="${DF_DATA["_dir"]}/secret"
-DF_DATA["backups_dir"]="${DF_DATA["_dir"]}/backups"
-declare -A DF_DATA
-
-# TODO: Deprecated
-declare -Ar URL=(
-	["dotfiles_repo"]="https://github.com/ardotsis/dotfiles.git"
-	["dotfiles_install_script"]="https://raw.githubusercontent.com/ardotsis/dotfiles/refs/heads/main/install.sh"
-)
-
-declare -Ar C=(
-	["0"]="\033[0m"
-	["k"]="\033[0;30m"
-	["r"]="\033[0;31m"
-	["g"]="\033[0;32m"
-	["y"]="\033[0;33m"
-	["b"]="\033[0;34m"
-	["p"]="\033[0;35m"
-	["c"]="\033[0;36m"
-	["w"]="\033[0;37m"
-)
-
-declare -Ar LC=(
-	["debug"]="${C["w"]}"
-	["info"]="${C["g"]}"
-	["warn"]="${C["y"]}"
-	["error"]="${C["r"]}"
-	["var"]="${C["p"]}"
-	["value"]="${C["c"]}"
-	["path"]="${C["y"]}"
-	["highlight"]="${C["r"]}"
-)
-
-if [[ "$(id -u)" == "0" ]]; then
-	declare -r SUDO=""
-else
-	declare -r SUDO="sudo"
+if ! parse_args "_OPTION" "CMDS" "_PARSE_ERR_MSG" "$@"; then
+	printf "%s\n" "$_PARSE_ERR_MSG" >&2
+	exit 1
 fi
+
+declare -r IS_DEBUG="${_OPTION["debug"]}"
+declare -r IS_DOCKER="${_OPTION["docker"]}"
+declare -r SHOW_HELP="${_OPTION["help"]}"
+declare -r SHOW_VERSION="${_OPTION["version"]}"
+declare -r LOVE="${_OPTION["love"]}"
+declare -r OS="$(get_os_name)"
 
 ##################################################
 #                 Pure Functions                 #
@@ -159,7 +226,7 @@ _log() {
 	local -r ignore="_log _debug _info _warn _error _vars main"
 	for funcname in "${FUNCNAME[@]}"; do
 		i=$((i + 1))
-		[[ $ignore =~ (^|[[:space:]])$funcname($|[[:space:]]) ]] && continue
+		[[ $ignore =~ (^|[[:space:]])$funcname($|[[:space:]]) ]] && continue # TODO: use is_contain
 		lineno="${BASH_LINENO[$((i - 2))]}"
 		caller="$funcname"
 		break
@@ -167,7 +234,7 @@ _log() {
 
 	local timestamp
 	timestamp="$(date "+%Y-%m-%d %H:%M:%S")"
-	printf "[%s] [%b%s%b] [%s:%s] (%s) %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$CURRENT_USER" "$msg" >&2
+	printf "[%s] [%b%s%b] [%s:%s] %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$msg" >&2
 }
 _debug() { _log "debug" "$1"; }
 _info() { _log "info" "$1"; }
@@ -201,7 +268,6 @@ draw_line() {
 	local bar_len=$((len - ${#txt} - margin * 2))
 
 	if ((bar_len < (2 * a_bar_min))); then
-		echo "need more len"
 		return 1
 	fi
 
@@ -228,28 +294,6 @@ clr() {
 	fi
 
 	printf "%b" "${q}${clr}${msg}${C["0"]}${q}"
-}
-
-get_script_path() {
-	printf "%s" "$(readlink -f "$0")"
-}
-
-get_script_run_cmd() {
-	local script_path="$1"
-	local -n arr_ref="$2"
-
-	arr_ref=(
-		"$script_path"
-		"--host"
-		"$HOSTNAME"
-		"--username"
-		"$INSTALL_USER"
-	)
-	# TODO: Detect flag(s) automatically
-	[[ "$IS_DOCKER" == "true" ]] && arr_ref+=("--docker") || true
-	[[ "$IS_DEBUG" == "true" ]] && arr_ref+=("--debug") || true
-
-	_vars "arr_ref[@]"
 }
 
 is_cmd_exist() {
@@ -291,11 +335,21 @@ get_safe_random_str() {
 }
 
 install_package() {
-	local pkg="$1"
+	local pkg_name="$1"
 
-	_info "Installing $pkg..."
 	if [[ "$OS" == "debian" ]]; then
-		$SUDO apt-get install -y --no-install-recommends "$pkg"
+		apt-get install -y --no-install-recommends "$pkg_name"
+	fi
+}
+
+remove_package() {
+	local pkg_name="$1"
+
+	if [[ "$OS" == "debian" ]]; then
+		apt-get remove -y "$pkg_name"
+		apt-get purge -y "$pkg_name"
+		apt-get autoremove -y
+		apt-get clean
 	fi
 }
 
@@ -311,70 +365,63 @@ get_tmp_curl_file() {
 
 install_nvim() {
 	local tgz_path
+
 	tgz_path=$(get_tmp_curl_file "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz")
-	$SUDO tar -C "/opt" -xzf "$tgz_path"
-	$SUDO rm -rf "$tgz_path"
+	tar -C "/opt" -xzf "$tgz_path"
+	rm -rf "$tgz_path"
 }
 
 install_zoxide() {
-	local username="$1"
-
-	local home_dir="/home/$username"
+	local bin_dir="$1"
+	local man1_dir="$2"
 
 	local tgz_path
-	tgz_path=$(get_tmp_curl_file "https://github.com/ajeetdsouza/zoxide/releases/latest/download/zoxide-0.9.8-x86_64-unknown-linux-musl.tar.gz")
+	tgz_path=$(get_tmp_curl_file "https://github.com/ajeetdsouza/zoxide/releases/latest/download/zoxide-0.9.9-x86_64-unknown-linux-musl.tar.gz")
+
 	local tmp_dir="$TMP_DIR/zoxide"
-	$SUDO mkdir $tmp_dir
-	$SUDO tar -C "$tmp_dir" -xzf "$tgz_path"
-	$SUDO cp -R "$tmp_dir/man/man1" "$home_dir/.local/share/man"
-	$SUDO mv "$tmp_dir/zoxide" "$home_dir/.local/bin"
-	$SUDO rm -rf "$tmp_dir" "$tgz_path"
+	mkdir $tmp_dir
+	tar -C "$tmp_dir" -xzf "$tgz_path"
+	cp "$tmp_dir/man/man1/"* "$man1_dir"
+	mv "$tmp_dir/zoxide" "$bin_dir"
+	rm -rf "$tmp_dir" "$tgz_path"
 }
 
 install_starship() {
-	local username="$1"
+	local bin_dir="$1"
 
-	local home_dir="/home/$username"
 	local tgz_path
 	tgz_path=$(get_tmp_curl_file "https://github.com/starship/starship/releases/download/v1.24.2/starship-x86_64-unknown-linux-musl.tar.gz")
-	$SUDO tar -C "$TMP_DIR" -xzf "$tgz_path"
-	$SUDO mv "$TMP_DIR/starship" "$home_dir/.local/bin"
-	$SUDO rm -rf "$tgz_path"
-}
 
-remove_package() {
-	local pkg="$1"
-
-	if [[ "$OS" == "debian" ]]; then
-		$SUDO apt-get remove -y "$pkg"
-		$SUDO apt-get purge -y "$pkg"
-		$SUDO apt-get autoremove -y
-		$SUDO apt-get clean
-	fi
+	tar -C "$TMP_DIR" -xzf "$tgz_path"
+	mv "$TMP_DIR/starship" "$bin_dir"
+	rm -rf "$tgz_path"
 }
 
 build_home() {
-	$SUDO mkdir -p "$HOME"/{.cache,.config,.local,.ssh}
-	$SUDO mkdir "$HOME/.local"/{bin,share,state}
-	$SUDO mkdir "$HOME/.local/share/"{zsh,man}
-	$SUDO mkdir "$HOME/.local/share/zsh/plugins"
-	$SUDO mkdir "$HOME/.cache/zsh"
-	$SUDO mkdir -p "${DF_DATA["backups_dir"]}"
-	$SUDO chown -R "$INSTALL_USER:$INSTALL_USER" "$HOME"
-	$SUDO chmod -R 700 "$HOME"
+	local username="$1"
+	local home="/home/$username"
 
-	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "${DF_DATA["secret"]}"
+	mkdir -p "$home"/{.cache,.config,.local,.ssh}
+	mkdir "$home/.local"/{bin,share,state}
+	mkdir "$home/.cache/zsh"
+	mkdir "$home/.local/share/zsh"
+	# mkdir -p "${DF_DATA["backups_dir"]}"
+
+	chown -R "$username:$username" "$home"
+	chmod -R 700 "$home"
+	# install -m 0600 -o "$username" -g "$username" /dev/null "${DF_DATA["secret"]}"
 }
 
 add_user() {
-	local passwd="$1"
+	local username="$1"
+	local passwd="$2"
 
 	if [[ "$OS" == "debian" ]]; then
-		$SUDO useradd -s "/bin/zsh" -G "sudo" "$INSTALL_USER"
-		printf "%s:%s" "$INSTALL_USER" "$passwd" | $SUDO chpasswd
+		useradd -s "/bin/zsh" -G "sudo" "$username"
+		printf "%s:%s" "$username" "$passwd" | chpasswd
 		# Allow "sudo" command without password
-		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$INSTALL_USER" | $SUDO tee "/etc/sudoers.d/$INSTALL_USER"
-		build_home
+		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" | tee "/etc/sudoers.d/$username"
+		build_home "$username"
 	fi
 }
 
@@ -466,7 +513,7 @@ link() {
 	local target_dir="$1"
 	local host_dir="${2:-}" # Preferrer
 	local default_dir="${3:-}"
-	local is_init="${4:-true}"
+
 	_vars "target_dir" "host_dir" "default_dir"
 
 	local all_host_items=() all_default_items=()
@@ -490,10 +537,11 @@ link() {
 	local item_type prefixed_items=()
 	for item_type in "host" "union" "default"; do
 		local -n items="${item_type}_items"
+		local as_var
 		if [[ "$item_type" == "union" ]]; then
-			local as_var="as_host_item"
+			as_var="as_host_item"
 		else
-			local as_var="as_${item_type}_item"
+			as_var="as_${item_type}_item"
 		fi
 
 		local item
@@ -502,7 +550,7 @@ link() {
 			# Skip host prefixed item
 			local renamed_item="${item#"${HOST_PREFIX}"}"
 			# shellcheck disable=SC1087
-			if [[ "$item_type" == "default" && " ${prefixed_items[*]} " =~ [[:space:]]$renamed_item[[:space:]] ]]; then
+			if [[ "$item_type" == "default" ]] && is_contain "$renamed_item" "prefixed_items"; then
 				continue
 			fi
 
@@ -510,13 +558,6 @@ link() {
 			local as_host_item="${host_dir}/${item}"
 			local as_default_item="${default_dir}/${item}"
 			local actual_path="${!as_var}"
-
-			# Backup home exists item
-			if [[ -e "$as_target_item" ]]; then
-				_debug "Backup: $as_target_item"
-				backup_item "$as_target_item"
-				rm -rf "$as_target_item"
-			fi
 
 			local fixed_target_path=""
 			if [[ "$item_type" == "host" && "$item" == "$HOST_PREFIX"* ]]; then
@@ -526,8 +567,8 @@ link() {
 
 			if [[ -d "$actual_path" ]]; then
 				[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
-				_debug "Create directory: \"${LC["path"]}$as_target_item${C["0"]}\""
 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$as_target_item" -d
+				_debug "Created: \"${LC["path"]}$as_target_item${C["0"]}\""
 
 				if [[ "$item_type" == "union" ]]; then
 					link "$as_target_item" "$as_host_item" "$as_default_item" "false"
@@ -538,16 +579,11 @@ link() {
 				fi
 			elif [[ -f "$actual_path" ]]; then
 				[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
-				_info "New symlink: \"${LC["path"]}$as_target_item${C["0"]}\" -> (${item_type^^}) \"${LC["path"]}$actual_path${C["0"]}\""
-				ln -sf "$actual_path" "$as_target_item"
+				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$actual_path" "$as_target_item"
+				_debug "Created: \"${LC["path"]}$as_target_item${C["0"]}\""
 			fi
 		done
 	done
-
-	# TODO: Create mark file (to track symlink dir/file)
-	# if [[ "$is_init" == "true" ]]; then
-	# 	tracks=("${union_items}")
-	# fi
 }
 
 ##################################################
@@ -609,7 +645,7 @@ _setup_vultr() {
 	fi
 
 	_info "Start linking dotfiles"
-	link "$HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
+	link "$INSTALL_USER_HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
 
 	if is_cmd_exist ufw; then
 		_info "Uninstall UFW"
@@ -618,17 +654,9 @@ _setup_vultr() {
 	fi
 
 	_info "Start SSH setup"
-	local ssh_dir="$HOME/.ssh"
+	local ssh_dir="$INSTALL_USER_HOME/.ssh"
 	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/authorized_keys"
 	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/config"
-
-	# Zsh plugins
-	local z_plugin_dir="$HOME/.local/share/zsh/plugins"
-	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$z_plugin_dir/zsh-autosuggestions"
-	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$z_plugin_dir/zsh-syntax-highlighting"
-	git clone "https://github.com/sindresorhus/pure.git" "$z_plugin_dir/pure"
-	install_zoxide "$INSTALL_USER"
-	install_starship "$INSTALL_USER"
 
 	if [[ "$IS_DOCKER" == "false" ]]; then
 		_info "Executing Docker installation script.."
@@ -673,73 +701,148 @@ _setup_vultr() {
 		printf "  User git\n"
 		printf "  IdentityFile ~/.ssh/%s\n" "$git_filename"
 		printf "  IdentitiesOnly yes\n"
-		printf "  AddKeysToAgent yes\n"
 		printf "\n"
 	} >>"$ssh_dir/config"
 
 	rm -f "$ssh_dir/${git_filename}.pub"
 }
 
-_setup_arch() {
-	_warn "dotfiles for arch - Not implemented yet"
+check_is_root() {
+	if ! is_root; then
+		printf "%b%s%b\n" "${C[r]}" "conf: need root privilege to run this command" "${C[0]}"
+		exit 1
+	fi
 }
 
-init_user() {
+cmd_install() {
+	local username="${1:-}"
+	local profile="${2:-}"
+
+	check_is_root
+
+	if [[ -e "$REPO_INSTALL_DIR" ]]; then
+		printf "%b%s\n%s%b\n" "${C[y]}" "conf is already installed." "Use 'adduser' command to create new user." "${C[0]}"
+		exit 1
+	fi
+
+	if ! is_cmd_exist "git"; then
+		install_package "git"
+	fi
+
+	# Install conf repository
+	if [[ "$IS_DEBUG" == "true" ]]; then
+		ln -sf "$DOCKER_VOLUME_DIR" "$REPO_INSTALL_DIR"
+	else
+		git clone -b main "$REPO_URL" "$REPO_INSTALL_DIR"
+	fi
+
+	ln -sf "$REPO_INSTALL_DIR/conf.sh" "/usr/local/bin/conf"
+	chmod +x "$REPO_INSTALL_DIR/conf.sh"
+
+	# Install binaries
+	install_nvim
+
+	local data_dir="/usr/local"
+	local zsh_plugins_dir="$data_dir/share/zsh/plugins"
+
+	[[ ! -e "$zsh_plugins_dir" ]] && mkdir -p "$zsh_plugins_dir"
+	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$zsh_plugins_dir/zsh-autosuggestions"
+	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$zsh_plugins_dir/zsh-syntax-highlighting"
+	git clone "https://github.com/sindresorhus/pure.git" "$zsh_plugins_dir/pure"
+
+	local man1_dir="$data_dir/share/man/man1"
+	[[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
+	install_zoxide "$data_dir/bin" "$man1_dir"
+	install_starship "$data_dir/bin"
+
+	# Create user (optional)
+	if [[ -n "$username" ]]; then
+		cmd_adduser "$username" "$profile"
+	fi
+
+	printf "%b%s%b\n" "${C[g]}" "conf has installed." "${C[0]}"
+}
+
+cmd_adduser() {
+	local username="$1"
+	local profile="${2:-}"
+
+	check_is_root
+
+	local home="/home/$username"
+
 	# Backup home directory
-	if [[ -e "$HOME" ]]; then
-		$SUDO mv "$HOME" "$HOME.old_$(get_safe_random_str 16)"
+	if is_usr_exist "$username"; then
+		_info "Backup current home directory"
+		if [[ -e "$home" ]]; then
+			mv "$home" "$home.old_$(get_safe_random_str 16)"
+		fi
+		deluser "$username"
 	fi
 
-	if is_usr_exist "$INSTALL_USER"; then
-		$SUDO deluser "$INSTALL_USER" # WARN: Debian only!
-	fi
-
-	# Create user
 	local passwd
 	passwd="$(get_random_str $PASSWD_LENGTH)"
-	add_user "$passwd"
+	add_user "$username" "$passwd"
 
-	# Install Git
-	if ! is_cmd_exist git; then
-		install_package git
-	fi
+	# Store password into "~/.conf/secret"
+	install -m 0600 -o "$username" -g "$username" /dev/null "$home/$SECRET_FILENAME"
+	printf "Password: %s\n" "$passwd" >>"$home/$SECRET_FILENAME"
 
-	# Clone repository into "~/.dotfiles"
-	if [[ "$IS_DEBUG" == "true" ]]; then
-		$SUDO sudo -u "$INSTALL_USER" -- \
-			ln -s "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
-	else
-		$SUDO sudo -u "$INSTALL_USER" -- \
-			git clone -b $GIT_REMOTE_BRANCH "${URL["dotfiles_repo"]}" "${DF_REPO["_dir"]}"
-	fi
-
-	# Store password into "~/.dotfiles-data/secret"
-	{
-		printf "# DELETE this file, once you complete the process.\n\n"
-		printf "# Password (%s)\n%s\n\n" "$INSTALL_USER" "$passwd"
-	} | $SUDO tee -a "${DF_DATA["secret"]}" >/dev/null
+	cmd_apply "$username" "$profile"
 }
 
-if [[ -z "${BASH_SOURCE[0]+x}" ]]; then
-	### Via pipeline (curl)
+cmd_apply() {
+	local username="${1:-$CURRENT_USER}"
+	local profile="${2:-}"
 
-	if [[ -n "$SUDO" ]]; then
-		sudo -v
+	local profile_dir=""
+	if [[ -n "$profile" ]]; then
+		profile_dir="${CONF_REPO["profiles"]}/$profile"
 	fi
 
-	_info "Creating $INSTALL_USER"
-	init_user
+	HOST_PREFIX="${profile}##" INSTALL_USER="$username" link "/home/$username" "$profile_dir" "${CONF_REPO["profiles"]}/default"
+}
 
-	get_script_run_cmd "${DF_REPO["_dir"]}/install.sh" "run_cmd"
-	# shellcheck disable=SC2154
-	$SUDO sudo -u "$INSTALL_USER" -- "${run_cmd[@]}"
-else
-	# Via ~/.dotfiles/install.sh
+main_() {
+	if [[ (($# -eq 0)) || "$SHOW_HELP" == "true" ]]; then
+		print_help
+		exit 0
+	fi
 
-	"_setup_${HOSTNAME,,}"
+	if [[ "$SHOW_VERSION" == "true" ]]; then
+		print_version
+		exit 0
+	fi
 
-	if [[ "$IS_DOCKER" == "true" ]]; then
-		_info "Docker mode is enabled. Keeping docker container running..."
+	if (("${#CMDS[@]}" == 0)); then
+		printf "%s\n" "$(get_err_msg "Please specify the conf command." "true")" >&2
+		exit 1
+	fi
+
+	if [[ -n "$LOVE" ]]; then
+		printf "i love you %s.\n" "$LOVE"
+	fi
+
+	local -ar modes=(
+		"install"
+		"adduser"
+		"apply"
+		"pull"
+	)
+
+	local mode="${CMDS[0]}"
+	if ! is_contain "$mode" "modes"; then
+		printf "%s\n" "$(get_err_msg "'$mode' is not conf command." "true")" >&2
+		exit 1
+	fi
+
+	# Run command
+	"cmd_$mode" "${CMDS[@]:1}"
+
+	if [[ "$IS_DEBUG" == "true" ]]; then
+		printf "Keeping docker container running...\n"
 		tail -f /dev/null
 	fi
-fi
+}
+
+main_ "$@"

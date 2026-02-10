@@ -7,7 +7,7 @@ set "FLAG=%~2"
 @REM Docker run configurations
 set "REPO_DIR=%~dp0.."
 set "DOCKERFILE=%REPO_DIR%\tests\Dockerfile.debian"
-set "IMAGE_NAME=dotfiles-debian"
+set "IMAGE_NAME=conf"
 set "IMAGE_TAG=latest"
 set "IMAGE=%IMAGE_NAME%:%IMAGE_TAG%"
 set "CONTAINER_NAME=%IMAGE_NAME%-container"
@@ -37,15 +37,12 @@ if "%FLAG%"=="--build" (
   docker buildx history rm --all
 )
 
-echo =============== Begin Docker Session ===============
-echo.
-
 docker run ^
 --rm ^
 --interactive ^
 --tty ^
 --hostname=somehost ^
---mount type=bind,source="%REPO_DIR%",target="%DOTFILES_VOLUME_DIR%",readonly ^
+--mount type=bind,source="%REPO_DIR%",target="%DOTFILES_VOLUME_DIR%" ^
 --env INSTALL_SCRIPT_PARAMS="%INSTALL_SCRIPT_PARAMS%" ^
 --env DOTFILES_VOLUME_DIR="%DOTFILES_VOLUME_DIR%" ^
 --name "%CONTAINER_NAME%" "%IMAGE%"
