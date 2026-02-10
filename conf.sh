@@ -70,8 +70,8 @@ declare -Ar _OPTION=(
 	[--docker]="flag:false"
 	[-dk]="docker"
 
-	[--kawaii]="value:ardotsis"
-	[-k]="kawaii"
+	[--love]="value:"
+	[-l]="love"
 )
 
 get_err_msg() {
@@ -165,10 +165,11 @@ if ! parse_args "OPTION" "CMDS" "_PARSE_ERR_MSG" "$@"; then
 	exit 1
 fi
 
-declare -r SHOW_HELP="${OPTION["help"]}"
-declare -r SHOW_VERSION="${OPTION["version"]}"
 declare -r IS_DEBUG="${OPTION["debug"]}"
 declare -r IS_DOCKER="${OPTION["docker"]}"
+declare -r SHOW_HELP="${OPTION["help"]}"
+declare -r SHOW_VERSION="${OPTION["version"]}"
+declare -r LOVE="${OPTION["love"]}"
 
 declare -r CURRENT_USER="$(whoami)"
 declare -r GIT_REMOTE_BRANCH="main"
@@ -817,18 +818,13 @@ main_() {
 		exit 0
 	fi
 
-	# "_${CMDS[0]}" "${CMDS[@]:1}"
-
-	# case "$mode" in
-	# union) comm_num="-12" ;;
-	# left_only) comm_num="-23" ;;
-	# right_only) comm_num="-13" ;;
-	# *) return 1 ;;
-	# esac
-
 	if (("${#CMDS[@]}" == 0)); then
 		printf "%s\n" "$(get_err_msg "Please specify conf command." "true")" >&2
 		exit 1
+	fi
+
+	if [[ -n "$LOVE" ]]; then
+		printf "i love you %s.\n" "$LOVE"
 	fi
 
 	local mode="${CMDS[0]}"
@@ -850,11 +846,3 @@ main_() {
 }
 
 main_ "$@"
-
-# local cmd="${args[$i]}"
-# if [[ -z "${COMMAND["$cmd"]+x}" ]]; then
-# 	show_err "'$cmd' is not a conf command. See 'conf --help'."
-# fi
-# if [[ "${args[$cmd]}" == "0" ]] && ! is_root; then
-# 	show_err "conf: Require root for this command. Run 'sudo conf $1 ..'\n"
-# fi
