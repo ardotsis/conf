@@ -8,5 +8,5 @@
 ### `ardotsis@vultr`
 
 ```sh
-curl -fsSL get.ardotsis.com/conf | bash -s -- install kana
+curl -fsSL get.ardotsis.com/conf | bash -s -- install ardotsis
 ```

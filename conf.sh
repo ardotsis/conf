@@ -17,21 +17,34 @@ CONF_REPO["profiles"]="${CONF_REPO["data"]}/profiles"
 declare -r CONF_REPO
 
 declare -Ar C=(
-	[0]="\033[0m"
-	[k]="\033[0;30m"
-	[r]="\033[0;31m"
-	[g]="\033[0;32m"
-	[y]="\033[0;33m"
-	[b]="\033[0;34m"
-	[p]="\033[0;35m"
-	[c]="\033[0;36m"
-	[w]="\033[0;37m"
+	[0]="\033[0m" # Reset
+	[B]="\033[1m" # Bold
+
+	# Normal
+	[r]="\033[0;31m" # Red
+	[y]="\033[0;33m" # Orange/Yellow
+	[g]="\033[0;32m" # Green
+	[c]="\033[0;36m" # Cyan
+	[b]="\033[0;34m" # Blue
+	[p]="\033[0;35m" # Purple
+	[k]="\033[0;30m" # Black
+	[w]="\033[0;37m" # White
+
+	# Bold
+	[R]="\033[1;31m"  # Bold Red
+	[Y]="\033[1;33m"  # Bold Orange/Yellow
+	[G]="\033[1;32m"  # Bold Green
+	[C]="\033[1;36m"  # Bold Cyan
+	[B_]="\033[1;34m" # Bold Blue (L for Light/Large)
+	[P]="\033[1;35m"  # Bold Purple
+	[K]="\033[1;30m"  # Bold Black
+	[W]="\033[1;37m"  # Bold White
 )
 
 declare -Ar LC=(
 	[debug]="${C["w"]}"
 	[info]="${C["g"]}"
-	[warn]="${C["y"]}"
+	[warn]="${C["Y"]}"
 	[error]="${C["r"]}"
 	[var]="${C["p"]}"
 	[value]="${C["c"]}"
@@ -52,8 +65,11 @@ declare -Ar _OPTION_MAP=(
 	[--docker]="flag:false"
 	[-dk]="docker"
 
+	["--show-log"]="flag:false"
+	[-l]="show-log"
+
 	[--love]="value:"
-	[-l]="love"
+	[-luv]="love"
 )
 
 is_root() {
@@ -106,7 +122,6 @@ print_help() {
 	printf "$fmt" "adduser" "adduser description"
 	printf "$fmt" "apply" "apply description"
 	printf "$fmt" "pull" "pull description"
-	printf "\n"
 }
 
 print_version() {
@@ -208,6 +223,7 @@ fi
 
 declare -r IS_DEBUG="${_OPTION["debug"]}"
 declare -r IS_DOCKER="${_OPTION["docker"]}"
+declare -r SHOW_LOG="${_OPTION["show-log"]}"
 declare -r SHOW_HELP="${_OPTION["help"]}"
 declare -r SHOW_VERSION="${_OPTION["version"]}"
 declare -r LOVE="${_OPTION["love"]}"
@@ -234,7 +250,9 @@ _log() {
 
 	local timestamp
 	timestamp="$(date "+%Y-%m-%d %H:%M:%S")"
-	printf "[%s] [%b%s%b] [%s:%s] %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$msg" >&2
+	if [[ "$SHOW_LOG" == "true" ]]; then
+		printf "[%s] [%b%s%b] [%s:%s] %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$msg" >&2
+	fi
 }
 _debug() { _log "debug" "$1"; }
 _info() { _log "info" "$1"; }
@@ -760,17 +778,21 @@ cmd_install() {
 		cmd_adduser "$username" "$profile"
 	fi
 
-	printf "%b%s%b\n" "${C[g]}" "conf has installed." "${C[0]}"
+	printf "%b%s%b\n" "${C[G]}" "conf has installed." "${C[0]}"
 }
 
 cmd_adduser() {
-	local username="$1"
+	local username="${1:-}"
 	local profile="${2:-}"
 
 	check_is_root
 
-	local home="/home/$username"
+	if [[ "$username" == "root" ]]; then
+		cmd_apply "$username" "$profile"
+		return 0
+	fi
 
+	local home="/home/$username"
 	# Backup home directory
 	if is_usr_exist "$username"; then
 		_info "Backup current home directory"
@@ -800,7 +822,16 @@ cmd_apply() {
 		profile_dir="${CONF_REPO["profiles"]}/$profile"
 	fi
 
-	HOST_PREFIX="${profile}##" INSTALL_USER="$username" link "/home/$username" "$profile_dir" "${CONF_REPO["profiles"]}/default"
+	local home
+	if [[ "$username" == "root" ]]; then
+		home="/root"
+	else
+		home="/home/$username"
+	fi
+
+	HOST_PREFIX="${profile}##" INSTALL_USER="$username" link "$home" "$profile_dir" "${CONF_REPO["profiles"]}/default"
+
+	printf "${C[G]}$profile${C[W]} profile has applied.${C[0]}\n"
 }
 
 main_() {
