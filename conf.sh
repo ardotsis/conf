@@ -29,7 +29,7 @@ get_os_name() {
 	fi
 }
 
-show_help() {
+print_help() {
 	local indent="    "
 	local col_width="18"
 	local fmt="${indent}%-${col_width}s %s\n"
@@ -43,46 +43,38 @@ show_help() {
 	printf "Options:\n"
 	printf "$fmt" "-d,  --debug" "Enable debug mode"
 	printf "$fmt" "-dk, --docker" "Enable Docker mode"
-	printf "$fmt" "-u,  --username" "Set username"
-	printf "$fmt" "-p,  --profile" "Set profile"
 	printf "\n"
 
 	printf "Commands:\n"
-	printf "$fmt" "init" "init description"
-	printf "$fmt" "add" "add description"
+	printf "$fmt" "install" "install description"
+	printf "$fmt" "adduser" "adduser description"
 	printf "$fmt" "apply" "apply description"
 	printf "$fmt" "pull" "pull description"
 	printf "\n"
-
-	exit 0
 }
 
-show_version() {
+print_version() {
 	printf "conf version 1.0\n"
-	exit 0
 }
 
 declare -Ar _OPTION=(
-	[help]="flag:false"
-	[h]="_help"
+	[--help]="flag:false"
+	[-h]="help"
 
-	[version]="flag:false"
-	[v]="_version"
+	[--version]="flag:false"
+	[-v]="version"
 
-	[debug]="flag:false"
-	[d]="_debug"
+	[--debug]="flag:false"
+	[-d]="debug"
 
-	[docker]="flag:false"
-	[dk]="_docker"
+	[--docker]="flag:false"
+	[-dk]="docker"
 
-	[username]="value:ardotsis"
-	[u]="_username"
-
-	[profile]="value:"
-	[p]="_profile"
+	[--kawaii]="value:ardotsis"
+	[-k]="kawaii"
 )
 
-_get_parse_err() {
+get_err_msg() {
 	local msg="$1"
 	local with_tip="${2:-false}"
 
@@ -100,10 +92,14 @@ parse_args() {
 	shift 3
 	local args=("$@")
 
-	for option_name in "${!_OPTION[@]}"; do
-		if [[ "${_OPTION["$option_name"]}" != "_"* ]]; then
-			IFS=":" read -r _ _default_value <<<"${_OPTION[$option_name]}"
-			option_hash["$option_name"]="$_default_value"
+	_rm_hyphen() {
+		printf "%s" "${1#"${1%%[!-]*}"}"
+	}
+
+	for hyphen_option in "${!_OPTION[@]}"; do
+		if [[ "$hyphen_option" == "--"* ]]; then
+			IFS=":" read -r _ _default_value <<<"${_OPTION[$hyphen_option]}"
+			option_hash["$(_rm_hyphen "$hyphen_option")"]="$_default_value"
 		fi
 	done
 
@@ -117,47 +113,42 @@ parse_args() {
 			i=$((i + 1))
 			continue
 		fi
-		if [[ "$input" == "-"* ]]; then
-			local pure="${input#"${input%%[!-]*}"}"
-			if [[ -n "${_OPTION["$pure"]+x}" ]]; then
-				local option_type restored_option=""
-				IFS=":" read -r option_type _ <<<"${_OPTION[$pure]}"
-				if [[ "$option_type" == "_"* ]]; then
-					if [[ "$input" =~ ^-[^-] ]]; then
-						restored_option="${option_type:1}"
-						IFS=":" read -r option_type _ <<<"${_OPTION[$restored_option]}"
-					else
-						err_msg="$(_get_parse_err "Use '-$pure' instead of '$input'.")"
-						return 1
-					fi
-				elif [[ "$input" != "--"* ]]; then
-					err_msg="$(_get_parse_err "Use '--$pure' instead of '$input'.")"
+
+		if [[ -n "${_OPTION["$input"]+x}" ]]; then
+			local option_type restored_option=""
+			IFS=":" read -r option_type _ <<<"${_OPTION["$input"]}"
+			if [[ "$input" =~ ^-[^-] ]]; then
+				restored_option="$option_type"
+				IFS=":" read -r option_type _ <<<"${_OPTION["--$option_type"]}"
+			fi
+
+			local insert_val
+			if [[ "$option_type" == "flag" ]]; then
+				insert_val="true"
+			elif [[ "$option_type" == "value" ]]; then
+				skip_index="true"
+				local val_i=$((i + 1))
+				if ((val_i > last_i)); then
+					err_msg="$(get_err_msg "'$input' require a value." "true")"
 					return 1
 				fi
-				local insert_val
-				if [[ "$option_type" == "flag" ]]; then
-					insert_val="true"
-				elif [[ "$option_type" == "value" ]]; then
-					skip_index="true"
-					local val_i=$((i + 1))
-					if ((val_i > last_i)); then
-						err_msg="$(_get_parse_err "'$input' require a value." "true")"
-						return 1
-					fi
-					insert_val="${args["$val_i"]}"
-				fi
-				if [[ -n "$restored_option" ]]; then
-					option_hash["$restored_option"]="$insert_val"
-				else
-					# shellcheck disable=SC2034
-					option_hash["$pure"]="$insert_val"
-				fi
-			else
-				err_msg="$(_get_parse_err "'$input' is not a conf option." "true")"
-				return 1
+				insert_val="${args["$val_i"]}"
 			fi
+
+			if [[ -z "$restored_option" ]]; then
+				option_hash["$(_rm_hyphen "$input")"]="$insert_val"
+			else
+				# shellcheck disable=SC2034
+				option_hash["$restored_option"]="$insert_val"
+			fi
+
 		else
-			break
+			if [[ "$input" == "-"* ]]; then
+				err_msg="$(get_err_msg "'$input' is not a conf option." "true")"
+				return 1
+			else
+				break
+			fi
 		fi
 		i=$((i + 1))
 	done
@@ -165,6 +156,19 @@ parse_args() {
 	commands_arr=("${args[@]:$i}")
 	return 0
 }
+
+declare -A OPTION=()
+declare -a CMDS=()
+declare _PARSE_ERR_MSG=""
+if ! parse_args "OPTION" "CMDS" "_PARSE_ERR_MSG" "$@"; then
+	printf "%s\n" "$_PARSE_ERR_MSG" >&2
+	exit 1
+fi
+
+declare -r SHOW_HELP="${OPTION["help"]}"
+declare -r SHOW_VERSION="${OPTION["version"]}"
+declare -r IS_DEBUG="${OPTION["debug"]}"
+declare -r IS_DOCKER="${OPTION["docker"]}"
 
 declare -r CURRENT_USER="$(whoami)"
 declare -r GIT_REMOTE_BRANCH="main"
@@ -263,7 +267,6 @@ draw_line() {
 	local bar_len=$((len - ${#txt} - margin * 2))
 
 	if ((bar_len < (2 * a_bar_min))); then
-		echo "need more len"
 		return 1
 	fi
 
@@ -708,6 +711,8 @@ check_is_root() {
 _init() {
 	check_is_root
 
+	local username="${1:-}"
+
 	if [[ -e "${DF_REPO["_dir"]}" ]]; then
 		printf "%b%s\n%s%b\n" "${C[y]}" "conf is already installed." "Use 'adduser' command to create new user." "${C[0]}"
 		exit 1
@@ -744,19 +749,20 @@ _init() {
 	install_starship "$data_dir/bin"
 
 	# Create user (optional)
-	if [[ -n "$INSTALL_USER" ]]; then
-		_info "Initializing user (additional)"
-		cmd_adduser
+	if [[ -n "$username" ]]; then
+		_adduser "$username"
 	fi
 
 	printf "%b%s%b\n" "${C[g]}" "conf has installed." "${C[0]}"
 }
 
-cmd_adduser() {
+_adduser() {
+	local username="$1"
+
 	check_is_root
 
-	if [[ -z "$INSTALL_USER" ]]; then
-		echo "Please specify username using --user (-u) parameter"
+	if [[ -z "$username" ]]; then
+		# echo "Please specify username using --user (-u) parameter"
 		exit 1
 	fi
 
@@ -801,36 +807,46 @@ cmd_update() {
 }
 
 main_() {
-	local -A opt
-	local -a cmds
-	local parse_err
+	if [[ (($# -eq 0)) || "$SHOW_HELP" == "true" ]]; then
+		print_help
+		exit 0
+	fi
 
-	if ! parse_args "opt" "cmds" "parse_err" "$@"; then
-		printf "%s\n" "$parse_err" >&2
+	if [[ "$SHOW_VERSION" == "true" ]]; then
+		print_version
+		exit 0
+	fi
+
+	# "_${CMDS[0]}" "${CMDS[@]:1}"
+
+	# case "$mode" in
+	# union) comm_num="-12" ;;
+	# left_only) comm_num="-23" ;;
+	# right_only) comm_num="-13" ;;
+	# *) return 1 ;;
+	# esac
+
+	if (("${#CMDS[@]}" == 0)); then
+		printf "%s\n" "$(get_err_msg "Please specify conf command." "true")" >&2
 		exit 1
 	fi
 
-	# declare -A OPTION
-	# declare -a CMDS
-	# declare -r PROFILE="${OPTION["profile"]}"
-	# declare -r IS_DOCKER="${OPTION["docker"]}"
-	# declare -r IS_DEBUG="${OPTION["debug"]}"
-	# declare -r INSTALL_USER="${OPTION["username"]}"
+	local mode="${CMDS[0]}"
 
-	# if [[ "${OPTION["help"]}" == "true" ]]; then
-	# 	show_help
-	# fi
+	case "$mode" in
+	install)
+		echo "hello install"
+		;;
+	*)
+		printf "%s\n" "$(get_err_msg "'$mode' is not conf command." "true")" >&2
+		exit 1
+		;;
+	esac
 
-	# if [[ "${OPTION["version"]}" == "true" ]]; then
-	# 	show_version
-	# fi
-
-	# "_${CMDS[0]}"
-
-	# if [[ "$IS_DOCKER" == "true" ]]; then
-	# 	printf "Keeping docker container running...\n"
-	# 	tail -f /dev/null
-	# fi
+	if [[ "$IS_DEBUG" == "true" ]]; then
+		printf "Keeping docker container running...\n"
+		tail -f /dev/null
+	fi
 }
 
 main_ "$@"
