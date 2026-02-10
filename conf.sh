@@ -1,20 +1,20 @@
 #!/bin/bash
 set -e -u -o pipefail -C
 
-declare -r CURRENT_USER="$(whoami)"
-declare -r GIT_REMOTE_BRANCH="main"
-declare -r PASSWD_LENGTH=72
+declare -r REPO_URL="https://github.com/ardotsis/conf.git"
+declare -r REPO_INSTALL_DIR="/usr/local/share/conf"
 declare -r TMP_DIR="/var/tmp"
 declare -r DOCKER_VOLUME_DIR="/app"
-declare -r CONF_REPO_URL="https://github.com/ardotsis/conf.git"
-declare -r CONF_INSTALLER_URL="https://raw.githubusercontent.com/ardotsis/conf/refs/heads/main/install.sh"
+declare -r SECRET_FILENAME="conf-secret"
+# shellcheck disable=SC2155
+declare -r CURRENT_USER="$(whoami)"
+declare -r PASSWD_LENGTH=72
 
-declare -A CONF_DIR -A
-CONF_DIR["_base"]="/usr/local/share/conf"
-CONF_DIR["data"]="${CONF_DIR["_base"]}/data"
-CONF_DIR["etc"]="${CONF_DIR["data"]}/etc"
-CONF_DIR["profiles"]="${CONF_DIR["data"]}/profiles"
-declare -A CONF_DIR -A
+declare -A CONF_REPO
+CONF_REPO["data"]="$REPO_INSTALL_DIR/data"
+CONF_REPO["etc"]="${CONF_REPO["data"]}/etc"
+CONF_REPO["profiles"]="${CONF_REPO["data"]}/profiles"
+declare -r CONF_REPO
 
 declare -Ar C=(
 	[0]="\033[0m"
@@ -68,6 +68,7 @@ is_contain() {
 	local value="$1"
 	local -n arr_ref="$2"
 
+	# shellcheck disable=SC1087
 	if [[ " ${arr_ref[*]} " =~ [[:space:]]$value[[:space:]] ]]; then
 		return 0
 	else
@@ -145,6 +146,7 @@ parse_args() {
 	i=0
 	last_i=$(("${#args[@]}" - 1))
 	skip_index="false"
+
 	for input in "${args[@]}"; do
 		if [[ "$skip_index" == "true" ]]; then
 			skip_index="false"
@@ -179,7 +181,6 @@ parse_args() {
 				# shellcheck disable=SC2034
 				option_hash["$restored_option"]="$insert_val"
 			fi
-
 		else
 			if [[ "$input" == "-"* ]]; then
 				# shellcheck disable=SC2034
@@ -210,8 +211,6 @@ declare -r IS_DOCKER="${_OPTION["docker"]}"
 declare -r SHOW_HELP="${_OPTION["help"]}"
 declare -r SHOW_VERSION="${_OPTION["version"]}"
 declare -r LOVE="${_OPTION["love"]}"
-
-declare -r HOST_PREFIX="${HOSTNAME^^}##"
 declare -r OS="$(get_os_name)"
 
 ##################################################
@@ -406,11 +405,11 @@ build_home() {
 	mkdir "$home/.local"/{bin,share,state}
 	mkdir "$home/.cache/zsh"
 	mkdir "$home/.local/share/zsh"
-	mkdir -p "${DF_DATA["backups_dir"]}"
+	# mkdir -p "${DF_DATA["backups_dir"]}"
 
 	chown -R "$username:$username" "$home"
 	chmod -R 700 "$home"
-	install -m 0600 -o "$username" -g "$username" /dev/null "${DF_DATA["secret"]}"
+	# install -m 0600 -o "$username" -g "$username" /dev/null "${DF_DATA["secret"]}"
 }
 
 add_user() {
@@ -538,10 +537,11 @@ link() {
 	local item_type prefixed_items=()
 	for item_type in "host" "union" "default"; do
 		local -n items="${item_type}_items"
+		local as_var
 		if [[ "$item_type" == "union" ]]; then
-			local as_var="as_host_item"
+			as_var="as_host_item"
 		else
-			local as_var="as_${item_type}_item"
+			as_var="as_${item_type}_item"
 		fi
 
 		local item
@@ -550,7 +550,7 @@ link() {
 			# Skip host prefixed item
 			local renamed_item="${item#"${HOST_PREFIX}"}"
 			# shellcheck disable=SC1087
-			if [[ "$item_type" == "default" && " ${prefixed_items[*]} " =~ [[:space:]]$renamed_item[[:space:]] ]]; then
+			if [[ "$item_type" == "default" ]] && is_contain "$renamed_item" "prefixed_items"; then
 				continue
 			fi
 
@@ -720,7 +720,7 @@ cmd_install() {
 
 	check_is_root
 
-	if [[ -e "${DF_REPO["_dir"]}" ]]; then
+	if [[ -e "$REPO_INSTALL_DIR" ]]; then
 		printf "%b%s\n%s%b\n" "${C[y]}" "conf is already installed." "Use 'adduser' command to create new user." "${C[0]}"
 		exit 1
 	fi
@@ -731,13 +731,13 @@ cmd_install() {
 
 	# Install conf repository
 	if [[ "$IS_DEBUG" == "true" ]]; then
-		ln -sf "$DOCKER_VOLUME_DIR" "${DF_REPO["_dir"]}"
+		ln -sf "$DOCKER_VOLUME_DIR" "$REPO_INSTALL_DIR"
 	else
-		git clone -b "$GIT_REMOTE_BRANCH" "$CONF_INSTALLER_URL" "${DF_REPO["_dir"]}"
+		git clone -b main "$REPO_URL" "$REPO_INSTALL_DIR"
 	fi
 
-	ln -sf "${DF_REPO["_dir"]}/conf.sh" "/usr/local/bin/conf"
-	chmod +x "${DF_REPO["_dir"]}/conf.sh"
+	ln -sf "$REPO_INSTALL_DIR/conf.sh" "/usr/local/bin/conf"
+	chmod +x "$REPO_INSTALL_DIR/conf.sh"
 
 	# Install binaries
 	install_nvim
@@ -757,7 +757,7 @@ cmd_install() {
 
 	# Create user (optional)
 	if [[ -n "$username" ]]; then
-		_adduser "$username" "$profile"
+		cmd_adduser "$username" "$profile"
 	fi
 
 	printf "%b%s%b\n" "${C[g]}" "conf has installed." "${C[0]}"
@@ -767,27 +767,26 @@ cmd_adduser() {
 	local username="$1"
 	local profile="${2:-}"
 
-	local home="/home/$username"
-
 	check_is_root
+
+	local home="/home/$username"
 
 	# Backup home directory
 	if is_usr_exist "$username"; then
 		_info "Backup current home directory"
-		mv "$home" "$home.old_$(get_safe_random_str 16)"
-		rm deluser "$username" # TODO: function
+		if [[ -e "$home" ]]; then
+			mv "$home" "$home.old_$(get_safe_random_str 16)"
+		fi
+		deluser "$username"
 	fi
 
-	# Create user
 	local passwd
 	passwd="$(get_random_str $PASSWD_LENGTH)"
 	add_user "$username" "$passwd"
 
 	# Store password into "~/.conf/secret"
-	{
-		printf "# DELETE this file, once you complete the process.\n\n"
-		printf "# User password: %s\n" "$passwd"
-	} | tee -a "${DF_DATA["secret"]}" >/dev/null
+	install -m 0600 -o "$username" -g "$username" /dev/null "$home/$SECRET_FILENAME"
+	printf "Password: %s\n" "$passwd" >>"$home/$SECRET_FILENAME"
 
 	cmd_apply "$username" "$profile"
 }
@@ -796,11 +795,12 @@ cmd_apply() {
 	local username="${1:-$CURRENT_USER}"
 	local profile="${2:-}"
 
+	local profile_dir=""
 	if [[ -n "$profile" ]]; then
-		profile_dir="${DF_REPO["current_host"]}"
+		profile_dir="${CONF_REPO["profiles"]}/$profile"
 	fi
 
-	link "/home/$INSTALL_USER" "$profile_dir" "${DF_REPO["default_host"]}"
+	HOST_PREFIX="${profile}##" INSTALL_USER="$username" link "/home/$username" "$profile_dir" "${CONF_REPO["profiles"]}/default"
 }
 
 main_() {
@@ -836,7 +836,8 @@ main_() {
 		exit 1
 	fi
 
-	"cmd_$mode"
+	# Run command
+	"cmd_$mode" "${CMDS[@]:1}"
 
 	if [[ "$IS_DEBUG" == "true" ]]; then
 		printf "Keeping docker container running...\n"
