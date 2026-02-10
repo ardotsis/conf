@@ -1,6 +1,61 @@
 #!/bin/bash
 set -e -u -o pipefail -C
 
+declare -r CURRENT_USER="$(whoami)"
+declare -r GIT_REMOTE_BRANCH="main"
+declare -r PASSWD_LENGTH=72
+declare -r TMP_DIR="/var/tmp"
+declare -r DOCKER_VOLUME_DIR="/app"
+declare -r CONF_REPO_URL="https://github.com/ardotsis/conf.git"
+declare -r CONF_INSTALLER_URL="https://raw.githubusercontent.com/ardotsis/conf/refs/heads/main/install.sh"
+
+declare -A CONF_DIR -A
+CONF_DIR["_base"]="/usr/local/share/conf"
+CONF_DIR["data"]="${CONF_DIR["_base"]}/data"
+CONF_DIR["etc"]="${CONF_DIR["data"]}/etc"
+CONF_DIR["profiles"]="${CONF_DIR["data"]}/profiles"
+declare -A CONF_DIR -A
+
+declare -Ar C=(
+	[0]="\033[0m"
+	[k]="\033[0;30m"
+	[r]="\033[0;31m"
+	[g]="\033[0;32m"
+	[y]="\033[0;33m"
+	[b]="\033[0;34m"
+	[p]="\033[0;35m"
+	[c]="\033[0;36m"
+	[w]="\033[0;37m"
+)
+
+declare -Ar LC=(
+	[debug]="${C["w"]}"
+	[info]="${C["g"]}"
+	[warn]="${C["y"]}"
+	[error]="${C["r"]}"
+	[var]="${C["p"]}"
+	[value]="${C["c"]}"
+	[path]="${C["y"]}"
+	[highlight]="${C["r"]}"
+)
+
+declare -Ar _OPTION_MAP=(
+	[--help]="flag:false"
+	[-h]="help"
+
+	[--version]="flag:false"
+	[-v]="version"
+
+	[--debug]="flag:false"
+	[-d]="debug"
+
+	[--docker]="flag:false"
+	[-dk]="docker"
+
+	[--love]="value:"
+	[-l]="love"
+)
+
 is_root() {
 	if [[ "$(id -u)" == "0" ]]; then
 		return 0
@@ -57,23 +112,6 @@ print_version() {
 	printf "conf version 1.0\n"
 }
 
-declare -Ar _OPTION=(
-	[--help]="flag:false"
-	[-h]="help"
-
-	[--version]="flag:false"
-	[-v]="version"
-
-	[--debug]="flag:false"
-	[-d]="debug"
-
-	[--docker]="flag:false"
-	[-dk]="docker"
-
-	[--love]="value:"
-	[-l]="love"
-)
-
 get_err_msg() {
 	local msg="$1"
 	local with_tip="${2:-false}"
@@ -96,9 +134,9 @@ parse_args() {
 		printf "%s" "${1#"${1%%[!-]*}"}"
 	}
 
-	for hyphen_option in "${!_OPTION[@]}"; do
+	for hyphen_option in "${!_OPTION_MAP[@]}"; do
 		if [[ "$hyphen_option" == "--"* ]]; then
-			IFS=":" read -r _ _default_value <<<"${_OPTION[$hyphen_option]}"
+			IFS=":" read -r _ _default_value <<<"${_OPTION_MAP[$hyphen_option]}"
 			option_hash["$(_rm_hyphen "$hyphen_option")"]="$_default_value"
 		fi
 	done
@@ -114,12 +152,12 @@ parse_args() {
 			continue
 		fi
 
-		if [[ -n "${_OPTION["$input"]+x}" ]]; then
+		if [[ -n "${_OPTION_MAP["$input"]+x}" ]]; then
 			local option_type restored_option=""
-			IFS=":" read -r option_type _ <<<"${_OPTION["$input"]}"
+			IFS=":" read -r option_type _ <<<"${_OPTION_MAP["$input"]}"
 			if [[ "$input" =~ ^-[^-] ]]; then
 				restored_option="$option_type"
-				IFS=":" read -r option_type _ <<<"${_OPTION["--$option_type"]}"
+				IFS=":" read -r option_type _ <<<"${_OPTION_MAP["--$option_type"]}"
 			fi
 
 			local insert_val
@@ -144,6 +182,7 @@ parse_args() {
 
 		else
 			if [[ "$input" == "-"* ]]; then
+				# shellcheck disable=SC2034
 				err_msg="$(get_err_msg "'$input' is not a conf option." "true")"
 				return 1
 			else
@@ -157,62 +196,24 @@ parse_args() {
 	return 0
 }
 
-declare -A OPTION=()
-declare -a CMDS=()
+declare -A _OPTION=()
 declare _PARSE_ERR_MSG=""
-if ! parse_args "OPTION" "CMDS" "_PARSE_ERR_MSG" "$@"; then
+declare -a CMDS=()
+
+if ! parse_args "_OPTION" "CMDS" "_PARSE_ERR_MSG" "$@"; then
 	printf "%s\n" "$_PARSE_ERR_MSG" >&2
 	exit 1
 fi
 
-declare -r IS_DEBUG="${OPTION["debug"]}"
-declare -r IS_DOCKER="${OPTION["docker"]}"
-declare -r SHOW_HELP="${OPTION["help"]}"
-declare -r SHOW_VERSION="${OPTION["version"]}"
-declare -r LOVE="${OPTION["love"]}"
+declare -r IS_DEBUG="${_OPTION["debug"]}"
+declare -r IS_DOCKER="${_OPTION["docker"]}"
+declare -r SHOW_HELP="${_OPTION["help"]}"
+declare -r SHOW_VERSION="${_OPTION["version"]}"
+declare -r LOVE="${_OPTION["love"]}"
 
-declare -r CURRENT_USER="$(whoami)"
-declare -r GIT_REMOTE_BRANCH="main"
 declare -r HOST_PREFIX="${HOSTNAME^^}##"
 declare -r OS="$(get_os_name)"
-declare -r PASSWD_LENGTH=72
-declare -r TMP_DIR="/var/tmp"
-declare -r DOCKER_VOLUME_DIR="/app"
-declare -r CONF_REPO_URL="https://github.com/ardotsis/conf.git"
-declare -r CONF_INSTALLER_URL="https://raw.githubusercontent.com/ardotsis/conf/refs/heads/main/install.sh"
 
-declare -A DF_REPO
-DF_REPO["_dir"]="/usr/local/share/conf"
-DF_REPO["linux_dir"]="${DF_REPO["_dir"]}/linux"
-DF_REPO["package_list"]="${DF_REPO["linux_dir"]}/packages.txt"
-DF_REPO["template_dir"]="${DF_REPO["linux_dir"]}/template"
-DF_REPO["hosts_dir"]="${DF_REPO["linux_dir"]}/hosts"
-DF_REPO["default_host"]="${DF_REPO["hosts_dir"]}/_default"
-DF_REPO["current_host"]="${DF_REPO["hosts_dir"]}/${HOSTNAME,,}"
-declare -r DF_REPO
-
-declare -Ar C=(
-	[0]="\033[0m"
-	[k]="\033[0;30m"
-	[r]="\033[0;31m"
-	[g]="\033[0;32m"
-	[y]="\033[0;33m"
-	[b]="\033[0;34m"
-	[p]="\033[0;35m"
-	[c]="\033[0;36m"
-	[w]="\033[0;37m"
-)
-
-declare -Ar LC=(
-	[debug]="${C["w"]}"
-	[info]="${C["g"]}"
-	[warn]="${C["y"]}"
-	[error]="${C["r"]}"
-	[var]="${C["p"]}"
-	[value]="${C["c"]}"
-	[path]="${C["y"]}"
-	[highlight]="${C["r"]}"
-)
 ##################################################
 #                 Pure Functions                 #
 ##################################################
@@ -376,7 +377,7 @@ install_zoxide() {
 	local man1_dir="$2"
 
 	local tgz_path
-	tgz_path=$(get_tmp_curl_file "https://github.com/ajeetdsouza/zoxide/releases/latest/download/zoxide-0.9.8-x86_64-unknown-linux-musl.tar.gz")
+	tgz_path=$(get_tmp_curl_file "https://github.com/ajeetdsouza/zoxide/releases/latest/download/zoxide-0.9.9-x86_64-unknown-linux-musl.tar.gz")
 
 	local tmp_dir="$TMP_DIR/zoxide"
 	mkdir $tmp_dir
@@ -396,28 +397,32 @@ install_starship() {
 	mv "$TMP_DIR/starship" "$bin_dir"
 	rm -rf "$tgz_path"
 }
+
 build_home() {
-	mkdir -p "$INSTALL_USER_HOME"/{.cache,.config,.local,.ssh}
-	mkdir "$INSTALL_USER_HOME/.local"/{bin,share,state}
-	mkdir "$INSTALL_USER_HOME/.cache/zsh"
-	mkdir "$INSTALL_USER_HOME/.local/share/zsh"
+	local username="$1"
+	local home="/home/$username"
+
+	mkdir -p "$home"/{.cache,.config,.local,.ssh}
+	mkdir "$home/.local"/{bin,share,state}
+	mkdir "$home/.cache/zsh"
+	mkdir "$home/.local/share/zsh"
 	mkdir -p "${DF_DATA["backups_dir"]}"
 
-	chown -R "$INSTALL_USER:$INSTALL_USER" "$INSTALL_USER_HOME"
-	chmod -R 700 "$INSTALL_USER_HOME"
-
-	install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "${DF_DATA["secret"]}"
+	chown -R "$username:$username" "$home"
+	chmod -R 700 "$home"
+	install -m 0600 -o "$username" -g "$username" /dev/null "${DF_DATA["secret"]}"
 }
 
 add_user() {
-	local passwd="$1"
+	local username="$1"
+	local passwd="$2"
 
 	if [[ "$OS" == "debian" ]]; then
-		useradd -s "/bin/zsh" -G "sudo" "$INSTALL_USER"
-		printf "%s:%s" "$INSTALL_USER" "$passwd" | chpasswd
+		useradd -s "/bin/zsh" -G "sudo" "$username"
+		printf "%s:%s" "$username" "$passwd" | chpasswd
 		# Allow "sudo" command without password
-		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$INSTALL_USER" | tee "/etc/sudoers.d/$INSTALL_USER"
-		build_home
+		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" | tee "/etc/sudoers.d/$username"
+		build_home "$username"
 	fi
 }
 
@@ -709,10 +714,11 @@ check_is_root() {
 	fi
 }
 
-_init() {
-	check_is_root
-
+cmd_install() {
 	local username="${1:-}"
+	local profile="${2:-}"
+
+	check_is_root
 
 	if [[ -e "${DF_REPO["_dir"]}" ]]; then
 		printf "%b%s\n%s%b\n" "${C[y]}" "conf is already installed." "Use 'adduser' command to create new user." "${C[0]}"
@@ -751,33 +757,31 @@ _init() {
 
 	# Create user (optional)
 	if [[ -n "$username" ]]; then
-		_adduser "$username"
+		_adduser "$username" "$profile"
 	fi
 
 	printf "%b%s%b\n" "${C[g]}" "conf has installed." "${C[0]}"
 }
 
-_adduser() {
+cmd_adduser() {
 	local username="$1"
+	local profile="${2:-}"
+
+	local home="/home/$username"
 
 	check_is_root
 
-	if [[ -z "$username" ]]; then
-		# echo "Please specify username using --user (-u) parameter"
-		exit 1
-	fi
-
 	# Backup home directory
-	if is_usr_exist "$INSTALL_USER"; then
+	if is_usr_exist "$username"; then
 		_info "Backup current home directory"
-		mv "$INSTALL_USER_HOME" "$INSTALL_USER_HOME.old_$(get_safe_random_str 16)"
-		rm deluser "$INSTALL_USER" # WARN: Debian only!
+		mv "$home" "$home.old_$(get_safe_random_str 16)"
+		rm deluser "$username" # TODO: function
 	fi
 
 	# Create user
 	local passwd
 	passwd="$(get_random_str $PASSWD_LENGTH)"
-	add_user "$passwd"
+	add_user "$username" "$passwd"
 
 	# Store password into "~/.conf/secret"
 	{
@@ -785,26 +789,18 @@ _adduser() {
 		printf "# User password: %s\n" "$passwd"
 	} | tee -a "${DF_DATA["secret"]}" >/dev/null
 
-	cmd_apply
+	cmd_apply "$username" "$profile"
 }
 
 cmd_apply() {
-	check_is_root
+	local username="${1:-$CURRENT_USER}"
+	local profile="${2:-}"
 
-	if [[ -z "$INSTALL_USER" ]]; then
-		INSTALL_USER=$CURRENT_USER
+	if [[ -n "$profile" ]]; then
+		profile_dir="${DF_REPO["current_host"]}"
 	fi
 
-	local host_dir=""
-	if [[ -n "$HOSTNAME" ]]; then
-		host_dir="${DF_REPO["current_host"]}"
-	fi
-
-	link "/home/$INSTALL_USER" "$host_dir" "${DF_REPO["default_host"]}"
-}
-
-cmd_update() {
-	printf "%b%s%b\n" "${C[y]}" "Updating..." "${C[0]}"
+	link "/home/$INSTALL_USER" "$profile_dir" "${DF_REPO["default_host"]}"
 }
 
 main_() {
@@ -819,7 +815,7 @@ main_() {
 	fi
 
 	if (("${#CMDS[@]}" == 0)); then
-		printf "%s\n" "$(get_err_msg "Please specify conf command." "true")" >&2
+		printf "%s\n" "$(get_err_msg "Please specify the conf command." "true")" >&2
 		exit 1
 	fi
 
@@ -827,17 +823,20 @@ main_() {
 		printf "i love you %s.\n" "$LOVE"
 	fi
 
-	local mode="${CMDS[0]}"
+	local -ar modes=(
+		"install"
+		"adduser"
+		"apply"
+		"pull"
+	)
 
-	case "$mode" in
-	install)
-		echo "hello install"
-		;;
-	*)
+	local mode="${CMDS[0]}"
+	if ! is_contain "$mode" "modes"; then
 		printf "%s\n" "$(get_err_msg "'$mode' is not conf command." "true")" >&2
 		exit 1
-		;;
-	esac
+	fi
+
+	"cmd_$mode"
 
 	if [[ "$IS_DEBUG" == "true" ]]; then
 		printf "Keeping docker container running...\n"
