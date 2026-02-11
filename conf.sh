@@ -766,7 +766,7 @@ cmd_adduser() {
 	add_user "$username" "$passwd"
 
 	# Store password into "~/.conf/secret"
-	install -m 0600 -o "$username" -g "$username" /dev/null "$home/$SECRET_FILENAME"
+	install -m 0400 -o "$username" -g "$username" /dev/null "$home/$SECRET_FILENAME"
 	printf "Password: %s\n" "$passwd" >>"$home/$SECRET_FILENAME"
 
 	if [[ "$INTERNAL" == "false" ]]; then
