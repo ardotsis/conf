@@ -1,22 +1,24 @@
 @echo off
 
 @REM Batch arguments
-set "INSTALL_SCRIPT_PARAMS=%~1"
+set "OS=%~1"
 set "FLAG=%~2"
+set "INSTALL_SCRIPT_PARAMS=%~3"
 
 @REM Docker run configurations
 set "REPO_DIR=%~dp0.."
-set "DOCKERFILE=%REPO_DIR%\tests\Dockerfile.debian"
-set "IMAGE_NAME=conf"
+set "DOCKERFILE=%REPO_DIR%\dockerfiles\%OS%"
+set "DOTFILES_VOLUME_DIR=/app"
+
+set "IMAGE_NAME=conf-%OS%"
 set "IMAGE_TAG=latest"
 set "IMAGE=%IMAGE_NAME%:%IMAGE_TAG%"
 set "CONTAINER_NAME=%IMAGE_NAME%-container"
-set "DOTFILES_VOLUME_DIR=/app"
 
 @REM Docker configurations
 set "DOCKER_CLI_HINTS=false"
 
-if "%FLAG%"=="--cleanup" (
+if "%FLAG%"=="cleanup" (
   echo Cleaning up running containers created from '%IMAGE%'...
   for /f "tokens=*" %%i in ('docker ps -aq --filter "ancestor=%IMAGE%"') do (
     docker rm -f %%i
@@ -26,7 +28,7 @@ if "%FLAG%"=="--cleanup" (
   )
 )
 
-if "%FLAG%"=="--build" (
+if "%FLAG%"=="build" (
   docker build --no-cache -f "%DOCKERFILE%" -t "%IMAGE%" "%REPO_DIR%"
 
   echo Cleaning up dangling images...

@@ -1,0 +1,15 @@
+FROM ubuntu:jammy
+
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y \
+    openssh-server \
+    ca-certificates \
+    sudo \
+    curl \
+    git \
+    man \
+    zsh
+
+# Simulate run script via pipeline (curl)
+CMD ["bash", "-c", "cat $DOTFILES_VOLUME_DIR/conf.sh | bash -s -- $INSTALL_SCRIPT_PARAMS"]

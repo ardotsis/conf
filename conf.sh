@@ -434,13 +434,13 @@ add_user() {
 	local username="$1"
 	local passwd="$2"
 
-	if [[ "$OS" == "debian" ]]; then
-		useradd -s "/bin/zsh" -G "sudo" "$username"
-		printf "%s:%s" "$username" "$passwd" | chpasswd
-		# Allow "sudo" command without password
-		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" >>"/etc/sudoers.d/$username"
-		build_home "$username"
-	fi
+	# if [[ "$OS" == "debian" ]]; then
+	useradd -s "/bin/zsh" -G "sudo" "$username"
+	printf "%s:%s" "$username" "$passwd" | chpasswd
+	# Allow "sudo" command without password
+	printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" >>"/etc/sudoers.d/$username"
+	build_home "$username"
+	# fi
 }
 
 backup_item() {
