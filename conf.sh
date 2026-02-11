@@ -32,7 +32,7 @@ declare -Ar C=(
 
 	# Bold
 	[R]="\033[1;31m"  # Bold Red
-	[Y]="\033[1;33m"  # Bold Orange/Yellow
+	[Y]="\033[1;33m"  # Bold Yellow
 	[G]="\033[1;32m"  # Bold Green
 	[C]="\033[1;36m"  # Bold Cyan
 	[B_]="\033[1;34m" # Bold Blue (L for Light/Large)
@@ -84,8 +84,7 @@ is_contain() {
 	local value="$1"
 	local -n arr_ref="$2"
 
-	# shellcheck disable=SC1087
-	if [[ " ${arr_ref[*]} " =~ [[:space:]]$value[[:space:]] ]]; then
+	if [[ " ${arr_ref[*]} " =~ [[:space:]]"$value"[[:space:]] ]]; then
 		return 0
 	else
 		return 1
@@ -212,6 +211,7 @@ parse_args() {
 	return 0
 }
 
+# Argument parser
 declare -A _OPTION=()
 declare _PARSE_ERR_MSG=""
 declare -a CMDS=()
@@ -438,7 +438,7 @@ add_user() {
 		useradd -s "/bin/zsh" -G "sudo" "$username"
 		printf "%s:%s" "$username" "$passwd" | chpasswd
 		# Allow "sudo" command without password
-		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" | tee "/etc/sudoers.d/$username"
+		printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" >>"/etc/sudoers.d/$username"
 		build_home "$username"
 	fi
 }
@@ -453,47 +453,7 @@ backup_item() {
 	dst="${DF_DATA["backups_dir"]}/${basename}.${timestamp}.tgz"
 
 	_info "Create backup: $(clr "$dst" "${LC["path"]}" "true")"
-	$SUDO tar czvf "$dst" -C "$parent_dir" "$basename"
-}
-
-install_template() {
-	local template_uri="${1:-/dev/null}"
-	local dst_path="$2"
-
-	read -r -a perm <<<"${TEMPLATE[$dst_path]}"
-	local type="${perm[0]}"
-	local group="${perm[1]}"
-	local user="${perm[2]}"
-	local num="${perm[3]}"
-
-	local install_cmd=("install" "-m" "$num" "-o" "$user" "-g" "$group")
-	if [[ -n "$SUDO" ]]; then
-		install_cmd=("$SUDO" "${install_cmd[@]}")
-	fi
-
-	if [[ -e "$dst_path" ]]; then
-		backup_item "$dst_path"
-		$SUDO rm -rf "$dst_path"
-	fi
-
-	local tmp_path=""
-	if [[ "$template_uri" == "https://"* ]]; then
-		tmp_path="$(get_tmp_curl_file "$template_uri")"
-		install_cmd=("${install_cmd[@]}" "$tmp_path" "$dst_path")
-	else
-		if [[ "$type" == "f" ]]; then
-			install_cmd=("${install_cmd[@]}" "$template_uri" "$dst_path")
-		elif [[ "$type" == "d" ]]; then
-			install_cmd=("${install_cmd[@]}" "$dst_path" "-d")
-		fi
-	fi
-
-	_info "Create item: \"${LC["path"]}$dst_path${C["0"]}\" (template=\"${LC["path"]}$template_uri${C["0"]}\" owner=$user, group=$group, mode=$num)"
-	"${install_cmd[@]}"
-
-	if [[ -n "$tmp_path" ]]; then
-		rm -f "$tmp_path"
-	fi
+	tar czvf "$dst" -C "$parent_dir" "$basename"
 }
 
 get_items() {
@@ -639,8 +599,6 @@ setup_network() {
 }
 
 _setup_vultr() {
-	### TODO: REMOVE UNNECCESSARY "$SUDO" CUZ IT"S USER's OP
-
 	_info "Start package installation"
 	while read -r pkg; do
 		if ! is_cmd_exist "$pkg"; then
@@ -727,7 +685,7 @@ _setup_vultr() {
 
 check_is_root() {
 	if ! is_root; then
-		printf "%b%s%b\n" "${C[r]}" "conf: need root privilege to run this command" "${C[0]}"
+		printf "%b%s%b\n" "${C[R]}" "$(get_err_msg "Root access required for this operation.")" "${C[0]}"
 		exit 1
 	fi
 }
@@ -773,12 +731,13 @@ cmd_install() {
 	install_zoxide "$data_dir/bin" "$man1_dir"
 	install_starship "$data_dir/bin"
 
-	# Create user (optional)
-	if [[ -n "$username" ]]; then
-		cmd_adduser "$username" "$profile"
+	if [[ "$INTERNAL" == "false" ]]; then
+		printf "%b%s%b\n" "${C[G]}" "conf has installed." "${C[0]}"
 	fi
 
-	printf "%b%s%b\n" "${C[G]}" "conf has installed." "${C[0]}"
+	if [[ -n "$username" ]]; then
+		INTERNAL="true" cmd_adduser "$username" "$profile"
+	fi
 }
 
 cmd_adduser() {
@@ -810,7 +769,11 @@ cmd_adduser() {
 	install -m 0600 -o "$username" -g "$username" /dev/null "$home/$SECRET_FILENAME"
 	printf "Password: %s\n" "$passwd" >>"$home/$SECRET_FILENAME"
 
-	cmd_apply "$username" "$profile"
+	if [[ "$INTERNAL" == "false" ]]; then
+		printf "%bAdded '%s' successfully.%b\n" "${C[G]}" "$username" "${C[0]}"
+	fi
+
+	INTERNAL="true" cmd_apply "$username" "$profile"
 }
 
 cmd_apply() {
@@ -831,7 +794,13 @@ cmd_apply() {
 
 	HOST_PREFIX="${profile}##" INSTALL_USER="$username" link "$home" "$profile_dir" "${CONF_REPO["profiles"]}/default"
 
-	printf "${C[G]}$profile${C[W]} profile has applied.${C[0]}\n"
+	if [[ -z "$profile" ]]; then
+		profile="default"
+	fi
+
+	if [[ "$INTERNAL" == "false" ]]; then
+		printf "%bApplied '%s' profile.%b\n" "${C[G]}" "$profile" "${C[0]}"
+	fi
 }
 
 main_() {
@@ -868,9 +837,9 @@ main_() {
 	fi
 
 	# Run command
-	"cmd_$mode" "${CMDS[@]:1}"
+	INTERNAL="false" "cmd_$mode" "${CMDS[@]:1}"
 
-	if [[ "$IS_DEBUG" == "true" ]]; then
+	if [[ "$IS_DOCKER" == "true" ]]; then
 		printf "Keeping docker container running...\n"
 		tail -f /dev/null
 	fi
