@@ -2,7 +2,7 @@
 <p align="center">
   <img src="docs/BD09068F832247CD9DD5ED2273F76F7CEBCB441A92CED8A076E213D7A4202EF0.webp" alt="girl" width="400">
   <br>
-  <em>everything, ar.sis</em>
+  <em>everything about ar.sis</em>
 </p>
 
 ## Install
