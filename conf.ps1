@@ -12,7 +12,7 @@ $SymlinkDirPairs = @(
     # PowerShell
     @("${Env:USERPROFILE}\Documents\PowerShell", "$ConfRepoDir\win\config\PowerShell"),
     # NeoVim
-    @("${Env:LOCALAPPDATA}\nvim", "$ConfRepoDir\data\profiles\default\.config\nvim")
+    @("${Env:USERPROFILE}\.config\nvim", "$ConfRepoDir\data\profiles\default\.config\nvim")
 
     # CAUTION: Do NOT forget to add a "comma (,)" for each array.
 )
@@ -58,6 +58,8 @@ function main() {
         exit 0
     }
 
+    # Set-XdgEnvVars
+
     foreach ($dirPair in $SymlinkDirPairs) {
         $winDir, $repoDir = $dirPair
 
@@ -67,8 +69,6 @@ function main() {
 
         Set-Symlink -WinDir $winDir -RepoDir $repoDir
     }
-
-    Pause
 }
 
 main

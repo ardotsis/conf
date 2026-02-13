@@ -1,16 +1,7 @@
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+
 # Aliases
 Set-Alias -Name nv -Value nvim -Force
-
-
-
-
-
-
-
-
-
-
-
 
 
 # =============================== Old config ===============================

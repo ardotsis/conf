@@ -19,9 +19,6 @@
   "[markdown]": {
     "editor.defaultFormatter": "DavidAnson.vscode-markdownlint"
   },
-  "[powershell]": {
-    "files.autoSave": "afterDelay"
-  },
   "[shellscript]": {
     "editor.defaultFormatter": "mkhl.shfmt"
   },
@@ -36,7 +33,7 @@
   "cSpell.words": [
     "ar.sis",
     "ardotsis",
-    "dotkana",
+    "kana",
     "menhera",
     "menhera.art",
     "kawaii",
@@ -107,7 +104,7 @@
   },
   "vscode-neovim.neovimExecutablePaths.win32": "C:\\Program Files\\Neovim\\bin\\nvim.exe",
   "vscode-neovim.neovimInitVimPaths.linux": "~/.config/nvim/init.lua",
-  "vscode-neovim.neovimInitVimPaths.win32": "~\\AppData\\Local\\nvim\\init.lua",
+  "vscode-neovim.neovimInitVimPaths.win32": "~\\.config\\nvim\\init.lua",
   "window.commandCenter": false,
   "window.menuBarVisibility": "compact",
   "window.restoreFullscreen": true,
