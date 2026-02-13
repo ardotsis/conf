@@ -100,6 +100,7 @@ function main() {
     if ($Build) {
         Write-Output "--------- Docker Session ---------"
     }
+
     $runArgs = @(
         "--rm",
         "--interactive",
