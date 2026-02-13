@@ -12,3 +12,19 @@
 ```sh
 curl -fsSL get.ardotsis.com/conf | bash -s -- install ardotsis
 ```
+
+## Test
+
+### Windows
+
+Build
+
+```powershell
+.\scripts\run_test.ps1 -Os debian -Params @("-d", "-dk", "-l", "-luv", "haruka", "install", "kana", "vultr") -Verbose
+```
+
+Enter container
+
+```powershell
+.\scripts\enter_docker.ps1 -Os debian -Username kana
+```
