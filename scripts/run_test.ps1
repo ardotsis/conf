@@ -97,7 +97,9 @@ function main() {
         }
     }
 
-    Write-Output "--------- Docker Session ---------"
+    if ($Build) {
+        Write-Output "--------- Docker Session ---------"
+    }
     $runArgs = @(
         "--rm",
         "--interactive",
