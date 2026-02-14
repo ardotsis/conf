@@ -1,3 +1,7 @@
+# !!! Temporary patch script
+# !!! Temporary patch script
+# !!! Temporary patch script
+
 [CmdletBinding()]
 param()
 
@@ -8,11 +12,11 @@ $SymlinkDirPairs = @(
     # FORMAT : [Windows directory],  [Dotfiles directory]
 
     # VSCode
-    @("${Env:APPDATA}\Code\User", "$ConfRepoDir\data\profiles\default\.config\Code\User"),
+    @("${Env:APPDATA}\Code\User", "$ConfRepoDir\profiles\default\home\default\.config\Code\User"),
     # PowerShell
-    @("${Env:USERPROFILE}\Documents\PowerShell", "$ConfRepoDir\win\config\PowerShell"),
+    @("${Env:USERPROFILE}\Documents\PowerShell", "$ConfRepoDir\profiles\windows\home\windows\.config\powershell"),
     # NeoVim
-    @("${Env:USERPROFILE}\.config\nvim", "$ConfRepoDir\data\profiles\default\.config\nvim")
+    @("${Env:USERPROFILE}\.config\nvim", "$ConfRepoDir\profiles\default\home\default\.config\nvim")
 
     # CAUTION: Do NOT forget to add a "comma (,)" for each array.
 )

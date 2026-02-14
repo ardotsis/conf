@@ -83,7 +83,7 @@ function main() {
         Write-Verbose "Delete old containers"
         Remove-Objects `
             -type "cont" `
-            -ids (Get-ObjectIds -type "cont" -filter "ancestor=$ContainerName") | Out-Null
+            -ids (Get-ObjectIds -type "cont" -filter "ancestor=$ImageName") | Out-Null
 
         Write-Verbose "Delete none images"
         Remove-Objects `
@@ -103,7 +103,14 @@ function main() {
             & $Docker build --no-cache --file "$Dockerfile" --tag "${ImageName}:${ImageTag}" "$RepoDir"
         }
     }
+    else {
+        Write-Verbose "Delete old containers"
+        Remove-Objects `
+            -type "cont" `
+            -ids (Get-ObjectIds -type "cont" -filter "ancestor=$ImageName") | Out-Null
+    }
 
+    Write-Verbose "Running..."
     if ($Build) {
         Write-Output "--------- Docker Session ---------"
     }
@@ -122,6 +129,5 @@ function main() {
 
     & $Docker run @runArgs
 }
-
 
 main

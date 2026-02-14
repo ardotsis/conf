@@ -1,22 +1,19 @@
 #!/bin/bash
 set -e -u -o pipefail -C
 
-declare -r REPO_URL="https://github.com/ardotsis/conf.git"
-declare -r REPO_INSTALL_DIR="/usr/local/share/conf"
+# System
 declare -r TMP_DIR="/var/tmp"
 declare -r DOCKER_VOLUME_DIR="/app"
-declare -r SECRET_FILENAME="CONF-SECRET"
 # shellcheck disable=SC2155
 declare -r CURRENT_USER="$(whoami)"
+# Repository
+declare -r REPO_URL="https://github.com/ardotsis/conf.git"
+declare -r REPO_INSTALL_DIR="/usr/local/share/conf"
+declare -r REPO_PROFILES_DIR="$REPO_INSTALL_DIR/profiles"
+declare -r REPO_PACKAGES_FILE="$REPO_PROFILES_DIR/packages"
+# User
+declare -r SECRET_FILENAME="CONF-SECRET"
 declare -r PASSWD_LENGTH=72
-
-declare -A CONF_REPO
-CONF_REPO["data"]="$REPO_INSTALL_DIR/data"
-CONF_REPO["etc"]="${CONF_REPO["data"]}/etc"
-CONF_REPO["profiles"]="${CONF_REPO["data"]}/profiles"
-declare -r CONF_REPO
-
-declare -r CONF_PACKAGES_FILE="${CONF_REPO["data"]}/packages"
 
 declare -Ar C=(
 	[0]="\033[0m" # Reset
@@ -73,6 +70,20 @@ declare -Ar _OPTION_MAP=(
 	[--love]="value:"
 	[-luv]="love"
 )
+
+get_profile_dir() {
+	local profile="$1"
+	printf "%s/%s" "$REPO_PROFILES_DIR" "$profile"
+}
+
+get_home_profile_dir() {
+	local profile="$1"
+
+	local profile_dir
+	profile_dir="$(get_profile_dir "$profile")"
+
+	printf "%s/home/%s" "$profile_dir" "$profile"
+}
 
 is_root() {
 	if [[ "$(id -u)" == "0" ]]; then
@@ -719,7 +730,7 @@ cmd_install() {
 		if ! is_cmd_exist "$pkg_name"; then
 			install_package "$pkg_name"
 		fi
-	done <"$CONF_PACKAGES_FILE"
+	done <"$REPO_PACKAGES_FILE"
 
 	ln -sf "$REPO_INSTALL_DIR/conf.sh" "/usr/local/bin/conf"
 	chmod +x "$REPO_INSTALL_DIR/conf.sh"
@@ -739,6 +750,8 @@ cmd_install() {
 	[[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
 	install_zoxide "$data_dir/bin" "$man1_dir"
 	install_starship "$data_dir/bin"
+
+	# Install etc
 
 	if [[ "$INTERNAL" == "false" ]]; then
 		printf "%b%s%b\n" "${C[G]}" "conf has installed." "${C[0]}"
@@ -786,12 +799,24 @@ cmd_adduser() {
 }
 
 cmd_apply() {
-	local username="${1:-$CURRENT_USER}"
-	local profile="${2:-}"
+	case "$INTERNAL" in
+	# Via user
+	false)
+		local username="$CURRENT_USER"
+		local profile="$1"
+		;;
+	# Via function
+	true)
+		local username="$1"
+		local profile="$2"
+		;;
+	esac
+
+	_vars "username" "profile"
 
 	local profile_dir=""
 	if [[ -n "$profile" ]]; then
-		profile_dir="${CONF_REPO["profiles"]}/$profile"
+		profile_dir="$(get_home_profile_dir "$profile")"
 	fi
 
 	local home
@@ -801,7 +826,7 @@ cmd_apply() {
 		home="/home/$username"
 	fi
 
-	HOST_PREFIX="${profile}##" INSTALL_USER="$username" link "$home" "$profile_dir" "${CONF_REPO["profiles"]}/default"
+	HOST_PREFIX="${profile}##" INSTALL_USER="$username" link "$home" "$profile_dir" "$(get_home_profile_dir "default")"
 
 	if [[ -z "$profile" ]]; then
 		profile="default"
