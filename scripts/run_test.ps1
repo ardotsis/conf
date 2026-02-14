@@ -62,6 +62,13 @@ function Get-ObjectIds {
 }
 
 function main() {
+    if (-not (& $Docker ps)) {
+        Write-Verbose "Launching Docker engine..."
+        while (-not (& $Docker ps)) {
+            Start-Sleep -Seconds 2
+        }
+    }
+
     if (-not (Test-Path -Path $Dockerfile)) {
         throw "Unknown OS or Dockerfile does't exit. ($Dockerfile)"
     }
@@ -115,5 +122,6 @@ function main() {
 
     & $Docker run @runArgs
 }
+
 
 main

@@ -16,6 +16,8 @@ CONF_REPO["etc"]="${CONF_REPO["data"]}/etc"
 CONF_REPO["profiles"]="${CONF_REPO["data"]}/profiles"
 declare -r CONF_REPO
 
+declare -r CONF_PACKAGES_FILE="${CONF_REPO["data"]}/packages"
+
 declare -Ar C=(
 	[0]="\033[0m" # Reset
 	[B]="\033[1m" # Bold
@@ -712,6 +714,13 @@ cmd_install() {
 		git clone -b main "$REPO_URL" "$REPO_INSTALL_DIR"
 	fi
 
+	local pkg_name
+	while read -r pkg_name; do
+		if ! is_cmd_exist "$pkg_name"; then
+			install_package "$pkg_name"
+		fi
+	done <"$CONF_PACKAGES_FILE"
+
 	ln -sf "$REPO_INSTALL_DIR/conf.sh" "/usr/local/bin/conf"
 	chmod +x "$REPO_INSTALL_DIR/conf.sh"
 
@@ -804,6 +813,8 @@ cmd_apply() {
 }
 
 main_() {
+	_vars "BASH_VERSION"
+
 	if [[ (($# -eq 0)) || "$SHOW_HELP" == "true" ]]; then
 		print_help
 		exit 0
@@ -823,6 +834,7 @@ main_() {
 		printf "i love you %s.\n" "$LOVE"
 	fi
 
+	# shellcheck disable=SC2034
 	local -ar modes=(
 		"install"
 		"adduser"
