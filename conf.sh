@@ -556,25 +556,33 @@ link() {
 				prefixed_items+=("${renamed_item}")
 			fi
 
+			[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
 			if [[ -d "$actual_path" ]]; then
-				[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$as_target_item" -d
 				_debug "Created: \"${LC["path"]}$as_target_item${C["0"]}\""
 
 				if [[ "$item_type" == "union" ]]; then
-					link "$as_target_item" "$as_host_item" "$as_default_item" "false"
+					INIT="false" link "$as_target_item" "$as_host_item" "$as_default_item" "false"
 				elif [[ "$item_type" == "host" ]]; then
-					link "$as_target_item" "$as_host_item" "false"
+					INIT="false" link "$as_target_item" "$as_host_item" "" "false"
 				elif [[ "$item_type" == "default" ]]; then
-					link "$as_target_item" "" "$as_default_item" "false"
+					INIT="false" link "$as_target_item" "" "$as_default_item" "false"
 				fi
 			elif [[ -f "$actual_path" ]]; then
-				[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$actual_path" "$as_target_item"
 				_debug "Created: \"${LC["path"]}$as_target_item${C["0"]}\""
 			fi
+
+			if [[ "$INIT" == "true" ]]; then
+				echo "!!!!!!!!!!!!!! $as_target_item"
+			fi
 		done
 	done
+}
+
+pull() {
+
+	echo ''
 }
 
 ##################################################
@@ -634,7 +642,7 @@ _setup_vultr() {
 	fi
 
 	_info "Start linking dotfiles"
-	link "$INSTALL_USER_HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
+	INIT="true" link "$INSTALL_USER_HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
 
 	if is_cmd_exist ufw; then
 		_info "Uninstall UFW"
@@ -826,7 +834,8 @@ cmd_apply() {
 		home="/home/$username"
 	fi
 
-	HOST_PREFIX="${profile}##" INSTALL_USER="$username" link "$home" "$profile_dir" "$(get_home_profile_dir "default")"
+	INIT="true" HOST_PREFIX="${profile}##" INSTALL_USER="$username" \
+		link "$home" "$profile_dir" "$(get_home_profile_dir "default")"
 
 	if [[ -z "$profile" ]]; then
 		profile="default"
