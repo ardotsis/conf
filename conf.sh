@@ -507,13 +507,11 @@ link() {
 	local host_dir="${2:-}" # Preferrer
 	local default_dir="${3:-}"
 
-	_vars "target_dir" "host_dir" "default_dir"
-
-	if [[ -z "${TRACK+x}" ]]; then
-		local -r TRACK="$REPO_TRACKS_DIR/$(id -u "$INSTALL_USER")"
-		_debug "Create track file: $TRACK"
-		install -m 0644 /dev/null "$TRACK"
+	if [[ -z "${target_dir_len+x}" ]]; then
+		local target_dir_len="${#target_dir}"
 	fi
+
+	_vars "target_dir" "host_dir" "default_dir"
 
 	local all_host_items=() all_default_items=()
 	[[ -z "$host_dir" ]] || get_items "$host_dir" "all_host_items"
@@ -557,24 +555,38 @@ link() {
 			local as_default_item="${default_dir}/${item}"
 			local actual_path="${!as_var}"
 
+			local is_prefixed="false"
 			if [[ "$item_type" == "host" && "$item" == "$HOST_PREFIX"* ]]; then
+				local is_prefixed="true"
 				as_target_item="${target_dir}/${renamed_item}"
 				prefixed_items+=("${renamed_item}")
 			fi
 
+			local write_path="${as_target_item:$target_dir_len+1}"
+
 			_debug "Create: \"${LC["path"]}$as_target_item${C["0"]}\""
 			if [[ -d "$actual_path" ]]; then
-				printf "%s\0\0" "$actual_path" >>"$TRACK"
+				if [[ "$is_prefixed" == "true" ]]; then
+					printf "\001%s\0\0" "$write_path" >>"$TRACK"
+				else
+					printf "%s\0\0" "$write_path" >>"$TRACK"
+				fi
 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$as_target_item" -d
 				if [[ "$item_type" == "union" ]]; then
-					link "$as_target_item" "$as_host_item" "$as_default_item" "false"
+					link "$as_target_item" "$as_host_item" "$as_default_item"
 				elif [[ "$item_type" == "host" ]]; then
-					link "$as_target_item" "$as_host_item" "" "false"
+					link "$as_target_item" "$as_host_item" ""
 				elif [[ "$item_type" == "default" ]]; then
-					link "$as_target_item" "" "$as_default_item" "false"
+					link "$as_target_item" "" "$as_default_item"
 				fi
 			elif [[ -f "$actual_path" ]]; then
-				printf "%s\0%s\0" "$actual_path" "$(sha256sum "$actual_path" | cut -d ' ' -f1)" >>"$TRACK"
+				local sum
+				sum="$(sha256sum "$actual_path" | cut -d ' ' -f1)"
+				if [[ "$is_prefixed" == "true" ]]; then
+					printf "\001%s\0%s\0" "$write_path" "$sum" >>"$TRACK"
+				else
+					printf "%s\0%s\0" "$write_path" "$sum" >>"$TRACK"
+				fi
 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$actual_path" "$as_target_item"
 			fi
 		done
@@ -718,7 +730,14 @@ cmd_apply() {
 		home="/home/$username"
 	fi
 
-	HOST_PREFIX="${profile}##" INSTALL_USER="$username" \
+	local track_file
+	track_file="$REPO_TRACKS_DIR/$(id -u "$username")"
+	install -m 0644 /dev/null "$track_file"
+	# track header
+
+	printf "%s\0%s\0" "$profile" "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" >>"$track_file"
+
+	TRACK="$track_file" HOST_PREFIX="${profile}##" INSTALL_USER="$username" \
 		link "$home" "$profile_dir" "$(get_home_profile_dir "default")"
 
 	if [[ -z "$profile" ]]; then
@@ -776,7 +795,3 @@ main_() {
 }
 
 main_ "$@"
-
-push() {
-	local F pF D pD
-}
