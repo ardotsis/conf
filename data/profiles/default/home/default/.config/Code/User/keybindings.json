@@ -149,4 +149,14 @@
     "key": "ctrl+shift+c",
     "when": "!terminalFocus"
   },
+  // ======== conf ========
+  {
+    "args": {
+      "text": ".\\scripts\\run_test.ps1 -Os debian -Params @(\"-d\", \"-dk\", \"-l\", \"-luv\", \"kana\", \"install\", \"kana\", \"uwu\")\n"
+    },
+    "command": "workbench.action.terminal.sendSequence",
+    "key": "ctrl+shift+r",
+    "when": "config.workspaceKeybindings.myAwesomeTask.enabled"
+  },
+  // ======== conf ========
 ]

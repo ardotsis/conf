@@ -1,5 +1,6 @@
 {
     "editor.codeActionsOnSave": {
         "source.sort.json": "always"
-    }
+    },
+    "workspaceKeybindings.myAwesomeTask.enabled": true
 }

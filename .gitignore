@@ -1,5 +1,8 @@
 # User data
-.env
+data/tracks/
+
+# Dev
+test.sh
 
 # VSCode
 .history/

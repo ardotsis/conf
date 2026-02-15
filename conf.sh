@@ -9,10 +9,12 @@ declare -r CURRENT_USER="$(whoami)"
 # Repository
 declare -r REPO_URL="https://github.com/ardotsis/conf.git"
 declare -r REPO_INSTALL_DIR="/usr/local/share/conf"
-declare -r REPO_PROFILES_DIR="$REPO_INSTALL_DIR/profiles"
+declare -r REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
+declare -r REPO_TRACKS_DIR="$REPO_DATA_DIR/tracks"
+declare -r REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
 declare -r REPO_PACKAGES_FILE="$REPO_PROFILES_DIR/packages"
 # User
-declare -r SECRET_FILENAME="CONF-SECRET"
+declare -r SECRET_FILENAME="conf_installation"
 declare -r PASSWD_LENGTH=72
 
 declare -Ar C=(
@@ -507,6 +509,12 @@ link() {
 
 	_vars "target_dir" "host_dir" "default_dir"
 
+	if [[ -z "${TRACK+x}" ]]; then
+		local -r TRACK="$REPO_TRACKS_DIR/$(id -u "$INSTALL_USER")"
+		_debug "Create track file: $TRACK"
+		install -m 0644 /dev/null "$TRACK"
+	fi
+
 	local all_host_items=() all_default_items=()
 	[[ -z "$host_dir" ]] || get_items "$host_dir" "all_host_items"
 	[[ -z "$default_dir" ]] || get_items "$default_dir" "all_default_items"
@@ -540,7 +548,6 @@ link() {
 			[[ -z "$item" ]] && continue
 			# Skip host prefixed item
 			local renamed_item="${item#"${HOST_PREFIX}"}"
-			# shellcheck disable=SC1087
 			if [[ "$item_type" == "default" ]] && is_contain "$renamed_item" "prefixed_items"; then
 				continue
 			fi
@@ -550,160 +557,33 @@ link() {
 			local as_default_item="${default_dir}/${item}"
 			local actual_path="${!as_var}"
 
-			local fixed_target_path=""
 			if [[ "$item_type" == "host" && "$item" == "$HOST_PREFIX"* ]]; then
-				fixed_target_path="${target_dir}/${renamed_item}"
+				as_target_item="${target_dir}/${renamed_item}"
 				prefixed_items+=("${renamed_item}")
 			fi
 
-			[[ -n "$fixed_target_path" ]] && as_target_item="$fixed_target_path"
+			_debug "Create: \"${LC["path"]}$as_target_item${C["0"]}\""
 			if [[ -d "$actual_path" ]]; then
+				printf "%s\0\0" "$actual_path" >>"$TRACK"
 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$as_target_item" -d
-				_debug "Created: \"${LC["path"]}$as_target_item${C["0"]}\""
-
 				if [[ "$item_type" == "union" ]]; then
-					INIT="false" link "$as_target_item" "$as_host_item" "$as_default_item" "false"
+					link "$as_target_item" "$as_host_item" "$as_default_item" "false"
 				elif [[ "$item_type" == "host" ]]; then
-					INIT="false" link "$as_target_item" "$as_host_item" "" "false"
+					link "$as_target_item" "$as_host_item" "" "false"
 				elif [[ "$item_type" == "default" ]]; then
-					INIT="false" link "$as_target_item" "" "$as_default_item" "false"
+					link "$as_target_item" "" "$as_default_item" "false"
 				fi
 			elif [[ -f "$actual_path" ]]; then
+				printf "%s\0%s\0" "$actual_path" "$(sha256sum "$actual_path" | cut -d ' ' -f1)" >>"$TRACK"
 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$actual_path" "$as_target_item"
-				_debug "Created: \"${LC["path"]}$as_target_item${C["0"]}\""
-			fi
-
-			if [[ "$INIT" == "true" ]]; then
-				echo "!!!!!!!!!!!!!! $as_target_item"
 			fi
 		done
 	done
 }
 
-pull() {
-
-	echo ''
-}
-
 ##################################################
-#                   Installers                   #
+#                    Commands                    #
 ##################################################
-setup_network() {
-	# Generate random SSH port
-	local ssh_port="$1"
-
-	# openssh-server
-	[[ -e "/etc/ssh" ]] && $SUDO rm -rf "/etc/ssh"
-	$SUDO install -m 0755 -o "root" -g "root" "/etc/ssh" -d
-	$SUDO install -m 0600 -o "root" -g "root" "${DF_REPO["template_dir"]}/openssh-server/sshd_config" "/etc/ssh/sshd_config"
-	$SUDO sed -i "s/^Port [0-9]\+/Port $ssh_port/" "/etc/ssh/sshd_config"
-	$SUDO ssh-keygen -A
-
-	# iptables
-	[[ -e "/etc/iptables" ]] && $SUDO rm -rf "/etc/iptables"
-	$SUDO install -m 0755 -o "root" -g "root" "/etc/iptables" -d
-	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template_dir"]}/iptables/rules.v4" "/etc/iptables/rules.v4"
-	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template_dir"]}/iptables/rules.v6" "/etc/iptables/rules.v6"
-	$SUDO install -m 0644 -o "root" -g "root" "${DF_REPO["template_dir"]}/iptables/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
-	$SUDO sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "/etc/iptables/rules.v4"
-
-	if [[ "$IS_DOCKER" == "false" ]]; then
-		# Reload sshd config
-		_info "Restart sshd service"
-		$SUDO systemctl restart sshd
-		# Enable iptables-restore.service
-		_info "Reload systemctl daemon"
-		$SUDO systemctl daemon-reload
-		_info "Enable iptables-restore service"
-		$SUDO systemctl enable iptables-restore.service
-	fi
-}
-
-_setup_vultr() {
-	_info "Start package installation"
-	while read -r pkg; do
-		if ! is_cmd_exist "$pkg"; then
-			install_package "$pkg"
-		fi
-	done <"${DF_REPO["package_list"]}"
-
-	local ssh_port
-	if [[ ! -e "$INIT_FLAG_FILE" ]]; then
-		ssh_port="$((1024 + RANDOM % (65535 - 1024 + 1)))"
-		_info "Setup system installation using templates"
-		install_nvim
-		setup_network "$ssh_port"
-
-		# Create flag file
-		$SUDO install -m 0755 -o "root" -g "root" "/dev/null" "$INIT_FLAG_FILE"
-		printf "%s" "$ssh_port" | $SUDO tee "$INIT_FLAG_FILE"
-	else
-		ssh_port="$(<"$INIT_FLAG_FILE")"
-	fi
-
-	_info "Start linking dotfiles"
-	INIT="true" link "$INSTALL_USER_HOME" "${DF_REPO["current_host"]}" "${DF_REPO["default_host"]}"
-
-	if is_cmd_exist ufw; then
-		_info "Uninstall UFW"
-		$SUDO ufw disable
-		remove_package "ufw"
-	fi
-
-	_info "Start SSH setup"
-	local ssh_dir="$INSTALL_USER_HOME/.ssh"
-	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/authorized_keys"
-	$SUDO install -m 0600 -o "$INSTALL_USER" -g "$INSTALL_USER" /dev/null "$ssh_dir/config"
-
-	if [[ "$IS_DOCKER" == "false" ]]; then
-		_info "Executing Docker installation script.."
-		sh -c "$(curl -fsSL https://get.docker.com)"
-	fi
-
-	### Client -> This Host
-	local ssh_publickey
-	if [[ "$IS_DEBUG" == "true" ]]; then
-		ssh_publickey="some_ssh_publickey"
-	else
-		read -r -p "Paste SSH public key: " ssh_publickey </dev/tty
-	fi
-
-	printf "%s" "$ssh_publickey" >>"$ssh_dir/authorized_keys"
-	{
-		printf "# Client's SSH template\n"
-		printf "Host %s\n" "$HOSTNAME"
-		printf "  HostName %s\n" "$(curl -fsSL https://api.ipify.org)"
-		printf "  Port %s\n" "$ssh_port"
-		printf "  User %s\n" "$INSTALL_USER"
-		printf "  IdentityFile ~/.ssh/%s\n" "$HOSTNAME"
-		printf "  IdentitiesOnly yes\n"
-		printf "\n"
-	} >>"${DF_DATA["secret"]}"
-
-	### This Host -> Git
-	local ssh_git_passphrase
-	ssh_git_passphrase="$(get_random_str $PASSWD_LENGTH)"
-	local git_filename="git"
-	ssh-keygen -t ed25519 -b 4096 -f "$ssh_dir/$git_filename" -N "$ssh_git_passphrase"
-	{
-		printf "# SSH passphrase for Git\n%s\n\n" "$ssh_git_passphrase"
-		printf "# SSH public key for Git\n"
-		cat "$ssh_dir/${git_filename}.pub"
-		printf "\n"
-	} >>"${DF_DATA["secret"]}"
-
-	{
-		printf "Host git\n"
-		printf "  HostName github.com\n"
-		printf "  User git\n"
-		printf "  IdentityFile ~/.ssh/%s\n" "$git_filename"
-		printf "  IdentitiesOnly yes\n"
-		printf "\n"
-	} >>"$ssh_dir/config"
-
-	rm -f "$ssh_dir/${git_filename}.pub"
-}
-
 check_is_root() {
 	if ! is_root; then
 		printf "%b%s%b\n" "${C[R]}" "$(get_err_msg "Root access required for this operation.")" "${C[0]}"
@@ -731,6 +611,10 @@ cmd_install() {
 		ln -sf "$DOCKER_VOLUME_DIR" "$REPO_INSTALL_DIR"
 	else
 		git clone -b main "$REPO_URL" "$REPO_INSTALL_DIR"
+	fi
+
+	if [[ ! -e "$REPO_TRACKS_DIR" ]]; then
+		mkdir "$REPO_TRACKS_DIR"
 	fi
 
 	local pkg_name
@@ -834,7 +718,7 @@ cmd_apply() {
 		home="/home/$username"
 	fi
 
-	INIT="true" HOST_PREFIX="${profile}##" INSTALL_USER="$username" \
+	HOST_PREFIX="${profile}##" INSTALL_USER="$username" \
 		link "$home" "$profile_dir" "$(get_home_profile_dir "default")"
 
 	if [[ -z "$profile" ]]; then
@@ -892,3 +776,7 @@ main_() {
 }
 
 main_ "$@"
+
+push() {
+	local F pF D pD
+}

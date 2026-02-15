@@ -3,7 +3,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $Os,
     [Parameter(Mandatory = $true)]
-    [array] $Username
+    [string] $Username,
+    [Parameter(Mandatory = $false)]
+    [string] $WorkDir = "/home/$Username"
 )
 
 $Docker = "docker.exe"
@@ -14,7 +16,7 @@ $ContainerName = "${ImageName}-cont"
 & $Docker exec `
     --interactive `
     --tty `
-    --workdir "/home/$Username" `
+    --workdir "$WorkDir" `
     --user "$Username" `
     "$ContainerName" zsh `
     --login
