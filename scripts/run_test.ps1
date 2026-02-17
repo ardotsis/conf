@@ -7,7 +7,7 @@ param(
     [array] $Params
 )
 
-$Docker = "docker.exe"
+$Docker = "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
 $env:DOCKER_CLI_HINTS = "false"
 $RepoDir = Split-Path -Path $PSScriptRoot
 $DockerfilesDir = "${RepoDir}\tests\dockerfiles"
@@ -64,6 +64,7 @@ function Get-ObjectIds {
 function main() {
     if (-not (& $Docker ps)) {
         Write-Verbose "Launching Docker engine..."
+        Start-Process -FilePath "C:\Program Files\Docker\Docker\Docker Desktop.exe"
         while (-not (& $Docker ps)) {
             Start-Sleep -Seconds 2
         }

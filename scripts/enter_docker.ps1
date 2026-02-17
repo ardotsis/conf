@@ -5,8 +5,17 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $Username,
     [Parameter(Mandatory = $false)]
-    [string] $WorkDir = "/home/$Username"
+    [string] $WorkDir
 )
+
+if (-not $WorkDir) {
+    if ($Username -eq "root") {
+        $WorkDir = "/root"
+    }
+    else {
+        $WorkDir = "/home/$Username"
+    }
+}
 
 $Docker = "docker.exe"
 $env:DOCKER_CLI_HINTS = "false"

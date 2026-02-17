@@ -147,7 +147,7 @@ get_err_msg() {
 	local with_tip="${2:-false}"
 
 	local tip=""
-	if [[ "$with_tip" == "true" ]]; then
+	if $with_tip; then
 		tip=" See 'conf --help'."
 	fi
 	printf "conf: %s%s\n" "$msg" "$tip"
@@ -174,11 +174,11 @@ parse_args() {
 	local i last_i input
 	i=0
 	last_i=$(("${#args[@]}" - 1))
-	skip_index="false"
+	skip_index=false
 
 	for input in "${args[@]}"; do
-		if [[ "$skip_index" == "true" ]]; then
-			skip_index="false"
+		if $skip_index; then
+			skip_index=false
 			i=$((i + 1))
 			continue
 		fi
@@ -193,12 +193,12 @@ parse_args() {
 
 			local insert_val
 			if [[ "$option_type" == "flag" ]]; then
-				insert_val="true"
+				insert_val=true
 			elif [[ "$option_type" == "value" ]]; then
-				skip_index="true"
+				skip_index=true
 				local val_i=$((i + 1))
 				if ((val_i > last_i)); then
-					err_msg="$(get_err_msg "'$input' require a value." "true")"
+					err_msg="$(get_err_msg "'$input' require a value." true)"
 					return 1
 				fi
 				insert_val="${args["$val_i"]}"
@@ -213,7 +213,7 @@ parse_args() {
 		else
 			if [[ "$input" == "-"* ]]; then
 				# shellcheck disable=SC2034
-				err_msg="$(get_err_msg "'$input' is not a conf option." "true")"
+				err_msg="$(get_err_msg "'$input' is not a conf option." true)"
 				return 1
 			else
 				break
@@ -265,7 +265,7 @@ _log() {
 
 	local timestamp
 	timestamp="$(date "+%Y-%m-%d %H:%M:%S")"
-	if [[ "$SHOW_LOG" == "true" ]]; then
+	if $SHOW_LOG; then
 		printf "[%s] [%b%s%b] [%s:%s] %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$msg" >&2
 	fi
 }
@@ -320,7 +320,7 @@ clr() {
 	local clr="$2"
 	local with_quote="${3-:}"
 
-	if [[ "$with_quote" == "true" ]]; then
+	if $with_quote; then
 		local q='"'
 	else
 		local q=''
@@ -467,13 +467,12 @@ backup_item() {
 	timestamp="$(date "+%Y-%m-%d_%H-%M-%S")"
 	dst="${DF_DATA["backups_dir"]}/${basename}.${timestamp}.tgz"
 
-	_info "Create backup: $(clr "$dst" "${LC["path"]}" "true")"
+	_info "Create backup: $(clr "$dst" "${LC["path"]}" true)"
 	tar czvf "$dst" -C "$parent_dir" "$basename"
 }
 
 get_items() {
 	local dir_path="$1"
-	# shellcheck disable=SC2178
 	local -n result_arr_name="$2"
 
 	# shellcheck disable=SC2034
@@ -502,6 +501,19 @@ get_mixed_items() {
 		<(printf "%s\0" "${right_arr[@]}" | sort -z))
 }
 
+_write_track() {
+	local track_path="$1"
+	local is_profiles=$2
+	local path="$3"
+	local sum="$4"
+
+	if $is_profiles; then
+		printf "\1%s\0%s\0" "$path" "$sum" >>"$track_path"
+	else
+		printf "%s\0%s\0" "$path" "$sum" >>"$track_path"
+	fi
+}
+
 link() {
 	local target_dir="$1"
 	local host_dir="${2:-}" # Preferrer
@@ -514,6 +526,7 @@ link() {
 	_vars "target_dir" "host_dir" "default_dir"
 
 	local all_host_items=() all_default_items=()
+	# TODO: refactor: include (f,d,l) for each path
 	[[ -z "$host_dir" ]] || get_items "$host_dir" "all_host_items"
 	[[ -z "$default_dir" ]] || get_items "$default_dir" "all_default_items"
 
@@ -555,22 +568,21 @@ link() {
 			local as_default_item="${default_dir}/${item}"
 			local actual_path="${!as_var}"
 
-			local is_prefixed="false"
-			if [[ "$item_type" == "host" && "$item" == "$HOST_PREFIX"* ]]; then
-				local is_prefixed="true"
-				as_target_item="${target_dir}/${renamed_item}"
-				prefixed_items+=("${renamed_item}")
+			local is_profiles=false
+			if [[ "$item_type" == "host" ]]; then
+				is_profiles=true
+				if [[ "$item" == "$HOST_PREFIX"* ]]; then
+					as_target_item="${target_dir}/${renamed_item}"
+					prefixed_items+=("${renamed_item}")
+				fi
 			fi
 
 			local write_path="${as_target_item:$target_dir_len+1}"
+			local sum=""
 
 			_debug "Create: \"${LC["path"]}$as_target_item${C["0"]}\""
 			if [[ -d "$actual_path" ]]; then
-				if [[ "$is_prefixed" == "true" ]]; then
-					printf "\001%s\0\0" "$write_path" >>"$TRACK"
-				else
-					printf "%s\0\0" "$write_path" >>"$TRACK"
-				fi
+				_write_track "$TRACK" $is_profiles "$write_path" "$sum"
 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$as_target_item" -d
 				if [[ "$item_type" == "union" ]]; then
 					link "$as_target_item" "$as_host_item" "$as_default_item"
@@ -580,13 +592,9 @@ link() {
 					link "$as_target_item" "" "$as_default_item"
 				fi
 			elif [[ -f "$actual_path" ]]; then
-				local sum
+				[[ "$item_type" == "union" ]] && is_profiles=true
 				sum="$(sha256sum "$actual_path" | cut -d ' ' -f1)"
-				if [[ "$is_prefixed" == "true" ]]; then
-					printf "\001%s\0%s\0" "$write_path" "$sum" >>"$TRACK"
-				else
-					printf "%s\0%s\0" "$write_path" "$sum" >>"$TRACK"
-				fi
+				_write_track "$TRACK" $is_profiles "$write_path" "$sum"
 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$actual_path" "$as_target_item"
 			fi
 		done
@@ -619,7 +627,7 @@ cmd_install() {
 	fi
 
 	# Install conf repository
-	if [[ "$IS_DEBUG" == "true" ]]; then
+	if $IS_DEBUG; then
 		ln -sf "$DOCKER_VOLUME_DIR" "$REPO_INSTALL_DIR"
 	else
 		git clone -b main "$REPO_URL" "$REPO_INSTALL_DIR"
@@ -640,29 +648,29 @@ cmd_install() {
 	chmod +x "$REPO_INSTALL_DIR/conf.sh"
 
 	# Install binaries
-	install_nvim
+	# install_nvim
 
-	local data_dir="/usr/local"
-	local zsh_plugins_dir="$data_dir/share/zsh/plugins"
+	# local data_dir="/usr/local"
+	# local zsh_plugins_dir="$data_dir/share/zsh/plugins"
 
-	[[ ! -e "$zsh_plugins_dir" ]] && mkdir -p "$zsh_plugins_dir"
-	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$zsh_plugins_dir/zsh-autosuggestions"
-	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$zsh_plugins_dir/zsh-syntax-highlighting"
-	git clone "https://github.com/sindresorhus/pure.git" "$zsh_plugins_dir/pure"
+	# [[ ! -e "$zsh_plugins_dir" ]] && mkdir -p "$zsh_plugins_dir"
+	# git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$zsh_plugins_dir/zsh-autosuggestions"
+	# git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$zsh_plugins_dir/zsh-syntax-highlighting"
+	# git clone "https://github.com/sindresorhus/pure.git" "$zsh_plugins_dir/pure"
 
-	local man1_dir="$data_dir/share/man/man1"
-	[[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
-	install_zoxide "$data_dir/bin" "$man1_dir"
-	install_starship "$data_dir/bin"
+	# local man1_dir="$data_dir/share/man/man1"
+	# [[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
+	# install_zoxide "$data_dir/bin" "$man1_dir"
+	# install_starship "$data_dir/bin"
 
 	# Install etc
 
-	if [[ "$INTERNAL" == "false" ]]; then
+	if ! $INTERNAL; then
 		printf "%b%s%b\n" "${C[G]}" "conf has installed." "${C[0]}"
 	fi
 
 	if [[ -n "$username" ]]; then
-		INTERNAL="true" cmd_adduser "$username" "$profile"
+		INTERNAL=true cmd_adduser "$username" "$profile"
 	fi
 }
 
@@ -695,11 +703,11 @@ cmd_adduser() {
 	install -m 0400 -o "$username" -g "$username" /dev/null "$home/$SECRET_FILENAME"
 	printf "Password: %s\n" "$passwd" >>"$home/$SECRET_FILENAME"
 
-	if [[ "$INTERNAL" == "false" ]]; then
+	if ! $INTERNAL; then
 		printf "%bAdded '%s' successfully.%b\n" "${C[G]}" "$username" "${C[0]}"
 	fi
 
-	INTERNAL="true" cmd_apply "$username" "$profile"
+	INTERNAL=true cmd_apply "$username" "$profile"
 }
 
 cmd_apply() {
@@ -744,7 +752,7 @@ cmd_apply() {
 		profile="default"
 	fi
 
-	if [[ "$INTERNAL" == "false" ]]; then
+	if ! $INTERNAL; then
 		printf "%bApplied '%s' profile.%b\n" "${C[G]}" "$profile" "${C[0]}"
 	fi
 }
@@ -752,18 +760,18 @@ cmd_apply() {
 main_() {
 	_vars "BASH_VERSION"
 
-	if [[ (($# -eq 0)) || "$SHOW_HELP" == "true" ]]; then
+	if [[ (($# -eq 0)) ]] || $SHOW_HELP; then
 		print_help
 		exit 0
 	fi
 
-	if [[ "$SHOW_VERSION" == "true" ]]; then
+	if $SHOW_VERSION; then
 		print_version
 		exit 0
 	fi
 
 	if (("${#CMDS[@]}" == 0)); then
-		printf "%s\n" "$(get_err_msg "Please specify the conf command." "true")" >&2
+		printf "%s\n" "$(get_err_msg "Please specify the conf command." true)" >&2
 		exit 1
 	fi
 
@@ -781,17 +789,26 @@ main_() {
 
 	local mode="${CMDS[0]}"
 	if ! is_contain "$mode" "modes"; then
-		printf "%s\n" "$(get_err_msg "'$mode' is not conf command." "true")" >&2
+		printf "%s\n" "$(get_err_msg "'$mode' is not conf command." true)" >&2
 		exit 1
 	fi
 
 	# Run command
-	INTERNAL="false" "cmd_$mode" "${CMDS[@]:1}"
+	INTERNAL=false "cmd_$mode" "${CMDS[@]:1}"
 
-	if [[ "$IS_DOCKER" == "true" ]]; then
+	if $IS_DOCKER; then
 		printf "Keeping docker container running...\n"
 		tail -f /dev/null
 	fi
 }
 
 main_ "$@"
+
+# get_items2 "/" roots
+# printf "%s\n" "${roots[@]}"
+
+# if [[ "$IS_DEBUG" ]]; then
+# 	git() {
+# 		echo ''
+# 	}
+# fi
