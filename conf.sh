@@ -501,75 +501,80 @@ get_mixed_items() {
 		<(printf "%s\0" "${right_arr[@]}" | sort -z))
 }
 
+declare -Ar ITEM=(
+	[F]="\1"
+	[pF]="\2"
+	[D]="\3"
+	[pD]="\4"
+)
+
 _write_track() {
 	local track_path="$1"
-	local is_profiles=$2
+	local type="$2"
 	local path="$3"
-	local sum="$4"
+	local f2="$4"
 
-	if $is_profiles; then
-		printf "\1%s\0%s\0" "$path" "$sum" >>"$track_path"
-	else
-		printf "%s\0%s\0" "$path" "$sum" >>"$track_path"
-	fi
+	case "$type" in
+	"${ITEM[pF]}" | "${ITEM[F]}")
+		printf "%b%s\0%s\0" "$type" "$path" "$f2" >>"$track_path"
+		;;
+	"${ITEM[pD]}" | "${ITEM[D]}")
+		printf "%b%s\0" "$type" "$path" >>"$track_path"
+		;;
+	esac
 }
 
 link() {
 	local target_dir="$1"
-	local host_dir="${2:-}" # Preferrer
+	local profile_dir="${2:-}" # Preferrer
 	local default_dir="${3:-}"
 
 	if [[ -z "${target_dir_len+x}" ]]; then
 		local target_dir_len="${#target_dir}"
 	fi
 
-	_vars "target_dir" "host_dir" "default_dir"
+	_vars "target_dir" "profile_dir" "default_dir"
 
-	local all_host_items=() all_default_items=()
-	# TODO: refactor: include (f,d,l) for each path
-	[[ -z "$host_dir" ]] || get_items "$host_dir" "all_host_items"
+	local all_profile_items=() all_default_items=()
+	# TODO: include item type (find command)
+	[[ -z "$profile_dir" ]] || get_items "$profile_dir" "all_profile_items"
 	[[ -z "$default_dir" ]] || get_items "$default_dir" "all_default_items"
 
 	# shellcheck disable=SC2034
-	local union_items=() host_items=() default_items=()
-	if [[ -n "$host_dir" && -n "$default_dir" ]]; then
-		get_mixed_items "all_host_items" "all_default_items" "union" "union_items"
-		get_mixed_items "all_host_items" "all_default_items" "left_only" "host_items"
-		get_mixed_items "all_host_items" "all_default_items" "right_only" "default_items"
-	elif [[ -n "$host_dir" ]]; then
+	local both_items=() profile_items=() default_items=()
+	if [[ -n "$profile_dir" && -n "$default_dir" ]]; then
+		get_mixed_items "all_profile_items" "all_default_items" "union" "both_items"
+		get_mixed_items "all_profile_items" "all_default_items" "left_only" "profile_items"
+		get_mixed_items "all_profile_items" "all_default_items" "right_only" "default_items"
+	elif [[ -n "$profile_dir" ]]; then
 		# shellcheck disable=SC2034
-		local host_items=("${all_host_items[@]}")
+		local profile_items=("${all_profile_items[@]}")
 	elif [[ -n "$default_dir" ]]; then
 		# shellcheck disable=SC2034
 		local default_items=("${all_default_items[@]}")
 	fi
 
-	local item_type prefixed_items=()
-	for item_type in "host" "union" "default"; do
-		local -n items="${item_type}_items"
-		local as_var
-		if [[ "$item_type" == "union" ]]; then
-			as_var="as_host_item"
-		else
-			as_var="as_${item_type}_item"
-		fi
+	local own prefixed_items=()
+	for own in "profile" "both" "default"; do
+		local -n items="${own}_items"
+		[[ "$own" == "both" ]] && as_var="as_profile_item" || as_var="as_${own}_item"
 
 		local item
 		for item in "${items[@]}"; do
 			[[ -z "$item" ]] && continue
-			# Skip host prefixed item
+			# Skip profile prefixed item
 			local renamed_item="${item#"${HOST_PREFIX}"}"
-			if [[ "$item_type" == "default" ]] && is_contain "$renamed_item" "prefixed_items"; then
+			if [[ "$own" == "default" ]] && is_contain "$renamed_item" "prefixed_items"; then
 				continue
 			fi
 
 			local as_target_item="${target_dir}/${item}"
-			local as_host_item="${host_dir}/${item}"
+			local as_profile_item="${profile_dir}/${item}"
 			local as_default_item="${default_dir}/${item}"
 			local actual_path="${!as_var}"
 
 			local is_profiles=false
-			if [[ "$item_type" == "host" ]]; then
+			if [[ "$own" == "profile" ]]; then
 				is_profiles=true
 				if [[ "$item" == "$HOST_PREFIX"* ]]; then
 					as_target_item="${target_dir}/${renamed_item}"
@@ -578,23 +583,25 @@ link() {
 			fi
 
 			local write_path="${as_target_item:$target_dir_len+1}"
-			local sum=""
-
 			_debug "Create: \"${LC["path"]}$as_target_item${C["0"]}\""
+			local item_type
 			if [[ -d "$actual_path" ]]; then
-				_write_track "$TRACK" $is_profiles "$write_path" "$sum"
+				$is_profiles && item_type="${ITEM[pD]}" || item_type="${ITEM[D]}"
+				_write_track "$TRACK" "$item_type" "$write_path" ""
+
 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$as_target_item" -d
-				if [[ "$item_type" == "union" ]]; then
-					link "$as_target_item" "$as_host_item" "$as_default_item"
-				elif [[ "$item_type" == "host" ]]; then
-					link "$as_target_item" "$as_host_item" ""
-				elif [[ "$item_type" == "default" ]]; then
+				if [[ "$own" == "both" ]]; then
+					link "$as_target_item" "$as_profile_item" "$as_default_item"
+				elif [[ "$own" == "profile" ]]; then
+					link "$as_target_item" "$as_profile_item" ""
+				elif [[ "$own" == "default" ]]; then
 					link "$as_target_item" "" "$as_default_item"
 				fi
 			elif [[ -f "$actual_path" ]]; then
-				[[ "$item_type" == "union" ]] && is_profiles=true
-				sum="$(sha256sum "$actual_path" | cut -d ' ' -f1)"
-				_write_track "$TRACK" $is_profiles "$write_path" "$sum"
+				[[ "$own" == "both" ]] && is_profiles=true # Prefer profile's file
+				$is_profiles && item_type="${ITEM[pF]}" || item_type="${ITEM[F]}"
+				_write_track "$TRACK" "$item_type" "$write_path" "$(sha256sum "$actual_path" | cut -d ' ' -f1)"
+
 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$actual_path" "$as_target_item"
 			fi
 		done

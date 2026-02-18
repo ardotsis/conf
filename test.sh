@@ -33,11 +33,10 @@ declare -Ar C=(
 )
 
 declare -Ar ITEM=(
-	[_]=0
-	[F]=1
-	[pF]=2
-	[D]=3
-	[pD]=4
+	[F]=$'\1'
+	[pF]=$'\2'
+	[D]=$'\3'
+	[pD]=$'\4'
 )
 
 declare -Ar STATE=(
@@ -91,15 +90,13 @@ get_commit_id() {
 }
 
 read_by_null() {
-	IFS="" read -r -d $'\0' "$1"
+	local -n _ref="${1:-REPLY}"
+	IFS="" read -r -d $'\0' _ref
 }
 
-has_p_prefix() {
-	if [[ "$1" == $'\1'* ]]; then
-		return 0
-	else
-		return 1
-	fi
+read_byte() {
+	local -n _ref="${1:-REPLY}"
+	IFS="" read -r -n 1 _ref
 }
 
 is_profiles() {
@@ -118,52 +115,76 @@ is_file() {
 	fi
 }
 
+is_in_skip_dir() {
+	local skip_dir="$1"
+	local current_path="$2"
+
+}
+
 update() {
 	local track_file="$1"
 
+	if [[ -z "${INIT+x}" ]]; then
+		HOME_DIR_LEN="${#HOME_DIR}"
+	fi
+
 	{
-		local prof commid
-		read_by_null "prof"
-		read_by_null "commid"
-		echo "profile $prof commit id: $commid"
+		local profile commit_id
+		read_by_null "profile"
+		read_by_null "commit_id"
+		echo "profile=$profile, commit id=$commit_id"
 
-		local base sum
-		while read_by_null base && read_by_null sum; do
-			local type=${ITEM[_]}
-			if [[ -n "$sum" ]]; then
-				has_p_prefix "$base" && type=${ITEM[pF]} || type=${ITEM[F]}
-			else
-				has_p_prefix "$base" && type=${ITEM[pD]} || type=${ITEM[D]}
+		local SKIP_DIR=""
+		while :; do
+			local type=""
+			read_byte type
+
+			local base="" sum="" repo_path=""
+			case "$type" in
+			"${ITEM[pF]}" | "${ITEM[F]}")
+				read_by_null "base"
+				read_by_null "sum"
+				repo_path="$PROFILE_DIR/$base"
+				;;
+			"${ITEM[pD]}" | "${ITEM[D]}")
+				read_by_null "base"
+				repo_path="$DEFAULT_DIR/$base"
+				;;
+			*)
+				printf "err: invalid file format\n" && exit 1
+				;;
+			esac
+
+			local home_path="$HOME_DIR/$base" state=${STATE[_]}
+			if [[ -n "$SKIP_DIR" ]]; then
+				if [[ "$base" == "$SKIP_DIR/"* ]]; then
+					state=${STATE[D]}
+					printfc "(skipped) $home_path" "${STATE_CLR[$state]}"
+					continue
+				else
+					SKIP_DIR=""
+				fi
 			fi
 
-			local home_path orig_path
-			if is_profiles $type; then
-				base="${base:1}"
-				orig_path="$PROFILE_DIR/$base"
-				home_path="$HOME_DIR/$base"
-			else
-				orig_path="$DEFAULT_DIR/$base"
-				home_path="$HOME_DIR/$base"
-			fi
-
-			local state=${STATE[_]}
-			if is_file $type; then
+			case "$type" in
+			"${ITEM[pF]}" | "${ITEM[F]}")
 				if [[ -f "$home_path" ]]; then
-					if [[ "$sum" == "$(get_sum "$home_path")" ]]; then
-						:
-					else
+					if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
 						state=${STATE[M]}
 					fi
 				else
-					state=${STATE[D]}
+					state=${STATE[D]} # deleted (or dir)
 				fi
-			else
+				;;
+			"${ITEM[pD]}" | "${ITEM[D]}")
 				if [[ -d "$home_path" ]]; then
 					:
 				else
-					state=${STATE[D]}
+					state=${STATE[D]} # deleted (or file)
+					SKIP_DIR="$base"
 				fi
-			fi
+				;;
+			esac
 
 			printfc "$home_path" "${STATE_CLR[$state]}"
 		done
