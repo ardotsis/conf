@@ -121,23 +121,31 @@ is_in_skip_dir() {
 
 }
 
+get_items() {
+	local dir_path="$1"
+	local -n arr_ref="$2"
+
+	# shellcheck disable=SC2034
+	mapfile -d $'\0' arr_ref < \
+		<(find "$dir_path" -mindepth 1 -maxdepth 1 -printf "%f\0")
+}
+
 update() {
 	local track_file="$1"
 
-	if [[ -z "${INIT+x}" ]]; then
-		HOME_DIR_LEN="${#HOME_DIR}"
-	fi
-
+	local -A UNTRACKED_ITEM=()
 	{
 		local profile commit_id
 		read_by_null "profile"
 		read_by_null "commit_id"
 		echo "profile=$profile, commit id=$commit_id"
 
-		local SKIP_DIR=""
+		local SKIP_DIR="" item
 		while :; do
 			local type=""
-			read_byte type
+			if ! read_byte type; then
+				break
+			fi
 
 			local base="" sum="" repo_path=""
 			case "$type" in
@@ -159,7 +167,7 @@ update() {
 			if [[ -n "$SKIP_DIR" ]]; then
 				if [[ "$base" == "$SKIP_DIR/"* ]]; then
 					state=${STATE[D]}
-					printfc "(skipped) $home_path" "${STATE_CLR[$state]}"
+					printfc "├─ $home_path" "${STATE_CLR[$state]}"
 					continue
 				else
 					SKIP_DIR=""
@@ -178,7 +186,9 @@ update() {
 				;;
 			"${ITEM[pD]}" | "${ITEM[D]}")
 				if [[ -d "$home_path" ]]; then
-					:
+					while read_by_null item; do
+						UNTRACKED_ITEM["$item"]=1
+					done < <(find "$home_path" -maxdepth 1 -mindepth 1 -print0)
 				else
 					state=${STATE[D]} # deleted (or file)
 					SKIP_DIR="$base"
@@ -186,10 +196,17 @@ update() {
 				;;
 			esac
 
+			# cuz parent add ME!!
+			unset "UNTRACKED_ITEM[$home_path]"
 			printfc "$home_path" "${STATE_CLR[$state]}"
+
 		done
+
 	} <"$track_file"
 
+	for untracked_item in "${!UNTRACKED_ITEM[@]}"; do
+		printfc "$untracked_item" "${STATE_CLR[${STATE[A]}]}"
+	done
 }
 
 main() {
