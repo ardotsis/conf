@@ -477,7 +477,7 @@ get_items() {
 
 	# shellcheck disable=SC2034
 	mapfile -d $'\0' result_arr_name < \
-		<(find "$dir_path" -mindepth 1 -maxdepth 1 -printf "%f\0")
+		<(find "$dir_path" -mindepth 1 -maxdepth 1 ! -type l -printf "%y%f\0")
 }
 
 get_mixed_items() {
@@ -501,12 +501,24 @@ get_mixed_items() {
 		<(printf "%s\0" "${right_arr[@]}" | sort -z))
 }
 
-declare -Ar ITEM=(
-	[F]="\1"
-	[pF]="\2"
-	[D]="\3"
-	[pD]="\4"
+declare -Ar TYPE=(
+	[F]=1
+	[D]=2
+
+	[pF]=3
+	[pD]=4
+
+	[xF]=5
+	[xD]=6
 )
+
+is_file() {
+	if (($1 % 2 != 0)); then
+		return 0
+	else
+		return 1
+	fi
+}
 
 _write_track() {
 	local track_path="$1"
@@ -514,95 +526,111 @@ _write_track() {
 	local path="$3"
 	local f2="$4"
 
-	case "$type" in
-	"${ITEM[pF]}" | "${ITEM[F]}")
-		printf "%b%s\0%s\0" "$type" "$path" "$f2" >>"$track_path"
-		;;
-	"${ITEM[pD]}" | "${ITEM[D]}")
-		printf "%b%s\0" "$type" "$path" >>"$track_path"
-		;;
-	esac
+	if is_file "$type"; then
+		printf "%s%s\0%s\0" "$type" "$path" "$f2" >>"$track_path"
+	else
+		printf "%s%s\0" "$type" "$path" >>"$track_path"
+	fi
+
 }
 
 link() {
-	local target_dir="$1"
-	local profile_dir="${2:-}" # Preferrer
+	local output_dir="$1"
+	local override_dir="${2:-}" # Preferrer
 	local default_dir="${3:-}"
 
-	if [[ -z "${target_dir_len+x}" ]]; then
-		local target_dir_len="${#target_dir}"
+	if [[ -z "${output_dir_len+x}" ]]; then
+		local output_dir_len="${#output_dir}"
 	fi
 
-	_vars "target_dir" "profile_dir" "default_dir"
-
-	local all_profile_items=() all_default_items=()
+	local all_override_items=() all_default_items=()
 	# TODO: include item type (find command)
-	[[ -z "$profile_dir" ]] || get_items "$profile_dir" "all_profile_items"
+	[[ -z "$override_dir" ]] || get_items "$override_dir" "all_override_items"
 	[[ -z "$default_dir" ]] || get_items "$default_dir" "all_default_items"
 
 	# shellcheck disable=SC2034
-	local both_items=() profile_items=() default_items=()
-	if [[ -n "$profile_dir" && -n "$default_dir" ]]; then
-		get_mixed_items "all_profile_items" "all_default_items" "union" "both_items"
-		get_mixed_items "all_profile_items" "all_default_items" "left_only" "profile_items"
-		get_mixed_items "all_profile_items" "all_default_items" "right_only" "default_items"
-	elif [[ -n "$profile_dir" ]]; then
+	local both_items=() override_items=() default_items=()
+	if [[ -n "$override_dir" && -n "$default_dir" ]]; then
+		get_mixed_items "all_override_items" "all_default_items" "union" "both_items"
+		get_mixed_items "all_override_items" "all_default_items" "left_only" "override_items"
+		get_mixed_items "all_override_items" "all_default_items" "right_only" "default_items"
+	elif [[ -n "$override_dir" ]]; then
 		# shellcheck disable=SC2034
-		local profile_items=("${all_profile_items[@]}")
+		local override_items=("${all_override_items[@]}")
 	elif [[ -n "$default_dir" ]]; then
 		# shellcheck disable=SC2034
 		local default_items=("${all_default_items[@]}")
 	fi
 
 	local own prefixed_items=()
-	for own in "profile" "both" "default"; do
+	for own in "override" "both" "default"; do
 		local -n items="${own}_items"
-		[[ "$own" == "both" ]] && as_var="as_profile_item" || as_var="as_${own}_item"
+		local as_var
+		[[ "$own" == "both" ]] && as_var="as_override_item" || as_var="as_${own}_item"
 
 		local item
 		for item in "${items[@]}"; do
 			[[ -z "$item" ]] && continue
-			# Skip profile prefixed item
-			local renamed_item="${item#"${HOST_PREFIX}"}"
-			if [[ "$own" == "default" ]] && is_contain "$renamed_item" "prefixed_items"; then
+			local type="${item:0:1}"
+			local base="${item:1}"
+
+			# Prevent load prefixed item (e.g. uwu##.config -> .config)
+			if [[ "$own" == "default" ]] && is_contain "$base" "prefixed_items"; then
+				_debug "Remove '$base' from default index"
 				continue
 			fi
 
-			local as_target_item="${target_dir}/${item}"
-			local as_profile_item="${profile_dir}/${item}"
-			local as_default_item="${default_dir}/${item}"
+			local as_output_item="${output_dir}/${base}"
+			local as_override_item="${override_dir}/${base}"
+			local as_default_item="${default_dir}/${base}"
 			local actual_path="${!as_var}"
 
-			local is_profiles=false
-			if [[ "$own" == "profile" ]]; then
-				is_profiles=true
-				if [[ "$item" == "$HOST_PREFIX"* ]]; then
-					as_target_item="${target_dir}/${renamed_item}"
-					prefixed_items+=("${renamed_item}")
+			local is_overrides=false is_prefixed=false
+			if [[ "$own" == "both" ]]; then
+				is_overrides=true # Prefer override's file
+			fi
+
+			if [[ "$own" == "override" ]]; then
+				is_overrides=true
+				if [[ "$base" == "$PROFILE_PREFIX"* ]]; then
+					is_prefixed=true
+					local origin_base="${base#"${PROFILE_PREFIX}"}"
+					as_output_item="${output_dir}/${origin_base}"
+					_debug "Add $own's prefixed item $base ($origin_base)"
+					prefixed_items+=("$origin_base")
 				fi
 			fi
 
-			local write_path="${as_target_item:$target_dir_len+1}"
-			_debug "Create: \"${LC["path"]}$as_target_item${C["0"]}\""
-			local item_type
-			if [[ -d "$actual_path" ]]; then
-				$is_profiles && item_type="${ITEM[pD]}" || item_type="${ITEM[D]}"
+			local write_path="${as_output_item:$output_dir_len+1}"
+			_debug "Create: \"${LC["path"]}$as_output_item${C["0"]}\""
+			if [[ "$type" == "d" ]]; then
+				if $is_prefixed; then
+					item_type="${TYPE[xD]}"
+				elif $is_overrides; then
+					item_type="${TYPE[pD]}"
+				else
+					item_type="${TYPE[D]}"
+				fi
 				_write_track "$TRACK" "$item_type" "$write_path" ""
 
-				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$as_target_item" -d
+				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$as_output_item" -d
 				if [[ "$own" == "both" ]]; then
-					link "$as_target_item" "$as_profile_item" "$as_default_item"
-				elif [[ "$own" == "profile" ]]; then
-					link "$as_target_item" "$as_profile_item" ""
+					link "$as_output_item" "$as_override_item" "$as_default_item"
+				elif [[ "$own" == "override" ]]; then
+					link "$as_output_item" "$as_override_item" ""
 				elif [[ "$own" == "default" ]]; then
-					link "$as_target_item" "" "$as_default_item"
+					link "$as_output_item" "" "$as_default_item"
 				fi
-			elif [[ -f "$actual_path" ]]; then
-				[[ "$own" == "both" ]] && is_profiles=true # Prefer profile's file
-				$is_profiles && item_type="${ITEM[pF]}" || item_type="${ITEM[F]}"
+			elif [[ "$type" == "f" ]]; then
+				if $is_prefixed; then
+					item_type="${TYPE[xF]}"
+				elif $is_overrides; then
+					item_type="${TYPE[pF]}"
+				else
+					item_type="${TYPE[F]}"
+				fi
 				_write_track "$TRACK" "$item_type" "$write_path" "$(sha256sum "$actual_path" | cut -d ' ' -f1)"
-
-				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$actual_path" "$as_target_item"
+				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$actual_path" "$as_output_item"
 			fi
 		done
 	done
@@ -750,9 +778,9 @@ cmd_apply() {
 	install -m 0644 /dev/null "$track_file"
 	# track header
 
-	printf "%s\0%s\0" "$profile" "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" >>"$track_file"
+	printf "%s\0%s\0%s\0" "$(id -u "$username")" "$profile" "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" >>"$track_file"
 
-	TRACK="$track_file" HOST_PREFIX="${profile}##" INSTALL_USER="$username" \
+	TRACK="$track_file" PROFILE_PREFIX="${profile}#" INSTALL_USER="$username" \
 		link "$home" "$profile_dir" "$(get_home_profile_dir "default")"
 
 	if [[ -z "$profile" ]]; then
@@ -803,19 +831,25 @@ main_() {
 	# Run command
 	INTERNAL=false "cmd_$mode" "${CMDS[@]:1}"
 
-	if $IS_DOCKER; then
-		printf "Keeping docker container running...\n"
-		tail -f /dev/null
-	fi
 }
 
 main_ "$@"
-
-# get_items2 "/" roots
-# printf "%s\n" "${roots[@]}"
 
 # if [[ "$IS_DEBUG" ]]; then
 # 	git() {
 # 		echo ''
 # 	}
 # fi
+
+# declare -a items
+# get_items "/" items
+
+# for item in "${items[@]}"; do
+# 	echo "$item"
+# done
+
+##### Docker util #####
+if $IS_DOCKER; then
+	printf "Keeping docker container running...\n"
+	tail -f /dev/null
+fi

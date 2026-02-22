@@ -32,11 +32,22 @@ declare -Ar C=(
 	[W]="\033[1;37m"  # Bold White
 )
 
-declare -Ar ITEM=(
-	[F]=$'\1'
-	[pF]=$'\2'
-	[D]=$'\3'
-	[pD]=$'\4'
+declare -Ar TYPE=(
+	[F]=1
+	[D]=2
+
+	[pF]=3
+	[pD]=4
+
+	[xF]=5
+	[xD]=6
+)
+
+declare -Ar TYPE_CLR=(
+	[${TYPE[D]}]="${C[w]}"
+	[${TYPE[F]}]="${C[W]}"
+	[${TYPE[pD]}]="${C[g]}"
+	[${TYPE[pF]}]="${C[G]}"
 )
 
 declare -Ar STATE=(
@@ -108,7 +119,7 @@ is_profiles() {
 }
 
 is_file() {
-	if (($1 <= 2)); then
+	if (($1 % 2 != 0)); then
 		return 0
 	else
 		return 1
@@ -130,88 +141,89 @@ get_items() {
 		<(find "$dir_path" -mindepth 1 -maxdepth 1 -printf "%f\0")
 }
 
-update() {
+diff() {
 	local track_file="$1"
 
-	local -A UNTRACKED_ITEM=()
+	local -A UNTRACKED_TYPE=()
 	{
-		local profile commit_id
+		local user_id profile commit_id
+		read_by_null "user_id"
 		read_by_null "profile"
 		read_by_null "commit_id"
-		echo "profile=$profile, commit id=$commit_id"
+		echo "user_id=$user_id, profile=$profile, commit id=$commit_id"
 
-		local SKIP_DIR="" item
+		local SKIP_DIR="" type
 		while :; do
-			local type=""
 			if ! read_byte type; then
 				break
 			fi
 
-			local base="" sum="" repo_path=""
-			case "$type" in
-			"${ITEM[pF]}" | "${ITEM[F]}")
+			local base="" sum=""
+			if is_file "$type"; then
 				read_by_null "base"
 				read_by_null "sum"
-				repo_path="$PROFILE_DIR/$base"
-				;;
-			"${ITEM[pD]}" | "${ITEM[D]}")
+			else
 				read_by_null "base"
-				repo_path="$DEFAULT_DIR/$base"
-				;;
-			*)
-				printf "err: invalid file format\n" && exit 1
-				;;
-			esac
-
-			local home_path="$HOME_DIR/$base" state=${STATE[_]}
-			if [[ -n "$SKIP_DIR" ]]; then
-				if [[ "$base" == "$SKIP_DIR/"* ]]; then
-					state=${STATE[D]}
-					printfc "├─ $home_path" "${STATE_CLR[$state]}"
-					continue
-				else
-					SKIP_DIR=""
-				fi
 			fi
+			printf "($type)  $base\n"
 
-			case "$type" in
-			"${ITEM[pF]}" | "${ITEM[F]}")
-				if [[ -f "$home_path" ]]; then
-					if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
-						state=${STATE[M]}
-					fi
-				else
-					state=${STATE[D]} # deleted (or dir)
-				fi
-				;;
-			"${ITEM[pD]}" | "${ITEM[D]}")
-				if [[ -d "$home_path" ]]; then
-					while read_by_null item; do
-						UNTRACKED_ITEM["$item"]=1
-					done < <(find "$home_path" -maxdepth 1 -mindepth 1 -print0)
-				else
-					state=${STATE[D]} # deleted (or file)
-					SKIP_DIR="$base"
-				fi
-				;;
-			esac
+			# local state=${STATE[_]}
+			# if [[ -n "$SKIP_DIR" ]]; then
+			# 	if [[ "$base" == "$SKIP_DIR/"* ]]; then
+			# 		state=${STATE[D]}
+			# 		printfc "($type) ├─ $base" "${STATE_CLR[$state]}"
+			# 		continue
+			# 	else
+			# 		SKIP_DIR=""
+			# 	fi
+			# fi
 
-			# cuz parent add ME!!
-			unset "UNTRACKED_ITEM[$home_path]"
-			printfc "$home_path" "${STATE_CLR[$state]}"
+			# local home_path="$HOME_DIR/$base"
 
+			# if is_file "$type"; then
+			# 	if [[ -f "$home_path" ]]; then
+			# 		if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
+			# 			state=${STATE[M]}
+			# 		fi
+			# 	else
+			# 		state=${STATE[D]} # deleted (or dir)
+			# 	fi
+			# else
+			# 	if [[ -d "$home_path" ]]; then
+			# 		local item
+			# 		while read_by_null item; do
+			# 			UNTRACKED_TYPE["$item"]=1
+			# 		done < <(find "$home_path" -maxdepth 1 -mindepth 1 -print0)
+			# 	else
+			# 		state=${STATE[D]} # deleted (or file)
+			# 		SKIP_DIR="$base"
+			# 	fi
+			# fi
+
+			# case "$state" in
+			# "${STATE[_]}" | "${STATE[M]}")
+			# 	unset "UNTRACKED_TYPE[$home_path]"
+			# 	if [[ "$state" == "${STATE[M]}" ]]; then
+			# 		echo 'writing...'
+			# 		install -o root -g root -m 700 "$home_path" "$repo_path"
+			# 	fi
+			# 	;;
+			# "${STATE[D]}") ;;
+			# esac
+
+			# printfc "($type) $base" "${STATE_CLR[$state]}"
 		done
 
 	} <"$track_file"
 
-	for untracked_item in "${!UNTRACKED_ITEM[@]}"; do
+	for untracked_item in "${!UNTRACKED_TYPE[@]}"; do
 		printfc "$untracked_item" "${STATE_CLR[${STATE[A]}]}"
 	done
 }
 
 main() {
 	HOME_DIR="/home/kana" DEFAULT_DIR="$(get_home_profile_dir "default")" PROFILE_DIR="$(get_home_profile_dir "uwu")" \
-		update "$REPO_TRACKS_DIR/1000"
+		diff "$REPO_TRACKS_DIR/1000"
 }
 
 main
