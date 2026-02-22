@@ -501,37 +501,27 @@ get_mixed_items() {
 		<(printf "%s\0" "${right_arr[@]}" | sort -z))
 }
 
-declare -Ar TYPE=(
-	[F]=1
-	[D]=2
-
-	[pF]=3
-	[pD]=4
-
-	[xF]=5
-	[xD]=6
+declare -A OWN=(
+	[default]=1
+	[override]=2
+	[both]=3
+	[prefixed]=4
+	[ghost]=9
 )
 
-is_file() {
-	if (($1 % 2 != 0)); then
-		return 0
-	else
-		return 1
-	fi
-}
-
-_write_track() {
+_append_track() {
 	local track_path="$1"
-	local type="$2"
-	local path="$3"
-	local f2="$4"
+	#
+	local item_type="$2"
+	local own="$3"
+	local base_path="$4"
+	local sum="${5:-}" # file only
 
-	if is_file "$type"; then
-		printf "%s%s\0%s\0" "$type" "$path" "$f2" >>"$track_path"
-	else
-		printf "%s%s\0" "$type" "$path" >>"$track_path"
+	if [[ "$item_type" == "f" ]]; then
+		printf "%s%s%s\0%s\0" "$item_type" "${OWN[$own]}" "$base_path" "$sum" >>"$track_path"
+	elif [[ "$item_type" == "d" ]]; then
+		printf "%s%s%s\0" "$item_type" "${OWN[$own]}" "$base_path" >>"$track_path"
 	fi
-
 }
 
 link() {
@@ -565,72 +555,64 @@ link() {
 	local own prefixed_items=()
 	for own in "override" "both" "default"; do
 		local -n items="${own}_items"
+
 		local as_var
-		[[ "$own" == "both" ]] && as_var="as_override_item" || as_var="as_${own}_item"
+		if [[ "$own" == "both" ]]; then
+			as_var="as_override_item" # choose override path
+		else
+			as_var="as_${own}_item"
+		fi
 
 		local item
 		for item in "${items[@]}"; do
 			[[ -z "$item" ]] && continue
+
 			local type="${item:0:1}"
 			local base="${item:1}"
 
-			# Prevent load prefixed item (e.g. uwu##.config -> .config)
+			local as_override_item="${override_dir}/${base}"
+			local as_default_item="${default_dir}/${base}"
+			local repo_path="${!as_var}"
+
+			local sum=""
+			if [[ "$type" == "f" ]]; then
+				sum="$(sha256sum "$repo_path" | cut -d ' ' -f1)"
+			fi
+
+			local output_path="${output_dir}/${base}"
+			local write_path="${output_path:$output_dir_len+1}"
+			local write_own="$own"
+
+			# Skip prefixed override path (for default)
 			if [[ "$own" == "default" ]] && is_contain "$base" "prefixed_items"; then
-				_debug "Remove '$base' from default index"
+				_debug "Skip '$base' from default index"
 				continue
 			fi
 
-			local as_output_item="${output_dir}/${base}"
-			local as_override_item="${override_dir}/${base}"
-			local as_default_item="${default_dir}/${base}"
-			local actual_path="${!as_var}"
-
-			local is_overrides=false is_prefixed=false
-			if [[ "$own" == "both" ]]; then
-				is_overrides=true # Prefer override's file
+			# Fix: <Prefixed Path> -> <Output Path>
+			if [[ "$own" == "override" && "$base" == "$PROFILE_PREFIX"* ]]; then
+				local origin_base="${base#"${PROFILE_PREFIX}"}"
+				output_path="${output_dir}/${origin_base}"
+				_debug "Add $own's prefixed item $base ($origin_base)"
+				prefixed_items+=("$origin_base")
+				write_path="${output_path:$output_dir_len+1}"
+				write_own="prefixed"
 			fi
 
-			if [[ "$own" == "override" ]]; then
-				is_overrides=true
-				if [[ "$base" == "$PROFILE_PREFIX"* ]]; then
-					is_prefixed=true
-					local origin_base="${base#"${PROFILE_PREFIX}"}"
-					as_output_item="${output_dir}/${origin_base}"
-					_debug "Add $own's prefixed item $base ($origin_base)"
-					prefixed_items+=("$origin_base")
-				fi
-			fi
-
-			local write_path="${as_output_item:$output_dir_len+1}"
-			_debug "Create: \"${LC["path"]}$as_output_item${C["0"]}\""
+			_debug "Create: \"${LC["path"]}$output_path${C["0"]}\""
 			if [[ "$type" == "d" ]]; then
-				if $is_prefixed; then
-					item_type="${TYPE[xD]}"
-				elif $is_overrides; then
-					item_type="${TYPE[pD]}"
-				else
-					item_type="${TYPE[D]}"
-				fi
-				_write_track "$TRACK" "$item_type" "$write_path" ""
-
-				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$as_output_item" -d
+				_append_track "$TRACK" "$type" "$write_own" "$write_path"
+				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$output_path" -d
 				if [[ "$own" == "both" ]]; then
-					link "$as_output_item" "$as_override_item" "$as_default_item"
+					link "$output_path" "$as_override_item" "$as_default_item"
 				elif [[ "$own" == "override" ]]; then
-					link "$as_output_item" "$as_override_item" ""
+					link "$output_path" "$as_override_item" ""
 				elif [[ "$own" == "default" ]]; then
-					link "$as_output_item" "" "$as_default_item"
+					link "$output_path" "" "$as_default_item"
 				fi
 			elif [[ "$type" == "f" ]]; then
-				if $is_prefixed; then
-					item_type="${TYPE[xF]}"
-				elif $is_overrides; then
-					item_type="${TYPE[pF]}"
-				else
-					item_type="${TYPE[F]}"
-				fi
-				_write_track "$TRACK" "$item_type" "$write_path" "$(sha256sum "$actual_path" | cut -d ' ' -f1)"
-				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$actual_path" "$as_output_item"
+				_append_track "$TRACK" "$type" "$write_own" "$write_path" "$sum"
+				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$repo_path" "$output_path"
 			fi
 		done
 	done

@@ -32,22 +32,13 @@ declare -Ar C=(
 	[W]="\033[1;37m"  # Bold White
 )
 
-declare -Ar TYPE=(
-	[F]=1
-	[D]=2
-
-	[pF]=3
-	[pD]=4
-
-	[xF]=5
-	[xD]=6
-)
-
-declare -Ar TYPE_CLR=(
-	[${TYPE[D]}]="${C[w]}"
-	[${TYPE[F]}]="${C[W]}"
-	[${TYPE[pD]}]="${C[g]}"
-	[${TYPE[pF]}]="${C[G]}"
+declare -A OWN=(
+	[default]=1
+	[override]=2
+	[both]=3
+	# Prefixed item might have alias on default (so we just delte the prefixed one)
+	[prefixed]=4
+	[ghost]=9
 )
 
 declare -Ar STATE=(
@@ -152,66 +143,72 @@ diff() {
 		read_by_null "commit_id"
 		echo "user_id=$user_id, profile=$profile, commit id=$commit_id"
 
-		local SKIP_DIR="" type
+		local SKIP_DIR=""
 		while :; do
+			local type
 			if ! read_byte type; then
 				break
 			fi
 
-			local base="" sum=""
-			if is_file "$type"; then
+			local own
+			read_byte own
+
+			local base sum
+			if [[ "$type" == "f" ]]; then
 				read_by_null "base"
 				read_by_null "sum"
-			else
+			elif [[ "$type" == "d" ]]; then
 				read_by_null "base"
+			else
+				printf "invalid file format\n" && exit 1
 			fi
-			printf "($type)  $base\n"
 
-			# local state=${STATE[_]}
-			# if [[ -n "$SKIP_DIR" ]]; then
-			# 	if [[ "$base" == "$SKIP_DIR/"* ]]; then
-			# 		state=${STATE[D]}
-			# 		printfc "($type) ├─ $base" "${STATE_CLR[$state]}"
-			# 		continue
-			# 	else
-			# 		SKIP_DIR=""
-			# 	fi
-			# fi
+			local state=${STATE[_]}
+			if [[ -n "$SKIP_DIR" ]]; then
+				if [[ "$base" == "$SKIP_DIR/"* ]]; then
+					state=${STATE[D]}
+					printfc "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
+					continue
+				else
+					SKIP_DIR=""
+				fi
+			fi
 
-			# local home_path="$HOME_DIR/$base"
+			local home_path="$HOME_DIR/$base"
 
-			# if is_file "$type"; then
-			# 	if [[ -f "$home_path" ]]; then
-			# 		if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
-			# 			state=${STATE[M]}
-			# 		fi
-			# 	else
-			# 		state=${STATE[D]} # deleted (or dir)
-			# 	fi
-			# else
-			# 	if [[ -d "$home_path" ]]; then
-			# 		local item
-			# 		while read_by_null item; do
-			# 			UNTRACKED_TYPE["$item"]=1
-			# 		done < <(find "$home_path" -maxdepth 1 -mindepth 1 -print0)
-			# 	else
-			# 		state=${STATE[D]} # deleted (or file)
-			# 		SKIP_DIR="$base"
-			# 	fi
-			# fi
+			if [[ "$type" == "f" ]]; then
+				if [[ -f "$home_path" ]]; then
+					if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
+						state=${STATE[M]}
+					fi
+				else
+					state=${STATE[D]} # deleted (or dir)
+				fi
+			else
+				if [[ -d "$home_path" ]]; then
+					local item
+					while read_by_null item; do
+						UNTRACKED_TYPE["$item"]=1
+					done < <(find "$home_path" -maxdepth 1 -mindepth 1 -print0)
+				else
+					state=${STATE[D]} # deleted (or file)
+					SKIP_DIR="$base"
+				fi
+			fi
 
-			# case "$state" in
-			# "${STATE[_]}" | "${STATE[M]}")
-			# 	unset "UNTRACKED_TYPE[$home_path]"
-			# 	if [[ "$state" == "${STATE[M]}" ]]; then
-			# 		echo 'writing...'
-			# 		install -o root -g root -m 700 "$home_path" "$repo_path"
-			# 	fi
-			# 	;;
-			# "${STATE[D]}") ;;
-			# esac
+			case "$state" in
+			"${STATE[_]}" | "${STATE[M]}")
+				unset "UNTRACKED_TYPE[$home_path]"
+				if [[ "$state" == "${STATE[M]}" ]]; then
+					:
+					# echo 'writing...'
+					# install -o root -g root -m 700 "$home_path" "$repo_path"
+				fi
+				;;
+			"${STATE[D]}") ;;
+			esac
 
-			# printfc "($type) $base" "${STATE_CLR[$state]}"
+			printfc "($type:$own) $base" "${STATE_CLR[$state]}"
 		done
 
 	} <"$track_file"
