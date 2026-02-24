@@ -117,12 +117,6 @@ is_file() {
 	fi
 }
 
-is_in_skip_dir() {
-	local skip_dir="$1"
-	local current_path="$2"
-
-}
-
 get_items() {
 	local dir_path="$1"
 	local -n arr_ref="$2"
@@ -135,24 +129,29 @@ get_items() {
 diff() {
 	local track_file="$1"
 
-	local -A UNTRACKED_TYPE=()
+	_show_err() {
+		printf "parse err: %s\n" "$1" >&2
+		exit 1
+	}
+
+	# File: <type><own><base>\0<sum>\0
+	# Dir : <type><own><base>\0
 	{
-		local user_id profile commit_id
+		local user_id profile commit_id prefix
 		read_by_null "user_id"
 		read_by_null "profile"
 		read_by_null "commit_id"
-		echo "user_id=$user_id, profile=$profile, commit id=$commit_id"
+		prefix="$profile#"
 
-		local SKIP_DIR=""
+		local -A new_item=()
+		local skip_base="" prefix_dir="" prefix_base=""
 		while :; do
-			local type
-			if ! read_byte type; then
-				break
-			fi
-
-			local own
+			# Read Item Header (Or EOF)
+			local type own
+			read_byte type || break
 			read_byte own
 
+			# Read Item Contents
 			local base sum
 			if [[ "$type" == "f" ]]; then
 				read_by_null "base"
@@ -160,22 +159,54 @@ diff() {
 			elif [[ "$type" == "d" ]]; then
 				read_by_null "base"
 			else
-				printf "invalid file format\n" && exit 1
+				_show_err "unknown file type: '$type'"
 			fi
 
 			local state=${STATE[_]}
-			if [[ -n "$SKIP_DIR" ]]; then
-				if [[ "$base" == "$SKIP_DIR/"* ]]; then
+			if [[ -n "$skip_base" ]]; then
+				if [[ "$base" == "$skip_base/"* ]]; then
 					state=${STATE[D]}
 					printfc "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
 					continue
 				else
-					SKIP_DIR=""
+					skip_base=""
 				fi
 			fi
 
-			local home_path="$HOME_DIR/$base"
+			# Resolve Repository Path
+			local repo_path has_repo_path=false
+			if [[ -n "$prefix_dir" ]]; then
+				if [[ "$base" == "$prefix_base/"* ]]; then
+					has_repo_path=true
+					repo_path=$prefix_dir/${base##*/}
+				else
+					prefix_base=""
+					prefix_dir=""
+				fi
+			fi
 
+			if ! $has_repo_path; then
+				if [[ "$own" == "${OWN[prefixed]}" ]]; then
+					if [[ "$base" == *"/"* ]]; then
+						repo_path="$_OVERRIDE_DIR/${base%/*}/$prefix${base##*/}"
+					else
+						repo_path="$_OVERRIDE_DIR/$prefix$base"
+					fi
+					# Store prefix directory
+					if [[ "$type" == "d" ]]; then
+						prefix_base="$base"
+						prefix_dir="$repo_path"
+					fi
+				elif [[ "$own" == "${OWN[override]}" || "$own" == "${OWN[both]}" ]]; then
+					repo_path="$_OVERRIDE_DIR/$base"
+				elif [[ "$own" == "${OWN[default]}" ]]; then
+					repo_path="$_DEFAULT_DIR/$base"
+				else
+					_show_err "unknown own type '$own'"
+				fi
+			fi
+
+			local home_path="$_HOME_DIR/$base"
 			if [[ "$type" == "f" ]]; then
 				if [[ -f "$home_path" ]]; then
 					if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
@@ -188,39 +219,51 @@ diff() {
 				if [[ -d "$home_path" ]]; then
 					local item
 					while read_by_null item; do
-						UNTRACKED_TYPE["$item"]=1
+						new_item["$item"]=1
 					done < <(find "$home_path" -maxdepth 1 -mindepth 1 -print0)
 				else
 					state=${STATE[D]} # deleted (or file)
-					SKIP_DIR="$base"
+					skip_base="$base"
 				fi
 			fi
 
 			case "$state" in
 			"${STATE[_]}" | "${STATE[M]}")
-				unset "UNTRACKED_TYPE[$home_path]"
+				unset "new_item[$home_path]"
 				if [[ "$state" == "${STATE[M]}" ]]; then
-					:
-					# echo 'writing...'
-					# install -o root -g root -m 700 "$home_path" "$repo_path"
+					install -o root -g root -m 700 "$home_path" "$repo_path"
 				fi
 				;;
-			"${STATE[D]}") ;;
+			"${STATE[D]}")
+				rm -rf "$repo_path"
+				;;
 			esac
 
 			printfc "($type:$own) $base" "${STATE_CLR[$state]}"
 		done
 
+		for new_item in "${!new_item[@]}"; do
+			printfc "$new_item" "${STATE_CLR[${STATE[A]}]}"
+		done
+
 	} <"$track_file"
 
-	for untracked_item in "${!UNTRACKED_TYPE[@]}"; do
-		printfc "$untracked_item" "${STATE_CLR[${STATE[A]}]}"
-	done
 }
 
 main() {
-	HOME_DIR="/home/kana" DEFAULT_DIR="$(get_home_profile_dir "default")" PROFILE_DIR="$(get_home_profile_dir "uwu")" \
+	local home="/home/kana"
+	local del_base="$home/.config/zsh"
+	local del_repo_path="$home/.config/zsh"
+
+	if [[ -e "$del_base" ]]; then
+		echo "exist ok: $del_base"
+	fi
+
+	rm -rf "$del_base"
+
+	_HOME_DIR="$home" _DEFAULT_DIR="$(get_home_profile_dir "default")" _OVERRIDE_DIR="$(get_home_profile_dir "uwu")" \
 		diff "$REPO_TRACKS_DIR/1000"
+
 }
 
 main

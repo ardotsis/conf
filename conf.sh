@@ -473,11 +473,11 @@ backup_item() {
 
 get_items() {
 	local dir_path="$1"
-	local -n result_arr_name="$2"
+	local -n result_arr="$2"
 
 	# shellcheck disable=SC2034
-	mapfile -d $'\0' result_arr_name < \
-		<(find "$dir_path" -mindepth 1 -maxdepth 1 ! -type l -printf "%y%f\0")
+	mapfile -d $'\0' result_arr < \
+		<(find "$dir_path" -mindepth 1 -maxdepth 1 ! -type l -printf "%y%f\0" | sort -z)
 }
 
 get_mixed_items() {
@@ -497,8 +497,8 @@ get_mixed_items() {
 
 	# shellcheck disable=SC2034
 	mapfile -d $'\0' result_arr < <(comm "$comm_num" -z \
-		<(printf "%s\0" "${left_arr[@]}" | sort -z) \
-		<(printf "%s\0" "${right_arr[@]}" | sort -z))
+		<(printf "%s\0" "${left_arr[@]}") \
+		<(printf "%s\0" "${right_arr[@]}"))
 }
 
 declare -A OWN=(

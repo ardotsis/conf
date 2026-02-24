@@ -4,6 +4,8 @@ param(
     [string] $Os,
     [Parameter(Mandatory = $true)]
     [string] $Username,
+    [Parameter(Mandatory = $true)]
+    [string] $Exec,
     [Parameter(Mandatory = $false)]
     [string] $WorkDir
 )
@@ -27,5 +29,5 @@ $ContainerName = "${ImageName}-cont"
     --tty `
     --workdir "$WorkDir" `
     --user "$Username" `
-    "$ContainerName" zsh `
+    "$ContainerName" "$Exec" `
     --login

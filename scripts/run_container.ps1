@@ -15,7 +15,7 @@ $Dockerfile = "${DockerfilesDir}\$Os"
 $ImageName = "conf-${Os}"
 $ImageTag = "latest"
 $ContainerName = "${ImageName}-cont"
-$GuestVolumeDir = "/app"
+$GuestVolumeDir = "/app-dev"
 
 
 function Remove-Objects {
@@ -121,7 +121,7 @@ function main() {
         "--interactive",
         "--tty",
         "--hostname=somehost",
-        "--mount", "type=bind,source=$RepoDir,target=$GuestVolumeDir",
+        "--mount", "type=bind,source=$RepoDir,target=$GuestVolumeDir,readonly",
         "--env", "INSTALL_SCRIPT_PARAMS=$Params",
         "--env", "DOTFILES_VOLUME_DIR=$GuestVolumeDir",
         "--name", $ContainerName,
