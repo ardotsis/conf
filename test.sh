@@ -181,7 +181,7 @@ diff() {
 					local item
 					while read_by_null item; do
 						new_item["$item"]=1
-					done < <(find "$home_path" -maxdepth 1 -mindepth 1 -print0)
+					done < <(find "$home_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%p\0")
 				else
 					state=${STATE[D]} # deleted (or file)
 					skip_base="$base"
@@ -190,13 +190,22 @@ diff() {
 
 			case "$state" in
 			"${STATE[_]}" | "${STATE[M]}")
-				unset "new_item[$home_path]"
+				unset "new_item[$type$home_path]"
 				if [[ "$state" == "${STATE[M]}" ]]; then
+					rm -f "$repo_path"
 					install -o root -g root -m 700 "$home_path" "$repo_path"
 				fi
 				;;
 			"${STATE[D]}")
-				# echo "RM"
+				local usr_input
+				if [[ "$own" == "${OWN[both]}" ]]; then
+					printf "($base) this item has alias on default profile.\nDo you want to delete it too?\n"
+					rm -rf "$default_dir/$base"
+					# read -r usr_input </dev/tty
+					# if [[ "$usr_input" == "y" ]]; then
+					# 	rm -rf "$default_dir/$base"
+					# fi
+				fi
 				rm -rf "$repo_path"
 				;;
 			esac
@@ -223,13 +232,28 @@ HOME_DIR="/home/$USER"
 DEFAULT_DIR="$REPO_PROFILES_DIR/default/home/default"
 OVERRIDE_DIR="$REPO_PROFILES_DIR/$PROFILE/home/$PROFILE"
 
-# Tests
-repo_dir_1="$OVERRIDE_DIR/uwu#aaaa"
-home_dir_1="$HOME_DIR/aaaa"
-# rm -rf "$home_dir_1"
+# Test 1 - Delete default, override dir
+default_dir_1="$DEFAULT_DIR/.config/zsh"
+override_dir_1="$OVERRIDE_DIR/.config/zsh"
+home_dir_1="$HOME_DIR/.config/zsh"
+rm -rf "$home_dir_1"
+
+# Test 2 - Modify default file
+home_item_1="$HOME_DIR/.hushlogin"
+default_item_1="$DEFAULT_DIR/.hushlogin"
+write_str="test.sh"
+printf "%s" "$write_str" >>"$home_item_1"
 
 diff "$HOME_DIR" "$DEFAULT_DIR" "$OVERRIDE_DIR" "$REPO_TRACKS_DIR/1000"
 
-if [[ -d "$repo_dir_1" ]]; then
-	printf "test ok!!!"
+if [[ ! -e "$default_dir_1" && ! -e "$override_dir_1" ]]; then
+	printfc "Test 1 - PASSED" "${C[G]}"
+else
+	printfc "Test 1 - FAILED" "${C[R]}"
+fi
+
+if [[ "$(cat "$default_item_1")" == "$write_str" ]]; then
+	printfc "Test 2 - PASSED" "${C[G]}"
+else
+	printfc "Test 2 - FAILED" "${C[R]}"
 fi
