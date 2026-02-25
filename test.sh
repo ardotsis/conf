@@ -104,6 +104,8 @@ diff() {
 		read_by_null "commit_id"
 		prefix="$profile#"
 
+		local -A del_dir=()
+
 		local -A new_item=()
 		local skip_base="" prefix_dir="" prefix_base=""
 		while :; do
@@ -121,6 +123,10 @@ diff() {
 				read_by_null "base"
 			else
 				_show_err "unknown file type: '$type'"
+			fi
+
+			if [[ -n "${skip_dir[$base]+x}" ]]; then
+				echo "detect skip dir $base"
 			fi
 
 			local state=${STATE[_]}
@@ -184,6 +190,7 @@ diff() {
 					done < <(find "$home_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%p\0")
 				else
 					state=${STATE[D]} # deleted (or file)
+					skip_dir["$base"]=1
 					skip_base="$base"
 				fi
 			fi
