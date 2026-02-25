@@ -30,4 +30,3 @@ $ContainerName = "${ImageName}-cont"
     --workdir "$WorkDir" `
     --user "$Username" `
     "$ContainerName" "$Exec" `
-    --login

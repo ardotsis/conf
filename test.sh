@@ -1,12 +1,6 @@
 #!/bin/bash
 set -e -u -o pipefail -C
 
-declare -r REPO_INSTALL_DIR="/usr/local/share/conf"
-declare -r REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
-declare -r REPO_TRACKS_DIR="$REPO_DATA_DIR/tracks"
-declare -r REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
-declare -r REPO_PACKAGES_FILE="$REPO_PROFILES_DIR/packages"
-
 declare -Ar C=(
 	[0]="\033[0m" # Reset
 	[B]="\033[1m" # Bold
@@ -36,9 +30,7 @@ declare -A OWN=(
 	[default]=1
 	[override]=2
 	[both]=3
-	# Prefixed item might have alias on default (so we just delte the prefixed one)
 	[prefixed]=4
-	[ghost]=9
 )
 
 declare -Ar STATE=(
@@ -54,20 +46,6 @@ declare -Ar STATE_CLR=(
 	[${STATE[A]}]="${C[G]}"
 	[${STATE[D]}]="${C[R]}"
 )
-
-get_profile_dir() {
-	local profile="$1"
-	printf "%s/%s" "$REPO_PROFILES_DIR" "$profile"
-}
-
-get_home_profile_dir() {
-	local profile="$1"
-
-	local profile_dir
-	profile_dir="$(get_profile_dir "$profile")"
-
-	printf "%s/home/%s" "$profile_dir" "$profile"
-}
 
 printfc() {
 	local msg="$1"
@@ -87,10 +65,6 @@ get_sum() {
 	printf "%s" "$(sha256sum "$1" | cut -d ' ' -f1)"
 }
 
-get_commit_id() {
-	git -C "$REPO_INSTALL_DIR" rev-parse HEAD
-}
-
 read_by_null() {
 	local -n _ref="${1:-REPLY}"
 	IFS="" read -r -d $'\0' _ref
@@ -99,22 +73,6 @@ read_by_null() {
 read_byte() {
 	local -n _ref="${1:-REPLY}"
 	IFS="" read -r -n 1 _ref
-}
-
-is_profiles() {
-	if (($1 % 2 == 0)); then
-		return 0
-	else
-		return 1
-	fi
-}
-
-is_file() {
-	if (($1 % 2 != 0)); then
-		return 0
-	else
-		return 1
-	fi
 }
 
 get_items() {
@@ -127,10 +85,13 @@ get_items() {
 }
 
 diff() {
-	local track_file="$1"
+	local output_dir="$1"
+	local default_dir="$2"
+	local override_dir="$3"
+	local track_file="$4"
 
 	_show_err() {
-		printf "parse err: %s\n" "$1" >&2
+		printf "diff err: %s\n" "$1" >&2
 		exit 1
 	}
 
@@ -188,9 +149,9 @@ diff() {
 			if ! $has_repo_path; then
 				if [[ "$own" == "${OWN[prefixed]}" ]]; then
 					if [[ "$base" == *"/"* ]]; then
-						repo_path="$_OVERRIDE_DIR/${base%/*}/$prefix${base##*/}"
+						repo_path="$override_dir/${base%/*}/$prefix${base##*/}"
 					else
-						repo_path="$_OVERRIDE_DIR/$prefix$base"
+						repo_path="$override_dir/$prefix$base"
 					fi
 					# Store prefix directory
 					if [[ "$type" == "d" ]]; then
@@ -198,15 +159,15 @@ diff() {
 						prefix_dir="$repo_path"
 					fi
 				elif [[ "$own" == "${OWN[override]}" || "$own" == "${OWN[both]}" ]]; then
-					repo_path="$_OVERRIDE_DIR/$base"
+					repo_path="$override_dir/$base"
 				elif [[ "$own" == "${OWN[default]}" ]]; then
-					repo_path="$_DEFAULT_DIR/$base"
+					repo_path="$default_dir/$base"
 				else
 					_show_err "unknown own type '$own'"
 				fi
 			fi
 
-			local home_path="$_HOME_DIR/$base"
+			local home_path="$output_dir/$base"
 			if [[ "$type" == "f" ]]; then
 				if [[ -f "$home_path" ]]; then
 					if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
@@ -235,6 +196,7 @@ diff() {
 				fi
 				;;
 			"${STATE[D]}")
+				# echo "RM"
 				rm -rf "$repo_path"
 				;;
 			esac
@@ -250,20 +212,24 @@ diff() {
 
 }
 
-main() {
-	local home="/home/kana"
-	local del_base="$home/.config/zsh"
-	local del_repo_path="$home/.config/zsh"
+# Env
+USER="kana"
+PROFILE="uwu"
+REPO_INSTALL_DIR="/usr/local/share/conf"
+REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
+REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
+REPO_TRACKS_DIR="$REPO_DATA_DIR/tracks"
+HOME_DIR="/home/$USER"
+DEFAULT_DIR="$REPO_PROFILES_DIR/default/home/default"
+OVERRIDE_DIR="$REPO_PROFILES_DIR/$PROFILE/home/$PROFILE"
 
-	if [[ -e "$del_base" ]]; then
-		echo "exist ok: $del_base"
-	fi
+# Tests
+repo_dir_1="$OVERRIDE_DIR/uwu#aaaa"
+home_dir_1="$HOME_DIR/aaaa"
+# rm -rf "$home_dir_1"
 
-	rm -rf "$del_base"
+diff "$HOME_DIR" "$DEFAULT_DIR" "$OVERRIDE_DIR" "$REPO_TRACKS_DIR/1000"
 
-	_HOME_DIR="$home" _DEFAULT_DIR="$(get_home_profile_dir "default")" _OVERRIDE_DIR="$(get_home_profile_dir "uwu")" \
-		diff "$REPO_TRACKS_DIR/1000"
-
-}
-
-main
+if [[ -d "$repo_dir_1" ]]; then
+	printf "test ok!!!"
+fi
