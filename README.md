@@ -28,3 +28,22 @@ Enter container
 ```powershell
 .\scripts\enter_docker.ps1 -Os debian -Username kana
 ```
+
+## Memo
+
+```
+diff for just an update...?
+or detect some change
+
+track file::::::::git::
+diff -> unlink -> apply
+
+we should show warn msg to usr
+when delte [both] dir/file
+delete default/override (or each one)
+
+skip dir to hash
+prefix base,pos to hash
+
+(find 'sosen' via cutting path over and over)
+```

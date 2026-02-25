@@ -104,10 +104,8 @@ diff() {
 		read_by_null "commit_id"
 		prefix="$profile#"
 
-		local -A del_dir=()
-
-		local -A new_item=()
-		local skip_base="" prefix_dir="" prefix_base=""
+		local -A new_item=() del_dir=()
+		local prefix_dir="" prefix_base=""
 		while :; do
 			# Read Item Header (Or EOF)
 			local type own
@@ -125,19 +123,13 @@ diff() {
 				_show_err "unknown file type: '$type'"
 			fi
 
-			if [[ -n "${skip_dir[$base]+x}" ]]; then
-				echo "detect skip dir $base"
-			fi
-
-			local state=${STATE[_]}
-			if [[ -n "$skip_base" ]]; then
-				if [[ "$base" == "$skip_base/"* ]]; then
-					state=${STATE[D]}
-					printfc "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
-					continue
-				else
-					skip_base=""
+			local in_dir="${base%/*}"
+			if [[ -v del_dir["$in_dir"] ]]; then
+				if [[ "$type" == "d" ]]; then
+					del_dir["$base"]=1
 				fi
+				printfc "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
+				continue
 			fi
 
 			# Resolve Repository Path
@@ -155,6 +147,7 @@ diff() {
 			if ! $has_repo_path; then
 				if [[ "$own" == "${OWN[prefixed]}" ]]; then
 					if [[ "$base" == *"/"* ]]; then
+						echo "pb: $base"
 						repo_path="$override_dir/${base%/*}/$prefix${base##*/}"
 					else
 						repo_path="$override_dir/$prefix$base"
@@ -173,7 +166,7 @@ diff() {
 				fi
 			fi
 
-			local home_path="$output_dir/$base"
+			local home_path="$output_dir/$base" state=${STATE[_]}
 			if [[ "$type" == "f" ]]; then
 				if [[ -f "$home_path" ]]; then
 					if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
@@ -190,8 +183,7 @@ diff() {
 					done < <(find "$home_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%p\0")
 				else
 					state=${STATE[D]} # deleted (or file)
-					skip_dir["$base"]=1
-					skip_base="$base"
+					del_dir["$base"]=1
 				fi
 			fi
 
@@ -223,6 +215,8 @@ diff() {
 		for new_item in "${!new_item[@]}"; do
 			printfc "$new_item" "${STATE_CLR[${STATE[A]}]}"
 		done
+
+		printf "del dir: %s\n" "${!del_dir[@]}"
 
 	} <"$track_file"
 
@@ -264,3 +258,37 @@ if [[ "$(cat "$default_item_1")" == "$write_str" ]]; then
 else
 	printfc "Test 2 - FAILED" "${C[R]}"
 fi
+
+TEST_MODIFY_STR="Hello, This is conf tester!"
+
+create_local_change() {
+	local home_item="$1"
+	local change_state="$2"
+	local expect_add_type="${3:-d}"
+
+	# Create change
+	case "$change_state" in
+	"${STATE[_]}")
+		# Do nothing
+		:
+		;;
+	"${STATE[M]}")
+		# Modify file
+		printf "%s" "$TEST_MODIFY_STR" >>"$home_item"
+		;;
+	"${STATE[A]}")
+		if [[ "$expect_add_type" == "d" ]]; then
+			mkdir -p "$home_path"
+		elif [[ "$expect_add_type" == "d" ]]; then
+			printf "%s" "$TEST_MODIFY_STR" >>"$home_item"
+		fi
+		;;
+	"${STATE[D]}")
+		if [[ -d "$home_item" ]]; then
+			rm -rf "$home_item"
+		elif [[ -f "$home_item" ]]; then
+			rm -f "$home_item"
+		fi
+		;;
+	esac
+}
