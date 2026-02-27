@@ -230,41 +230,45 @@ REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
 REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
 REPO_TRACKS_DIR="$REPO_DATA_DIR/tracks"
 HOME_DIR="/home/$USER"
-DEFAULT_DIR="$REPO_PROFILES_DIR/default/home/default"
-OVERRIDE_DIR="$REPO_PROFILES_DIR/$PROFILE/home/$PROFILE"
-
-# Test 1 - Delete default, override dir
-default_dir_1="$DEFAULT_DIR/.config/zsh"
-override_dir_1="$OVERRIDE_DIR/.config/zsh"
-home_dir_1="$HOME_DIR/.config/zsh"
-rm -rf "$home_dir_1"
-
-# Test 2 - Modify default file
-home_item_1="$HOME_DIR/.hushlogin"
-default_item_1="$DEFAULT_DIR/.hushlogin"
-write_str="test.sh"
-printf "%s" "$write_str" >>"$home_item_1"
-
-diff "$HOME_DIR" "$DEFAULT_DIR" "$OVERRIDE_DIR" "$REPO_TRACKS_DIR/1000"
-
-if [[ ! -e "$default_dir_1" && ! -e "$override_dir_1" ]]; then
-	printfc "Test 1 - PASSED" "${C[G]}"
-else
-	printfc "Test 1 - FAILED" "${C[R]}"
-fi
-
-if [[ "$(cat "$default_item_1")" == "$write_str" ]]; then
-	printfc "Test 2 - PASSED" "${C[G]}"
-else
-	printfc "Test 2 - FAILED" "${C[R]}"
-fi
 
 TEST_MODIFY_STR="Hello, This is conf tester!"
+DEFAULT_DIR="$REPO_PROFILES_DIR/default/home/default"
+OVERRIDE_DIR="$REPO_PROFILES_DIR/$PROFILE/home/$PROFILE"
+PREFIX="$PROFILE#"
 
-create_local_change() {
-	local home_item="$1"
-	local change_state="$2"
-	local expect_add_type="${3:-d}"
+test_apply_local_change() {
+	local desc="$1"
+	local item_path="$2"
+	local change_state="$3"
+	local add_type="${4:-f}"
+
+	local home_item="$HOME_DIR/$item_path"
+	local default_item="$DEFAULT_DIR/$item_path"
+	local override_item=$OVERRIDE_DIR/$item_path
+
+	printfc "[TEST] $desc ($item_path)" "${C[C]}"
+
+	# Detect own type
+	local own
+	if [[ -e "$default_item" && -e "$override_item" ]]; then
+		own="${OWN[both]}"
+	elif [[ -e "$default_item" ]]; then
+		own="${OWN[default]}"
+	elif [[ -e "$override_item" ]]; then
+		own="${OWN[override]}"
+	else
+		if [[ "$item_path" == *"/"* ]]; then
+			override_item="$OVERRIDE_DIR/${item_path%/*}/$PREFIX${item_path##*/}"
+		else
+			override_item="$OVERRIDE_DIR/$PREFIX$item_path"
+		fi
+		if [[ -e "$override_item" ]]; then
+			own="${OWN[prefixed]}"
+		else
+			printfc "invalid item path '$item_path'" "${C[R]}" >&2
+			return 1
+		fi
+	fi
 
 	# Create change
 	case "$change_state" in
@@ -277,9 +281,9 @@ create_local_change() {
 		printf "%s" "$TEST_MODIFY_STR" >>"$home_item"
 		;;
 	"${STATE[A]}")
-		if [[ "$expect_add_type" == "d" ]]; then
+		if [[ "$add_type" == "d" ]]; then
 			mkdir -p "$home_path"
-		elif [[ "$expect_add_type" == "d" ]]; then
+		elif [[ "$add_type" == "f" ]]; then
 			printf "%s" "$TEST_MODIFY_STR" >>"$home_item"
 		fi
 		;;
@@ -291,4 +295,32 @@ create_local_change() {
 		fi
 		;;
 	esac
+
+	# RUN TEST
+	# RUN TEST
+	# RUN TEST
+	# RUN TEST
+	diff "$HOME_DIR" "$DEFAULT_DIR" "$OVERRIDE_DIR" "$REPO_TRACKS_DIR/1000"
+
+	case "$own" in
+	"${OWN[both]}")
+		if [[ ! -e "$default_item" && ! -e "$override_item" ]]; then
+			printfc "[TEST] Success!" "${C[G]}"
+		else
+			printfc "[TEST] Failed" "${C[R]}"
+		fi
+
+		;;
+	esac
 }
+
+item_1="aaaa"
+state_1="${STATE[D]}"
+test_apply_local_change "Delete prefixed item" "$item_1" "$state_1"
+
+item_2=".config/zsh"
+state_1="${STATE[D]}"
+test_apply_local_change "Delete both directory" "$item_2" "$state_1"
+
+# TODO: DEFAULT_DIR, OVERRIDE_DIR to Global var (etc REPO...)
+# diff "$HOME_DIR" "$DEFAULT_DIR" "$OVERRIDE_DIR" "$REPO_TRACKS_DIR/1000"
