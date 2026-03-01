@@ -47,6 +47,17 @@ declare -Ar STATE_CLR=(
 	[${STATE[D]}]="${C[R]}"
 )
 
+is_contain() {
+	local value="$1"
+	local -n arr_ref="$2"
+
+	if [[ " ${arr_ref[*]} " =~ [[:space:]]"$value"[[:space:]] ]]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
 printfc() {
 	local msg="$1"
 	local c="$2"
@@ -77,11 +88,136 @@ read_byte() {
 
 get_items() {
 	local dir_path="$1"
-	local -n arr_ref="$2"
+	local -n result_arr="$2"
 
 	# shellcheck disable=SC2034
-	mapfile -d $'\0' arr_ref < \
-		<(find "$dir_path" -mindepth 1 -maxdepth 1 -printf "%f\0")
+	mapfile -d $'\0' result_arr < \
+		<(find "$dir_path" -mindepth 1 -maxdepth 1 ! -type l -printf "%y%f\0" | sort -z)
+}
+
+get_mixed_items() {
+	# todo: arr1 arr2
+	local -n left_arr="$1"
+	local -n right_arr="$2"
+	local mode="$3"
+	# shellcheck disable=SC2178
+	local -n result_arr="$4"
+
+	case "$mode" in
+	union) comm_num="-12" ;;
+	left_only) comm_num="-23" ;;
+	right_only) comm_num="-13" ;;
+	*) return 1 ;;
+	esac
+
+	# shellcheck disable=SC2034
+	mapfile -d $'\0' result_arr < <(comm "$comm_num" -z \
+		<(printf "%s\0" "${left_arr[@]}") \
+		<(printf "%s\0" "${right_arr[@]}"))
+}
+
+_append_track() {
+	local track_path="$1"
+	local item_type="$2"
+	local own="$3"
+	local base_path="$4"
+	local sum="${5:-}"
+
+	if [[ "$item_type" == "f" ]]; then
+		printf "%s%s%s\0%s\0" "$item_type" "${OWN[$own]}" "$base_path" "$sum" >>"$track_path"
+	elif [[ "$item_type" == "d" ]]; then
+		printf "%s%s%s\0" "$item_type" "${OWN[$own]}" "$base_path" >>"$track_path"
+	fi
+}
+link() {
+	local output_dir="$1"
+	local override_dir="${2:-}" # Preferrer
+	local default_dir="${3:-}"
+
+	if [[ -z "${output_dir_len+x}" ]]; then
+		local output_dir_len="${#output_dir}"
+	fi
+
+	local all_override_items=() all_default_items=()
+	# TODO: include item type (find command)
+	[[ -z "$override_dir" ]] || get_items "$override_dir" "all_override_items"
+	[[ -z "$default_dir" ]] || get_items "$default_dir" "all_default_items"
+
+	# shellcheck disable=SC2034
+	local both_items=() override_items=() default_items=()
+	if [[ -n "$override_dir" && -n "$default_dir" ]]; then
+		get_mixed_items "all_override_items" "all_default_items" "union" "both_items"
+		get_mixed_items "all_override_items" "all_default_items" "left_only" "override_items"
+		get_mixed_items "all_override_items" "all_default_items" "right_only" "default_items"
+	elif [[ -n "$override_dir" ]]; then
+		# shellcheck disable=SC2034
+		local override_items=("${all_override_items[@]}")
+	elif [[ -n "$default_dir" ]]; then
+		# shellcheck disable=SC2034
+		local default_items=("${all_default_items[@]}")
+	fi
+
+	local own prefixed_items=()
+	for own in "override" "both" "default"; do
+		local -n items="${own}_items"
+
+		local as_var
+		if [[ "$own" == "both" ]]; then
+			as_var="as_override_item" # choose override path
+		else
+			as_var="as_${own}_item"
+		fi
+
+		local item
+		for item in "${items[@]}"; do
+			[[ -z "$item" ]] && continue
+
+			local type="${item:0:1}"
+			local base="${item:1}"
+
+			local as_override_item="${override_dir}/${base}"
+			local as_default_item="${default_dir}/${base}"
+			local repo_path="${!as_var}"
+
+			local sum=""
+			if [[ "$type" == "f" ]]; then
+				sum="$(sha256sum "$repo_path" | cut -d ' ' -f1)"
+			fi
+
+			local output_path="${output_dir}/${base}"
+			local write_path="${output_path:$output_dir_len+1}"
+			local write_own="$own"
+
+			# Skip prefixed override path (for default)
+			if [[ "$own" == "default" ]] && is_contain "$base" "prefixed_items"; then
+				continue
+			fi
+
+			# Fix: <Prefixed Path> -> <Output Path>
+			if [[ "$own" == "override" && "$base" == "$PROFILE_PREFIX"* ]]; then
+				local origin_base="${base#"${PROFILE_PREFIX}"}"
+				output_path="${output_dir}/${origin_base}"
+				prefixed_items+=("$origin_base")
+				write_path="${output_path:$output_dir_len+1}"
+				write_own="prefixed"
+			fi
+
+			if [[ "$type" == "d" ]]; then
+				_append_track "$TRACK" "$type" "$write_own" "$write_path"
+				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$output_path" -d
+				if [[ "$own" == "both" ]]; then
+					link "$output_path" "$as_override_item" "$as_default_item"
+				elif [[ "$own" == "override" ]]; then
+					link "$output_path" "$as_override_item" ""
+				elif [[ "$own" == "default" ]]; then
+					link "$output_path" "" "$as_default_item"
+				fi
+			elif [[ "$type" == "f" ]]; then
+				_append_track "$TRACK" "$type" "$write_own" "$write_path" "$sum"
+				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$repo_path" "$output_path"
+			fi
+		done
+	done
 }
 
 diff() {
@@ -107,6 +243,7 @@ diff() {
 		local -A new_item=() del_dir=()
 		local prefix_dir="" prefix_base=""
 		while :; do
+
 			# Read Item Header (Or EOF)
 			local type own
 			read_byte type || break
@@ -147,7 +284,6 @@ diff() {
 			if ! $has_repo_path; then
 				if [[ "$own" == "${OWN[prefixed]}" ]]; then
 					if [[ "$base" == *"/"* ]]; then
-						echo "pb: $base"
 						repo_path="$override_dir/${base%/*}/$prefix${base##*/}"
 					else
 						repo_path="$override_dir/$prefix$base"
@@ -213,10 +349,8 @@ diff() {
 		done
 
 		for new_item in "${!new_item[@]}"; do
-			printfc "$new_item" "${STATE_CLR[${STATE[A]}]}"
+			printfc "new item: $new_item" "${STATE_CLR[${STATE[A]}]}"
 		done
-
-		printf "del dir: %s\n" "${!del_dir[@]}"
 
 	} <"$track_file"
 
@@ -225,10 +359,11 @@ diff() {
 # Env
 USER="kana"
 PROFILE="uwu"
-REPO_INSTALL_DIR="/usr/local/share/conf"
+REPO_INSTALL_DIR="/app"
 REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
 REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
 REPO_TRACKS_DIR="$REPO_DATA_DIR/tracks"
+TRACK_FILE="/tmp/tracks_$USER"
 HOME_DIR="/home/$USER"
 
 TEST_MODIFY_STR="Hello, This is conf tester!"
@@ -246,7 +381,9 @@ test_apply_local_change() {
 	local default_item="$DEFAULT_DIR/$item_path"
 	local override_item=$OVERRIDE_DIR/$item_path
 
-	printfc "[TEST] $desc ($item_path)" "${C[C]}"
+	_show_test_msg() {
+		printfc "[TEST:$desc] $1" "$2"
+	}
 
 	# Detect own type
 	local own
@@ -288,6 +425,7 @@ test_apply_local_change() {
 		fi
 		;;
 	"${STATE[D]}")
+		_show_test_msg "delete $home_item" "${C[C]}"
 		if [[ -d "$home_item" ]]; then
 			rm -rf "$home_item"
 		elif [[ -f "$home_item" ]]; then
@@ -296,31 +434,34 @@ test_apply_local_change() {
 		;;
 	esac
 
-	# RUN TEST
-	# RUN TEST
-	# RUN TEST
-	# RUN TEST
-	diff "$HOME_DIR" "$DEFAULT_DIR" "$OVERRIDE_DIR" "$REPO_TRACKS_DIR/1000"
+	diff "$HOME_DIR" "$DEFAULT_DIR" "$OVERRIDE_DIR" "$TRACK_FILE"
 
+	IS_SUCCESS=false
 	case "$own" in
 	"${OWN[both]}")
-		if [[ ! -e "$default_item" && ! -e "$override_item" ]]; then
-			printfc "[TEST] Success!" "${C[G]}"
-		else
-			printfc "[TEST] Failed" "${C[R]}"
-		fi
-
+		[[ ! -e "$default_item" && ! -e "$override_item" ]] && IS_SUCCESS=true
+		;;
+	"${OWN[default]}")
+		[[ ! -e "$default" ]] && IS_SUCCESS=true
+		;;
+	"${OWN[override]}" | "${OWN[prefixed]}")
+		[[ ! -e "$override_item" ]] && IS_SUCCESS=true
+		_show_test_msg "$override_item is_success=$IS_SUCCESS" "${C[C]}"
 		;;
 	esac
+
+	if $IS_SUCCESS; then
+		_show_test_msg "success" "${C[G]}"
+	else
+		_show_test_msg "failed" "${C[R]}"
+	fi
 }
 
-item_1="aaaa"
-state_1="${STATE[D]}"
-test_apply_local_change "Delete prefixed item" "$item_1" "$state_1"
+useradd -s "/bin/zsh" -G "sudo" "$USER"
+printf "%s\0%s\0%s\0" "$(id -u "$USER")" "$PROFILE" "<git_commit_id>" >>"$TRACK_FILE"
+TRACK="$TRACK_FILE" PROFILE_PREFIX="$PREFIX" INSTALL_USER="$USER" \
+	link "$HOME_DIR" "$OVERRIDE_DIR" "$DEFAULT_DIR"
+printf "Done link----\n\n"
 
-item_2=".config/zsh"
-state_1="${STATE[D]}"
-test_apply_local_change "Delete both directory" "$item_2" "$state_1"
-
-# TODO: DEFAULT_DIR, OVERRIDE_DIR to Global var (etc REPO...)
-# diff "$HOME_DIR" "$DEFAULT_DIR" "$OVERRIDE_DIR" "$REPO_TRACKS_DIR/1000"
+test_apply_local_change "Delete both directory" ".config/zsh" "${STATE[D]}"
+test_apply_local_change "Delete override directory" "hellouwu" "${STATE[D]}"

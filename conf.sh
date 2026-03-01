@@ -449,26 +449,10 @@ add_user() {
 	local username="$1"
 	local passwd="$2"
 
-	# if [[ "$OS" == "debian" ]]; then
 	useradd -s "/bin/zsh" -G "sudo" "$username"
 	printf "%s:%s" "$username" "$passwd" | chpasswd
-	# Allow "sudo" command without password
 	printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" >>"/etc/sudoers.d/$username"
 	build_home "$username"
-	# fi
-}
-
-backup_item() {
-	local item_path="$1"
-
-	local parent_dir basename dst timestamp
-	parent_dir="$(dirname "$item_path")"
-	basename="$(basename "$item_path")"
-	timestamp="$(date "+%Y-%m-%d_%H-%M-%S")"
-	dst="${DF_DATA["backups_dir"]}/${basename}.${timestamp}.tgz"
-
-	_info "Create backup: $(clr "$dst" "${LC["path"]}" true)"
-	tar czvf "$dst" -C "$parent_dir" "$basename"
 }
 
 get_items() {
@@ -815,7 +799,7 @@ main_() {
 
 }
 
-main_ "$@"
+# main_ "$@"
 
 # if [[ "$IS_DEBUG" ]]; then
 # 	git() {
