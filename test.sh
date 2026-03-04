@@ -29,7 +29,7 @@ declare -Ar C=(
 declare -A OWN=(
 	[default]=1
 	[override]=2
-	[both]=3
+	[union]=3
 	[prefixed]=4
 )
 
@@ -144,9 +144,9 @@ link() {
 	[[ -z "$default_dir" ]] || get_items "$default_dir" "all_default_items"
 
 	# shellcheck disable=SC2034
-	local both_items=() override_items=() default_items=()
+	local union_items=() override_items=() default_items=()
 	if [[ -n "$override_dir" && -n "$default_dir" ]]; then
-		get_mixed_items "all_override_items" "all_default_items" "union" "both_items"
+		get_mixed_items "all_override_items" "all_default_items" "union" "union_items"
 		get_mixed_items "all_override_items" "all_default_items" "left_only" "override_items"
 		get_mixed_items "all_override_items" "all_default_items" "right_only" "default_items"
 	elif [[ -n "$override_dir" ]]; then
@@ -158,11 +158,11 @@ link() {
 	fi
 
 	local own prefixed_items=()
-	for own in "override" "both" "default"; do
+	for own in "override" "union" "default"; do
 		local -n items="${own}_items"
 
 		local as_var
-		if [[ "$own" == "both" ]]; then
+		if [[ "$own" == "union" ]]; then
 			as_var="as_override_item" # choose override path
 		else
 			as_var="as_${own}_item"
@@ -205,7 +205,7 @@ link() {
 			if [[ "$type" == "d" ]]; then
 				_append_track "$TRACK" "$type" "$write_own" "$write_path"
 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$output_path" -d
-				if [[ "$own" == "both" ]]; then
+				if [[ "$own" == "union" ]]; then
 					link "$output_path" "$as_override_item" "$as_default_item"
 				elif [[ "$own" == "override" ]]; then
 					link "$output_path" "$as_override_item" ""
@@ -220,14 +220,14 @@ link() {
 	done
 }
 
-diff() {
+apply_local_change() {
 	local output_dir="$1"
 	local default_dir="$2"
 	local override_dir="$3"
 	local track_file="$4"
 
 	_show_err() {
-		printf "diff err: %s\n" "$1" >&2
+		printf "apply_local_change err: %s\n" "$1" >&2
 		exit 1
 	}
 
@@ -265,7 +265,7 @@ diff() {
 				if [[ "$type" == "d" ]]; then
 					del_dir["$base"]=1
 				fi
-				printfc "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
+				# printfc "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
 				continue
 			fi
 
@@ -293,7 +293,7 @@ diff() {
 						prefix_base="$base"
 						prefix_dir="$repo_path"
 					fi
-				elif [[ "$own" == "${OWN[override]}" || "$own" == "${OWN[both]}" ]]; then
+				elif [[ "$own" == "${OWN[override]}" || "$own" == "${OWN[union]}" ]]; then
 					repo_path="$override_dir/$base"
 				elif [[ "$own" == "${OWN[default]}" ]]; then
 					repo_path="$default_dir/$base"
@@ -332,9 +332,9 @@ diff() {
 				fi
 				;;
 			"${STATE[D]}")
-				local usr_input
-				if [[ "$own" == "${OWN[both]}" ]]; then
-					printf "($base) this item has alias on default profile.\nDo you want to delete it too?\n"
+				# local usr_input
+				if [[ "$own" == "${OWN[union]}" ]]; then
+					# printf "($base) this item has alias on default profile.\nDo you want to delete it too?\n"
 					rm -rf "$default_dir/$base"
 					# read -r usr_input </dev/tty
 					# if [[ "$usr_input" == "y" ]]; then
@@ -345,11 +345,12 @@ diff() {
 				;;
 			esac
 
-			printfc "($type:$own) $base" "${STATE_CLR[$state]}"
+			# printfc "($type:$own) $base" "${STATE_CLR[$state]}"
 		done
 
 		for new_item in "${!new_item[@]}"; do
-			printfc "new item: $new_item" "${STATE_CLR[${STATE[A]}]}"
+			:
+			# printfc "new item: $new_item" "${STATE_CLR[${STATE[A]}]}"
 		done
 
 	} <"$track_file"
@@ -362,106 +363,63 @@ PROFILE="uwu"
 REPO_INSTALL_DIR="/app"
 REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
 REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
-REPO_TRACKS_DIR="$REPO_DATA_DIR/tracks"
 TRACK_FILE="/tmp/tracks_$USER"
 HOME_DIR="/home/$USER"
-
-TEST_MODIFY_STR="Hello, This is conf tester!"
 DEFAULT_DIR="$REPO_PROFILES_DIR/default/home/default"
 OVERRIDE_DIR="$REPO_PROFILES_DIR/$PROFILE/home/$PROFILE"
 PREFIX="$PROFILE#"
-
-test_apply_local_change() {
-	local desc="$1"
-	local item_path="$2"
-	local change_state="$3"
-	local add_type="${4:-f}"
-
-	local home_item="$HOME_DIR/$item_path"
-	local default_item="$DEFAULT_DIR/$item_path"
-	local override_item=$OVERRIDE_DIR/$item_path
-
-	_show_test_msg() {
-		printfc "[TEST:$desc] $1" "$2"
-	}
-
-	# Detect own type
-	local own
-	if [[ -e "$default_item" && -e "$override_item" ]]; then
-		own="${OWN[both]}"
-	elif [[ -e "$default_item" ]]; then
-		own="${OWN[default]}"
-	elif [[ -e "$override_item" ]]; then
-		own="${OWN[override]}"
-	else
-		if [[ "$item_path" == *"/"* ]]; then
-			override_item="$OVERRIDE_DIR/${item_path%/*}/$PREFIX${item_path##*/}"
-		else
-			override_item="$OVERRIDE_DIR/$PREFIX$item_path"
-		fi
-		if [[ -e "$override_item" ]]; then
-			own="${OWN[prefixed]}"
-		else
-			printfc "invalid item path '$item_path'" "${C[R]}" >&2
-			return 1
-		fi
-	fi
-
-	# Create change
-	case "$change_state" in
-	"${STATE[_]}")
-		# Do nothing
-		:
-		;;
-	"${STATE[M]}")
-		# Modify file
-		printf "%s" "$TEST_MODIFY_STR" >>"$home_item"
-		;;
-	"${STATE[A]}")
-		if [[ "$add_type" == "d" ]]; then
-			mkdir -p "$home_path"
-		elif [[ "$add_type" == "f" ]]; then
-			printf "%s" "$TEST_MODIFY_STR" >>"$home_item"
-		fi
-		;;
-	"${STATE[D]}")
-		_show_test_msg "delete $home_item" "${C[C]}"
-		if [[ -d "$home_item" ]]; then
-			rm -rf "$home_item"
-		elif [[ -f "$home_item" ]]; then
-			rm -f "$home_item"
-		fi
-		;;
-	esac
-
-	diff "$HOME_DIR" "$DEFAULT_DIR" "$OVERRIDE_DIR" "$TRACK_FILE"
-
-	IS_SUCCESS=false
-	case "$own" in
-	"${OWN[both]}")
-		[[ ! -e "$default_item" && ! -e "$override_item" ]] && IS_SUCCESS=true
-		;;
-	"${OWN[default]}")
-		[[ ! -e "$default" ]] && IS_SUCCESS=true
-		;;
-	"${OWN[override]}" | "${OWN[prefixed]}")
-		[[ ! -e "$override_item" ]] && IS_SUCCESS=true
-		_show_test_msg "$override_item is_success=$IS_SUCCESS" "${C[C]}"
-		;;
-	esac
-
-	if $IS_SUCCESS; then
-		_show_test_msg "success" "${C[G]}"
-	else
-		_show_test_msg "failed" "${C[R]}"
-	fi
-}
 
 useradd -s "/bin/zsh" -G "sudo" "$USER"
 printf "%s\0%s\0%s\0" "$(id -u "$USER")" "$PROFILE" "<git_commit_id>" >>"$TRACK_FILE"
 TRACK="$TRACK_FILE" PROFILE_PREFIX="$PREFIX" INSTALL_USER="$USER" \
 	link "$HOME_DIR" "$OVERRIDE_DIR" "$DEFAULT_DIR"
-printf "Done link----\n\n"
 
-test_apply_local_change "Delete both directory" ".config/zsh" "${STATE[D]}"
-test_apply_local_change "Delete override directory" "hellouwu" "${STATE[D]}"
+run_test() {
+	_show_msg() {
+		printfc "[Test:$1] $2" "$3" >&2
+	}
+
+	local f
+	for f in $(declare -F | cut -d ' ' -f3 | grep "^test_" | grep -v "_after$"); do
+		if ! $f; then
+			_show_msg "$f" "Prepare failed" "${C[R]}"
+			return 1
+		fi
+
+		apply_local_change "$HOME_DIR" "$DEFAULT_DIR" "$OVERRIDE_DIR" "$TRACK_FILE"
+
+		if "${f}_after"; then
+			_show_msg "$f" "Success" "${C[G]}"
+		else
+			_show_msg "$f" "Failed" "${C[R]}"
+		fi
+	done
+}
+
+TEST_DUMMY_DIR="_dummy"
+TEST_DEFAULT_DIR="$TEST_DUMMY_DIR/defaultDir"
+TEST_DEFAULT_FILE="$TEST_DUMMY_DIR/defaultFile"
+
+# shellcheck disable=SC2329
+test_del_default_dir() {
+	[[ ! -d "$HOME_DIR/$TEST_DEFAULT_DIR" ]] && return 1
+	rm -rf "$HOME_DIR/$TEST_DEFAULT_DIR"
+}
+# shellcheck disable=SC2329
+test_del_default_dir_after() {
+	[[ ! -d "$DEFAULT_DIR/$TEST_DEFAULT_DIR" ]] && return 0
+	return 1
+}
+
+# shellcheck disable=SC2329
+test_del_default_file() {
+	[[ ! -f "$HOME_DIR/$TEST_DEFAULT_FILE" ]] && return 1
+	rm -f "$HOME_DIR/$TEST_DEFAULT_FILE"
+}
+# shellcheck disable=SC2329
+test_del_default_file_after() {
+	[[ ! -f "$DEFAULT_DIR/$TEST_DEFAULT_FILE" ]] && return 0
+	return 1
+}
+
+run_test
