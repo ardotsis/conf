@@ -371,20 +371,20 @@ get_safe_random_str() {
 install_package() {
 	local pkg_name="$1"
 
-	if [[ "$OS" == "debian" ]]; then
-		apt-get install -y --no-install-recommends "$pkg_name"
-	fi
+	# if [[ "$OS" == "debian" ]]; then
+	apt-get install -y --no-install-recommends "$pkg_name"
+	# fi
 }
 
 remove_package() {
 	local pkg_name="$1"
 
-	if [[ "$OS" == "debian" ]]; then
-		apt-get remove -y "$pkg_name"
-		apt-get purge -y "$pkg_name"
-		apt-get autoremove -y
-		apt-get clean
-	fi
+	# if [[ "$OS" == "debian" ]]; then
+	apt-get remove -y "$pkg_name"
+	apt-get purge -y "$pkg_name"
+	apt-get autoremove -y
+	apt-get clean
+	# fi
 }
 
 get_tmp_curl_file() {
@@ -655,6 +655,12 @@ cmd_install() {
 	if [[ -e "$REPO_INSTALL_DIR" ]]; then
 		printf "%b%s\n%s%b\n" "${C[y]}" "conf is already installed." "Use 'adduser' command to create new user." "${C[0]}"
 		exit 1
+	fi
+
+	if is_cmd_exist ufw; then
+		_info "Uninstall UFW"
+		ufw disable
+		remove_package "ufw"
 	fi
 
 	if ! is_cmd_exist "git"; then
