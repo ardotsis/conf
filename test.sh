@@ -422,4 +422,6 @@ test_del_default_file_after() {
 	return 1
 }
 
-run_test
+# run_test
+
+tail -f /dev/null

@@ -651,18 +651,18 @@ cmd_install() {
 	# Install binaries
 	# install_nvim
 
-	# local data_dir="/usr/local"
-	# local zsh_plugins_dir="$data_dir/share/zsh/plugins"
+	local data_dir="/usr/local"
+	local zsh_plugins_dir="$data_dir/share/zsh/plugins"
 
-	# [[ ! -e "$zsh_plugins_dir" ]] && mkdir -p "$zsh_plugins_dir"
-	# git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$zsh_plugins_dir/zsh-autosuggestions"
-	# git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$zsh_plugins_dir/zsh-syntax-highlighting"
-	# git clone "https://github.com/sindresorhus/pure.git" "$zsh_plugins_dir/pure"
+	[[ ! -e "$zsh_plugins_dir" ]] && mkdir -p "$zsh_plugins_dir"
+	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$zsh_plugins_dir/zsh-autosuggestions"
+	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$zsh_plugins_dir/zsh-syntax-highlighting"
+	git clone "https://github.com/sindresorhus/pure.git" "$zsh_plugins_dir/pure"
 
-	# local man1_dir="$data_dir/share/man/man1"
-	# [[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
-	# install_zoxide "$data_dir/bin" "$man1_dir"
-	# install_starship "$data_dir/bin"
+	local man1_dir="$data_dir/share/man/man1"
+	[[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
+	install_zoxide "$data_dir/bin" "$man1_dir"
+	install_starship "$data_dir/bin"
 
 	# Install etc
 
@@ -799,20 +799,7 @@ main_() {
 
 }
 
-# main_ "$@"
-
-# if [[ "$IS_DEBUG" ]]; then
-# 	git() {
-# 		echo ''
-# 	}
-# fi
-
-# declare -a items
-# get_items "/" items
-
-# for item in "${items[@]}"; do
-# 	echo "$item"
-# done
+main_ "$@"
 
 ##### Docker util #####
 if $IS_DOCKER; then
