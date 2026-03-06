@@ -4,6 +4,7 @@ set -e -u -o pipefail -C
 # System
 declare -r TMP_DIR="/var/tmp"
 declare -r DOCKER_VOLUME_DIR="/app"
+declare -r PORT_NUM_FILE="/etc/conf_port"
 # shellcheck disable=SC2155
 declare -r CURRENT_USER="$(whoami)"
 # Repository
@@ -14,7 +15,7 @@ declare -r REPO_TRACKS_DIR="$REPO_DATA_DIR/tracks"
 declare -r REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
 declare -r REPO_PACKAGES_FILE="$REPO_PROFILES_DIR/packages"
 # User
-declare -r SECRET_FILENAME="conf_installation"
+declare -r SECRET_FILENAME="conf_secret"
 declare -r PASSWD_LENGTH=72
 
 declare -Ar C=(
@@ -605,6 +606,39 @@ link() {
 ##################################################
 #                    Commands                    #
 ##################################################
+setup_network() {
+	local ssh_port="$1"
+	_debug "using default etc (not implemented yet)"
+
+	# TODO: chown, chmod
+	local tmpl_etc_dir="$REPO_PROFILES_DIR/default/etc"
+
+	# /etc/ssh
+	[[ -e /etc/ssh ]] && rm -rf /etc/ssh
+	cp -r "$tmpl_etc_dir/ssh" /etc/ssh
+	sed -i "s/^Port [0-9]\+/Port $port_num/" /etc/ssh/sshd_config
+	ssh-keygen -A
+
+	# /etc/iptables
+	[[ -e /etc/iptables ]] && rm -rf /etc/iptables
+	cp -r "$tmpl_etc_dir/iptables" /etc/iptables
+
+	# /etc/systemd/system/iptables-restore.service
+	install -m 0644 -o root -g root "$tmpl_etc_dir/systemd/system/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
+	sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "/etc/iptables/rules.v4"
+
+	if [[ "$IS_DOCKER" == "false" ]]; then
+		# Reload sshd config
+		_info "Restart sshd service"
+		systemctl restart sshd
+		# Enable iptables-restore.service
+		_info "Reload systemctl daemon"
+		systemctl daemon-reload
+		_info "Enable iptables-restore service"
+		systemctl enable iptables-restore.service
+	fi
+}
+
 check_is_root() {
 	if ! is_root; then
 		printf "%b%s%b\n" "${C[R]}" "$(get_err_msg "Root access required for this operation.")" "${C[0]}"
@@ -649,7 +683,7 @@ cmd_install() {
 	chmod +x "$REPO_INSTALL_DIR/conf.sh"
 
 	# Install binaries
-	# install_nvim
+	install_nvim
 
 	local data_dir="/usr/local"
 	local zsh_plugins_dir="$data_dir/share/zsh/plugins"
@@ -664,7 +698,14 @@ cmd_install() {
 	install_zoxide "$data_dir/bin" "$man1_dir"
 	install_starship "$data_dir/bin"
 
-	# Install etc
+	if [[ "$IS_DOCKER" == "false" ]]; then
+		_info "Executing Docker installation script.."
+		sh -c "$(curl -fsSL https://get.docker.com)"
+	fi
+
+	local port_num="$((1024 + RANDOM % (65535 - 1024 + 1)))"
+	printf "%s" "$port_num" >>"$PORT_NUM_FILE"
+	setup_network "$port_num"
 
 	if ! $INTERNAL; then
 		printf "%b%s%b\n" "${C[G]}" "conf has installed." "${C[0]}"
@@ -700,13 +741,68 @@ cmd_adduser() {
 	passwd="$(get_random_str $PASSWD_LENGTH)"
 	add_user "$username" "$passwd"
 
+	local secret_file="$home/$SECRET_FILENAME"
+
 	# Store password into "~/.conf/secret"
-	install -m 0400 -o "$username" -g "$username" /dev/null "$home/$SECRET_FILENAME"
-	printf "Password: %s\n" "$passwd" >>"$home/$SECRET_FILENAME"
+	install -m 0400 -o "$username" -g "$username" /dev/null "$secret_file"
+	printf "Password: %s\n\n" "$passwd" >>"$home/$SECRET_FILENAME"
 
 	if ! $INTERNAL; then
 		printf "%bAdded '%s' successfully.%b\n" "${C[G]}" "$username" "${C[0]}"
 	fi
+
+	# Set up SSH
+	## Create SSH home correctly
+	local ssh_dir="$home/.ssh"
+	# install -m 0600 -o "$username" -g "$username" /dev/null "$ssh_dir/authorized_keys"
+	# install -m 0600 -o "$username" -g "$username" /dev/null "$ssh_dir/config"
+
+	local ssh_publickey
+	if [[ "$IS_DEBUG" == "true" ]]; then
+		ssh_publickey="some_ssh_publickey"
+	else
+		read -r -p "Paste SSH public key: " ssh_publickey </dev/tty
+	fi
+	printf "%s" "$ssh_publickey" >>"$ssh_dir/authorized_keys"
+
+	local ssh_port
+	ssh_port=$(<"$PORT_NUM_FILE")
+	### Create template example
+	{
+		printf "# Client's SSH template\n"
+		printf "Host yourhost\n"
+		printf "  HostName %s\n" "$(curl -fsSL https://api.ipify.org)"
+		printf "  Port %s\n" "$ssh_port"
+		printf "  User %s\n" "$username"
+		printf "  IdentityFile ~/.ssh/%s\n" "yourhost"
+		printf "  IdentitiesOnly yes\n"
+		printf "\n"
+	} >>"$secret_file"
+
+	### This Host -> Git
+	local ssh_git_passphrase
+	ssh_git_passphrase="$(get_random_str $PASSWD_LENGTH)"
+	local git_filename="git"
+	ssh-keygen -t ed25519 -b 4096 -f "$ssh_dir/$git_filename" -N "$ssh_git_passphrase" -C ""
+	{
+		printf "# SSH passphrase for Git\n%s\n\n" "$ssh_git_passphrase"
+		printf "# SSH public key for Git\n"
+		cat "$ssh_dir/${git_filename}.pub"
+		printf "\n"
+	} >>"$secret_file"
+
+	{
+		printf "Host git\n"
+		printf "  HostName github.com\n"
+		printf "  User git\n"
+		printf "  IdentityFile ~/.ssh/%s\n" "$git_filename"
+		printf "  IdentitiesOnly yes\n"
+		printf "\n"
+	} >>"$ssh_dir/config"
+	rm -f "$ssh_dir/${git_filename}.pub"
+
+	chown "$username:$username" "$ssh_dir/"*
+	chmod 0600 "$ssh_dir/"*
 
 	INTERNAL=true cmd_apply "$username" "$profile"
 }
@@ -797,12 +893,10 @@ main_() {
 	# Run command
 	INTERNAL=false "cmd_$mode" "${CMDS[@]:1}"
 
+	if $IS_DOCKER; then
+		printf "Keeping docker container running...\n"
+		tail -f /dev/null
+	fi
 }
 
 main_ "$@"
-
-##### Docker util #####
-if $IS_DOCKER; then
-	printf "Keeping docker container running...\n"
-	tail -f /dev/null
-fi
