@@ -10,7 +10,7 @@
 ### `ardotsis@vultr`
 
 ```sh
-curl -fsSL get.ardotsis.com/conf | bash -s -- install ardotsis
+curl -fsSL get.ardotsis.com/conf | bash -s -- -l install kana
 ```
 
 ## Test
