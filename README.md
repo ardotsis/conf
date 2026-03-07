@@ -7,7 +7,7 @@
 
 ## Install
 
-### `ardotsis@vultr`
+### `kana@host`
 
 ```sh
 curl -fsSL get.ardotsis.com/conf | bash -s -- -l install kana
