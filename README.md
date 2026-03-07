@@ -13,37 +13,23 @@
 curl -fsSL get.ardotsis.com/conf | bash -s -- -l install kana
 ```
 
+You'll need:
+
+- Public key for remote SSH.
+- Configure local `~/.ssh/config` file. (See remote `~/conf_secret` file)
+
 ## Test
 
 ### Windows
 
-Build
+Run container
 
 ```powershell
-.\scripts\run_test.ps1 -Os debian -Params @("-d", "-dk", "-l", "-luv", "haruka", "install", "kana", "vultr") -Verbose
+.\scripts\run_container.ps1 -Os debian -Params @("-dk","-d", "-l", "-luv", "kana", "install", "kana", "uwu") -Verbose
 ```
 
-Enter container
+Execute in container
 
 ```powershell
-.\scripts\enter_docker.ps1 -Os debian -Username kana
-```
-
-## Memo
-
-```
-diff for just an update...?
-or detect some change
-
-track file::::::::git::
-diff -> unlink -> apply
-
-we should show warn msg to usr
-when delte [both] dir/file
-delete default/override (or each one)
-
-skip dir to hash
-prefix base,pos to hash
-
-(find 'sosen' via cutting path over and over)
+.\scripts\exec_docker.ps1 -Os debian -Username kana -Exec zsh
 ```
