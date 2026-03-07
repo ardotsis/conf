@@ -26,7 +26,7 @@ eval "$(zoxide init zsh)"
 source "$Z_PLUGIN_DIR/zsh-autosuggestions/zsh-autosuggestions.zsh"
 source "$Z_PLUGIN_DIR/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" # MUST BE LAST
 
-### SSH Agent
+### SSH Agent (https://grep.koditi.my/reuse-existing-ssh-agent)
 # Function to find existing SSH agent
 find_ssh_agent() {
 	echo "Look for existing ssh-agent processes"

@@ -16,7 +16,10 @@ curl -fsSL get.ardotsis.com/conf | bash -s -- -l install kana
 You'll need:
 
 - Public key for remote SSH.
-- Configure local `~/.ssh/config` file. (See remote `~/conf_secret` file.)
+- Configure local `~/.ssh/config` file. (*1)
+- Registry generated public key on Git. (*1)
+
+*1 See remote `~/conf_secret` file.
 
 ## Test
 
