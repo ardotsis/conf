@@ -4,6 +4,7 @@ param(
     [string] $Os,
     [switch] $Build = $false,
     [switch] $Cache = $false,
+    [switch] $Clear = $false,
     [array] $Params
 )
 
@@ -16,6 +17,10 @@ $ImageName = "conf-${Os}"
 $ImageTag = "latest"
 $ContainerName = "${ImageName}-cont"
 $GuestVolumeDir = "/app-dev"
+
+if ($Clear) {
+    Clear-Host
+}
 
 
 function Remove-Objects {

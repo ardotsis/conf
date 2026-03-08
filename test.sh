@@ -1,243 +1,221 @@
 #!/bin/bash
 set -e -u -o pipefail -C
 
-# declare -Ar C=(
-# 	[0]="\033[0m" # Reset
-# 	[B]="\033[1m" # Bold
+declare -Ar C=(
+	[0]="\033[0m" # Reset
+	[B]="\033[1m" # Bold
 
-# 	# Normal
-# 	[r]="\033[0;31m" # Red
-# 	[y]="\033[0;33m" # Orange/Yellow
-# 	[g]="\033[0;32m" # Green
-# 	[c]="\033[0;36m" # Cyan
-# 	[b]="\033[0;34m" # Blue
-# 	[p]="\033[0;35m" # Purple
-# 	[k]="\033[0;30m" # Black
-# 	[w]="\033[0;37m" # White
+	# Normal
+	[r]="\033[0;31m" # Red
+	[y]="\033[0;33m" # Orange/Yellow
+	[g]="\033[0;32m" # Green
+	[c]="\033[0;36m" # Cyan
+	[b]="\033[0;34m" # Blue
+	[p]="\033[0;35m" # Purple
+	[k]="\033[0;30m" # Black
+	[w]="\033[0;37m" # White
 
-# 	# Bold
-# 	[R]="\033[1;31m"  # Bold Red
-# 	[Y]="\033[1;33m"  # Bold Yellow
-# 	[G]="\033[1;32m"  # Bold Green
-# 	[C]="\033[1;36m"  # Bold Cyan
-# 	[B_]="\033[1;34m" # Bold Blue (L for Light/Large)
-# 	[P]="\033[1;35m"  # Bold Purple
-# 	[K]="\033[1;30m"  # Bold Black
-# 	[W]="\033[1;37m"  # Bold White
-# )
+	# Bold
+	[R]="\033[1;31m"  # Bold Red
+	[Y]="\033[1;33m"  # Bold Yellow
+	[G]="\033[1;32m"  # Bold Green
+	[C]="\033[1;36m"  # Bold Cyan
+	[B_]="\033[1;34m" # Bold Blue (L for Light/Large)
+	[P]="\033[1;35m"  # Bold Purple
+	[K]="\033[1;30m"  # Bold Black
+	[W]="\033[1;37m"  # Bold White
+)
 
-# declare -A OWN=(
-# 	[default]=1
-# 	[override]=2
-# 	[union]=3
-# 	[prefixed]=4
-# )
+declare -Ar STATE=(
+	[_]=0
+	[M]=1 # Modified
+	[A]=2 # Added
+	[D]=3 # Deleted
+)
 
-# declare -Ar STATE=(
-# 	[_]=0
-# 	[M]=1 # Modified
-# 	[A]=2 # Added
-# 	[D]=3 # Deleted
-# )
+declare -Ar STATE_CLR=(
+	[${STATE[_]}]=""
+	[${STATE[M]}]="${C[Y]}"
+	[${STATE[A]}]="${C[G]}"
+	[${STATE[D]}]="${C[R]}"
+)
 
-# declare -Ar STATE_CLR=(
-# 	[${STATE[_]}]=""
-# 	[${STATE[M]}]="${C[Y]}"
-# 	[${STATE[A]}]="${C[G]}"
-# 	[${STATE[D]}]="${C[R]}"
-# )
+is_contain() {
+	local value="$1"
+	local -n arr_ref="$2"
 
-# is_contain() {
-# 	local value="$1"
-# 	local -n arr_ref="$2"
+	if [[ " ${arr_ref[*]} " =~ [[:space:]]"$value"[[:space:]] ]]; then
+		return 0
+	else
+		return 1
+	fi
+}
 
-# 	if [[ " ${arr_ref[*]} " =~ [[:space:]]"$value"[[:space:]] ]]; then
-# 		return 0
-# 	else
-# 		return 1
-# 	fi
-# }
+printfc() {
+	local msg="$1"
+	local c="$2"
+	printf "%b%s%b\n" "$c" "$msg" "${C[0]}"
+}
 
-# printfc() {
-# 	local msg="$1"
-# 	local c="$2"
-# 	printf "%b%s%b\n" "$c" "$msg" "${C[0]}"
-# }
+is_git_clean() {
+	if [[ -n $(git status --porcelain "$REPO_PROFILES_DIR") ]]; then
+		return 0
+	else
+		return 1
+	fi
+}
 
-# is_git_clean() {
-# 	if [[ -n $(git status --porcelain "$REPO_PROFILES_DIR") ]]; then
-# 		return 0
-# 	else
-# 		return 1
-# 	fi
-# }
+get_sum() {
+	printf "%s" "$(sha256sum "$1" | cut -d ' ' -f1)"
+}
 
-# get_sum() {
-# 	printf "%s" "$(sha256sum "$1" | cut -d ' ' -f1)"
-# }
+read_by_null() {
+	local -n _ref="${1:-REPLY}"
+	IFS="" read -r -d $'\0' _ref
+}
 
-# read_by_null() {
-# 	local -n _ref="${1:-REPLY}"
-# 	IFS="" read -r -d $'\0' _ref
-# }
+read_byte() {
+	local -n _ref="${1:-REPLY}"
+	IFS="" read -r -n 1 _ref
+}
 
-# read_byte() {
-# 	local -n _ref="${1:-REPLY}"
-# 	IFS="" read -r -n 1 _ref
-# }
+get_prefix() {
+	printf "%s#" "$1"
+}
 
-# apply_local_change() {
-# 	local output_dir="$1"
-# 	local default_dir="$2"
-# 	local override_dir="$3"
-# 	local track_file="$4"
+apply_to_repo() {
+	local output_dir="$1"
+	local override_dir="$2"
+	local default_dir="$3"
 
-# 	_show_err() {
-# 		printf "apply_local_change err: %s\n" "$1" >&2
-# 		exit 1
-# 	}
+	_show_err() {
+		printf "apply_local_repo err: %s\n" "$1" >&2
+		exit 1
+	}
 
-# 	# File: <type><own><base>\0<sum>\0
-# 	# Dir : <type><own><base>\0
-# 	{
-# 		local user_id profile commit_id prefix
-# 		read_by_null "user_id"
-# 		read_by_null "profile"
-# 		read_by_null "commit_id"
-# 		prefix="$profile#"
+	{
+		local profile commit_id
+		read_by_null "profile"
+		read_by_null "commit_id"
+		local prefix
+		prefix="$(get_prefix "$profile")"
 
-# 		local -A new_item=() del_dir=()
-# 		local prefix_dir="" prefix_base=""
-# 		while :; do
+		local -A new_item=() del_dir=()
+		local prefix_dir="" prefix_base=""
+		while :; do
+			# Read Item Header (Or EOF)
+			local type own
+			read_byte type || break
+			read_byte own
 
-# 			# Read Item Header (Or EOF)
-# 			local type own
-# 			read_byte type || break
-# 			read_byte own
+			# Read Item Contents
+			local base sum
+			if [[ "$type" == "f" ]]; then
+				read_by_null "base"
+				read_by_null "sum"
+			elif [[ "$type" == "d" ]]; then
+				read_by_null "base"
+			else
+				_show_err "unknown file type: '$type'"
+			fi
 
-# 			# Read Item Contents
-# 			local base sum
-# 			if [[ "$type" == "f" ]]; then
-# 				read_by_null "base"
-# 				read_by_null "sum"
-# 			elif [[ "$type" == "d" ]]; then
-# 				read_by_null "base"
-# 			else
-# 				_show_err "unknown file type: '$type'"
-# 			fi
+			local in_dir="${base%/*}"
+			if [[ -v del_dir["$in_dir"] ]]; then
+				if [[ "$type" == "d" ]]; then
+					del_dir["$base"]=1
+				fi
+				printfc "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
+				continue
+			fi
 
-# 			local in_dir="${base%/*}"
-# 			if [[ -v del_dir["$in_dir"] ]]; then
-# 				if [[ "$type" == "d" ]]; then
-# 					del_dir["$base"]=1
-# 				fi
-# 				# printfc "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
-# 				continue
-# 			fi
+			# Resolve Repository Path
+			local repo_path has_repo_path=false
+			if [[ -n "$prefix_dir" ]]; then
+				if [[ "$base" == "$prefix_base/"* ]]; then
+					has_repo_path=true
+					repo_path=$prefix_dir/${base##*/}
+				else
+					prefix_base=""
+					prefix_dir=""
+				fi
+			fi
 
-# 			# Resolve Repository Path
-# 			local repo_path has_repo_path=false
-# 			if [[ -n "$prefix_dir" ]]; then
-# 				if [[ "$base" == "$prefix_base/"* ]]; then
-# 					has_repo_path=true
-# 					repo_path=$prefix_dir/${base##*/}
-# 				else
-# 					prefix_base=""
-# 					prefix_dir=""
-# 				fi
-# 			fi
+			if ! $has_repo_path; then
+				if [[ "$own" == "${OWN[prefixed]}" ]]; then
+					if [[ "$base" == *"/"* ]]; then
+						repo_path="$override_dir/${base%/*}/$prefix${base##*/}"
+					else
+						repo_path="$override_dir/$prefix$base"
+					fi
+					# Store prefix directory
+					if [[ "$type" == "d" ]]; then
+						prefix_base="$base"
+						prefix_dir="$repo_path"
+					fi
+				elif [[ "$own" == "${OWN[override]}" || "$own" == "${OWN[union]}" ]]; then
+					repo_path="$override_dir/$base"
+				elif [[ "$own" == "${OWN[default]}" ]]; then
+					repo_path="$default_dir/$base"
+				else
+					_show_err "unknown own type '$own'"
+				fi
+			fi
 
-# 			if ! $has_repo_path; then
-# 				if [[ "$own" == "${OWN[prefixed]}" ]]; then
-# 					if [[ "$base" == *"/"* ]]; then
-# 						repo_path="$override_dir/${base%/*}/$prefix${base##*/}"
-# 					else
-# 						repo_path="$override_dir/$prefix$base"
-# 					fi
-# 					# Store prefix directory
-# 					if [[ "$type" == "d" ]]; then
-# 						prefix_base="$base"
-# 						prefix_dir="$repo_path"
-# 					fi
-# 				elif [[ "$own" == "${OWN[override]}" || "$own" == "${OWN[union]}" ]]; then
-# 					repo_path="$override_dir/$base"
-# 				elif [[ "$own" == "${OWN[default]}" ]]; then
-# 					repo_path="$default_dir/$base"
-# 				else
-# 					_show_err "unknown own type '$own'"
-# 				fi
-# 			fi
+			local home_path="$output_dir/$base" state=${STATE[_]}
+			if [[ "$type" == "f" ]]; then
+				if [[ -f "$home_path" ]]; then
+					if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
+						state=${STATE[M]}
+					fi
+				else
+					state=${STATE[D]} # deleted (or dir)
+				fi
+			else
+				if [[ -d "$home_path" ]]; then
+					local item
+					while read_by_null item; do
+						new_item["$item"]=1
+					done < <(find "$home_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%p\0")
+				else
+					state=${STATE[D]} # deleted (or file)
+					del_dir["$base"]=1
+				fi
+			fi
 
-# 			local home_path="$output_dir/$base" state=${STATE[_]}
-# 			if [[ "$type" == "f" ]]; then
-# 				if [[ -f "$home_path" ]]; then
-# 					if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
-# 						state=${STATE[M]}
-# 					fi
-# 				else
-# 					state=${STATE[D]} # deleted (or dir)
-# 				fi
-# 			else
-# 				if [[ -d "$home_path" ]]; then
-# 					local item
-# 					while read_by_null item; do
-# 						new_item["$item"]=1
-# 					done < <(find "$home_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%p\0")
-# 				else
-# 					state=${STATE[D]} # deleted (or file)
-# 					del_dir["$base"]=1
-# 				fi
-# 			fi
+			case "$state" in
+			"${STATE[_]}" | "${STATE[M]}")
+				unset "new_item[$type$home_path]"
+				if [[ "$state" == "${STATE[M]}" ]]; then
+					rm -f "$repo_path"
+					install -o root -g root -m 700 "$home_path" "$repo_path"
+				fi
+				;;
+			"${STATE[D]}")
+				# local usr_input
+				if [[ "$own" == "${OWN[union]}" ]]; then
+					# printf "($base) this item has alias on default profile.\nDo you want to delete it too?\n"
+					rm -rf "${default_dir:?}/$base"
+					# read -r usr_input </dev/tty
+					# if [[ "$usr_input" == "y" ]]; then
+					# 	rm -rf "$default_dir/$base"
+					# fi
+				fi
+				rm -rf "$repo_path"
+				;;
+			esac
 
-# 			case "$state" in
-# 			"${STATE[_]}" | "${STATE[M]}")
-# 				unset "new_item[$type$home_path]"
-# 				if [[ "$state" == "${STATE[M]}" ]]; then
-# 					rm -f "$repo_path"
-# 					install -o root -g root -m 700 "$home_path" "$repo_path"
-# 				fi
-# 				;;
-# 			"${STATE[D]}")
-# 				# local usr_input
-# 				if [[ "$own" == "${OWN[union]}" ]]; then
-# 					# printf "($base) this item has alias on default profile.\nDo you want to delete it too?\n"
-# 					rm -rf "$default_dir/$base"
-# 					# read -r usr_input </dev/tty
-# 					# if [[ "$usr_input" == "y" ]]; then
-# 					# 	rm -rf "$default_dir/$base"
-# 					# fi
-# 				fi
-# 				rm -rf "$repo_path"
-# 				;;
-# 			esac
+			printfc "($type:$own) $base" "${STATE_CLR[$state]}"
+		done
 
-# 			# printfc "($type:$own) $base" "${STATE_CLR[$state]}"
-# 		done
+		for new_item in "${!new_item[@]}"; do
+			local n_path=""
+			local n_type=""
+			# printfc "new item: $new_item" "${STATE_CLR[${STATE[A]}]}"
+		done
 
-# 		for new_item in "${!new_item[@]}"; do
-# 			local n_path=""
-# 			local n_type=""
-# 			# printfc "new item: $new_item" "${STATE_CLR[${STATE[A]}]}"
-# 		done
+	} <"$_TRACK_FILE"
 
-# 	} <"$track_file"
-
-# }
-
-# # Env
-# USER="kana"
-# PROFILE="uwu"
-# REPO_INSTALL_DIR="/app"
-# REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
-# REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
-# TRACK_FILE="/tmp/tracks_$USER"
-# HOME_DIR="/home/$USER"
-# DEFAULT_DIR="$REPO_PROFILES_DIR/default/home/default"
-# OVERRIDE_DIR="$REPO_PROFILES_DIR/$PROFILE/home/$PROFILE"
-# PREFIX="$PROFILE#"
-
-# useradd -s "/bin/zsh" -G "sudo" "$USER"
-# printf "%s\0%s\0%s\0" "$(id -u "$USER")" "$PROFILE" "<git_commit_id>" >>"$TRACK_FILE"
+}
 
 # run_test() {
 # 	_show_msg() {
@@ -261,10 +239,6 @@ set -e -u -o pipefail -C
 # 	done
 # }
 
-# TEST_DUMMY_DIR="_dummy"
-# TEST_DEFAULT_DIR="$TEST_DUMMY_DIR/defaultDir"
-# TEST_DEFAULT_FILE="$TEST_DUMMY_DIR/defaultFile"
-
 # # shellcheck disable=SC2329
 # test_del_default_dir() {
 # 	[[ ! -d "$HOME_DIR/$TEST_DEFAULT_DIR" ]] && return 1
@@ -286,35 +260,6 @@ set -e -u -o pipefail -C
 # 	[[ ! -f "$DEFAULT_DIR/$TEST_DEFAULT_FILE" ]] && return 0
 # 	return 1
 # }
-
-# run_test
-
-# # tail -f /dev/null
-
-create_test_env() {
-	local output_dir="$1"
-
-	mkdir -p "$output_dir/"{default,override,home}
-
-	local default_home="$output_dir/default"
-	local override_home="$output_dir/override"
-
-	# Default directory
-	mkdir -p "$default_home/"{defaultDir,union,my_folder}
-	printf "DEFAULT" >>"$default_home/my_file"
-	touch "$default_home/my_folder/A_"{1..3}
-	touch "$default_home/A_"{1..3}
-	touch "$default_home/defaultDir/A_"{1..3}
-	touch "$default_home/union/U_"{1..3}
-
-	# Override directory
-	mkdir -p "$override_home/"{overrideDir,union,$PROFILE#my_folder}
-	printf "OVERRIDE" >>"$override_home/my_file"
-	touch "$override_home/$PROFILE#my_folder/B_"{1..3} # Prefixed directory
-	touch "$override_home/B_"{1..3}
-	touch "$override_home/overrideDir/B_"{1..3}
-	touch "$override_home/union/U_"{1..6}
-}
 
 get_temp_dir() {
 	local random_str
@@ -357,7 +302,14 @@ get_mixed_items() {
 		<(printf "%s\0" "${right_arr[@]}"))
 }
 
-append_path() {
+declare -A OWN=(
+	[default]=1
+	[override]=2
+	[union]=3
+	[prefixed]=4
+)
+
+append_track() {
 	local track_path="$1"
 	local item_type="$2"
 	local own="$3"
@@ -370,6 +322,7 @@ append_path() {
 		printf "%s%s%s\0" "$item_type" "${OWN[$own]}" "$base_path" >>"$track_path"
 	fi
 }
+
 apply_to_local() {
 	local output_dir="$1"
 	local override_dir="${2:-}" # Preferrer
@@ -444,7 +397,7 @@ apply_to_local() {
 			fi
 
 			if [[ "$type" == "d" ]]; then
-				append_path "$_TRACK_FILE" "$type" "$write_own" "$write_path"
+				append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path"
 				install -m 0700 -o "$_USER" -g "$_USER" "$output_path" -d
 				if [[ "$own" == "union" ]]; then
 					apply_to_local "$output_path" "$as_override_item" "$as_default_item"
@@ -454,36 +407,88 @@ apply_to_local() {
 					apply_to_local "$output_path" "" "$as_default_item"
 				fi
 			elif [[ "$type" == "f" ]]; then
-				append_path "$_TRACK_FILE" "$type" "$write_own" "$write_path" "$sum"
+				append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path" "$sum"
 				install -m 0700 -o "$_USER" -g "$_USER" "$repo_path" "$output_path"
 			fi
 		done
 	done
 }
 
-############## TESTER ##############
-USER="kana"
-PROFILE="uwu"
-PREFIX="$PROFILE#"
+############## TEST ##############
+TEST_USER="kana"
+TEST_PROFILE="uwu"
+TEST_PREFIX="$(get_prefix "$TEST_PROFILE")"
 
-main_() {
+generate_test_data() {
+	local dest_dir="$1"
+
+	mkdir -p "$dest_dir/"{A,B,OUT}
+
+	local A_dir="$dest_dir/A"
+	local B_Dir="$dest_dir/B"
+
+	# Base directory
+	mkdir -p "$A_dir/"{A_Dir,U,P_Dir}
+	printf "A" >>"$A_dir/P_File"
+	touch "$A_dir/P_Dir/A_File"{1..3}
+	touch "$A_dir/A_File"{1..3}
+	touch "$A_dir/A_Dir/A_File"{1..3}
+	touch "$A_dir/U/U_File"{1..3}
+
+	# Override directory
+	mkdir -p "$B_Dir/"{B_Dir,U,"$TEST_PREFIX"P_Dir}
+	printf "B" >>"$B_Dir/${TEST_PREFIX}P_File"
+	touch "$B_Dir/${TEST_PREFIX}P_Dir/B_"{1..3}
+	touch "$B_Dir/B_File"{1..3}
+	touch "$B_Dir/B_Dir/B_File"{1..3}
+	touch "$B_Dir/U/U_File"{1..6}
+}
+
+test_main() {
+	# Before test
+	useradd -G "sudo" "$TEST_USER"
+
 	local tmp_dir
 	tmp_dir="$(get_temp_dir)"
 	mkdir "$tmp_dir"
-	create_test_env "$tmp_dir"
+	generate_test_data "$tmp_dir"
 	debug "Created test data: '$tmp_dir'"
 
-	local home_dir="$tmp_dir/default"
-	local default_dir="$tmp_dir/default"
-	local override_dir="$tmp_dir/override"
+	local local_dir="$tmp_dir/OUT"
+	local default_dir="$tmp_dir/A"
+	local override_dir="$tmp_dir/B"
+	local user_id
+	user_id="$(id -u "$TEST_USER")"
+	local track_file="$tmp_dir/$user_id"
 
+	_run_apply_to_local() {
+		# Write track headers
+		printf "%s\0%s\0" "$TEST_PROFILE" "<git_commit_id>" >>"$track_file"
+
+		_TRACK_FILE="$track_file" _PREFIX="$TEST_PREFIX" _USER="$TEST_USER" \
+			apply_to_local "$local_dir" "$override_dir" "$default_dir"
+	}
+
+	_reset_local_dir() {
+		rm -f "$track_file"
+		rm -rf "${local_dir:?}/"*
+	}
+
+	_run_apply_to_repo() {
+		_TRACK_FILE="$track_file" \
+			apply_to_repo "$local_dir" "$override_dir" "$default_dir"
+	}
+
+	### Test "apply_to_local"
+	_run_apply_to_local
+	_run_apply_to_repo
+
+	# _reset_local_dir
 	tree "$tmp_dir"
 
-	_TRACK_FILE="$TRACK_FILE" _PREFIX="$PREFIX" _USER="$USER" \
-		apply_to_local "$home_dir" "$override_dir" "$default_dir"
-
+	# Clean up temp test dir
 	debug "Clean up test dir"
 	rm -rf "$tmp_dir"
 }
 
-main_
+test_main
