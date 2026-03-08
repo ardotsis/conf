@@ -208,9 +208,10 @@ apply_to_repo() {
 		done
 
 		for new_item in "${!new_item[@]}"; do
-			local n_path=""
-			local n_type=""
-			# printfc "new item: $new_item" "${STATE_CLR[${STATE[A]}]}"
+			# local new_type="${new_item:0:1}"
+			# local new_base="${new_item:1}"
+			# cp -r "$new_base" "$default_dir/$new_base"
+			printfc "new item: $new_item" "${STATE_CLR[${STATE[A]}]}"
 		done
 
 	} <"$_TRACK_FILE"
@@ -446,6 +447,7 @@ generate_test_data() {
 }
 
 test_main() {
+	# New item should be in tracked item!
 	_show_msg() {
 		printfc "[Test] $1" "$2" >&2
 	}
@@ -499,6 +501,7 @@ test_main() {
 		fi
 
 		rm -rf "$rm_dir"
+		# mkdir -p "$local_dir/u_dir/adsad"
 		_run_apply_to_repo
 
 		if "$callback"; then
