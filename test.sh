@@ -202,10 +202,9 @@ apply_to_repo() {
 		done
 
 		for new_item in "${!new_item[@]}"; do
-			# TODO: Refactor?
-			local new_base="${new_item:1+$output_dir_len+1}"
+			local new_base="${new_item:1+$output_dir_len+1}" # TODO: Refactor
 			echo "N $new_base"
-			cp -r "${new_item:1}" "$default_dir/$new_base"
+			cp -r "${new_item:1}" "$default_dir/$new_base" # TODO: if 'd' or 'f'
 			printfc "Added: $new_base" "${STATE_CLR[${STATE[A]}]}"
 		done
 
@@ -213,60 +212,11 @@ apply_to_repo() {
 
 }
 
-# run_test() {
-# 	_show_msg() {
-# 		printfc "[Test:$1] $2" "$3" >&2
-# 	}
-
-# 	local f
-# 	for f in $(declare -F | cut -d ' ' -f3 | grep "^test_" | grep -v "_after$"); do
-# 		if ! $f; then
-# 			_show_msg "$f" "Prepare failed" "${C[R]}"
-# 			return 1
-# 		fi
-
-# 		apply_local_change "$HOME_DIR" "$DEFAULT_DIR" "$OVERRIDE_DIR" "$TRACK_FILE"
-
-# 		if "${f}_after"; then
-# 			_show_msg "$f" "Success" "${C[G]}"
-# 		else
-# 			_show_msg "$f" "Failed" "${C[R]}"
-# 		fi
-# 	done
-# }
-
-# # shellcheck disable=SC2329
-# test_del_default_dir() {
-# 	[[ ! -d "$HOME_DIR/$TEST_DEFAULT_DIR" ]] && return 1
-# 	rm -rf "$HOME_DIR/$TEST_DEFAULT_DIR"
-# }
-# # shellcheck disable=SC2329
-# test_del_default_dir_after() {
-# 	[[ ! -d "$DEFAULT_DIR/$TEST_DEFAULT_DIR" ]] && return 0
-# 	return 1
-# }
-
-# # shellcheck disable=SC2329
-# test_del_default_file() {
-# 	[[ ! -f "$HOME_DIR/$TEST_DEFAULT_FILE" ]] && return 1
-# 	rm -f "$HOME_DIR/$TEST_DEFAULT_FILE"
-# }
-# # shellcheck disable=SC2329
-# test_del_default_file_after() {
-# 	[[ ! -f "$DEFAULT_DIR/$TEST_DEFAULT_FILE" ]] && return 0
-# 	return 1
-# }
-
 get_temp_dir() {
 	local random_str
 	random_str="$(tr -dc A-Za-z0-9 </dev/urandom | head -c 8)"
 	printf "/tmp/test-%s" "$random_str"
 }
-
-# debug() {
-# 	local msg="$1"
-# 	printf "%b[TEST] %s%b\n" "\033[1;36m" "$msg" "\033[0m" >&2
-# }
 
 get_items() {
 	local dir_path="$1"
