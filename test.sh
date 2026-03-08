@@ -490,7 +490,7 @@ test_main() {
 	}
 
 	_add_kana_dir() {
-		[[ -e "$repo_a_dir/a_dir/kana" ]] && return 0 || return 1
+		[[ -d "$repo_a_dir/a_dir/kana" ]] && return 0 || return 1
 	}
 	_run_add_test "$local_dir/a_dir/kana" "_add_kana_dir"
 
