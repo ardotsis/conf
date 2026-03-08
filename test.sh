@@ -267,10 +267,10 @@ get_temp_dir() {
 	printf "/tmp/test-%s" "$random_str"
 }
 
-debug() {
-	local msg="$1"
-	printf "%b[TEST] %s%b\n" "\033[1;36m" "$msg" "\033[0m" >&2
-}
+# debug() {
+# 	local msg="$1"
+# 	printf "%b[TEST] %s%b\n" "\033[1;36m" "$msg" "\033[0m" >&2
+# }
 
 get_items() {
 	local dir_path="$1"
@@ -446,18 +446,25 @@ generate_test_data() {
 }
 
 test_main() {
+	_show_msg() {
+		printfc "[Test] $1" "$2" >&2
+	}
+
 	# Before test
 	useradd -G "sudo" "$TEST_USER"
 
+	# Get temp test dir
 	local tmp_dir
 	tmp_dir="$(get_temp_dir)"
 	mkdir "$tmp_dir"
 	generate_test_data "$tmp_dir"
-	debug "Created test data: '$tmp_dir'"
 
+	# Homes
+	local repo_a_dir="$tmp_dir/a"
+	local repo_b_dir="$tmp_dir/b"
 	local local_dir="$tmp_dir/out"
-	local default_dir="$tmp_dir/a"
-	local override_dir="$tmp_dir/b"
+
+	# Track file
 	local user_id
 	user_id="$(id -u "$TEST_USER")"
 	local track_file="$tmp_dir/$user_id"
@@ -467,7 +474,7 @@ test_main() {
 		printf "%s\0%s\0" "$TEST_PROFILE" "<git_commit_id>" >>"$track_file"
 
 		_TRACK_FILE="$track_file" _PREFIX="$TEST_PREFIX" _USER="$TEST_USER" \
-			apply_to_local "$local_dir" "$override_dir" "$default_dir"
+			apply_to_local "$local_dir" "$repo_b_dir" "$repo_a_dir"
 	}
 
 	_reset_local_dir() {
@@ -477,27 +484,46 @@ test_main() {
 
 	_run_apply_to_repo() {
 		_TRACK_FILE="$track_file" \
-			apply_to_repo "$local_dir" "$override_dir" "$default_dir"
+			apply_to_repo "$local_dir" "$repo_b_dir" "$repo_a_dir"
 	}
 
-	### Test "apply_to_local"
-	_run_apply_to_local
+	_run_del_test() {
+		local rm_dir="$1"
+		local callback="$2"
 
-	### Test "apply_to_local"
-	rm -rf "$local_dir/a_dir"
-	# rm -rf "$local_dir/u_dir"
-	_run_apply_to_repo
+		_run_apply_to_local
 
-	if [[ ! -e "$default_dir/a_dir" ]]; then
-		debug " test ok!"
-	else
-		debug " test failed!"
-	fi
+		if [[ ! -e "$rm_dir" ]]; then
+			_show_msg "Invalid del dir: $rm_dir" "${C[R]}"
+			exit 1
+		fi
 
-	# _reset_local_dir
+		rm -rf "$rm_dir"
+		_run_apply_to_repo
+
+		if "$callback"; then
+			_show_msg "$callback - Success" "${C[G]}"
+		else
+			_show_msg "$callback - Failed" "${C[R]}"
+		fi
+		printf "\n"
+
+		_reset_local_dir
+	}
+
+	# Delete test
+	_del_a_dir() {
+		[[ ! -e "$repo_a_dir/a_dir" ]] && return 0 || return 1
+	}
+	_run_del_test "$local_dir/a_dir" "_del_a_dir"
+
+	_del_u_dir() {
+		[[ ! -e "$repo_a_dir/u_dir" && ! -e "$repo_b_dir/u_dir" ]] && return 0 || return 1
+	}
+	_run_del_test "$local_dir/u_dir" "_del_u_dir"
 
 	# Clean up temp test dir
-	debug "Clean up test dir"
+	_show_msg "Clean up test dir" "${C[C]}"
 	rm -rf "$tmp_dir"
 }
 
