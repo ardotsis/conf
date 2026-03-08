@@ -86,50 +86,6 @@ set -e -u -o pipefail -C
 # 	IFS="" read -r -n 1 _ref
 # }
 
-# get_items() {
-# 	local dir_path="$1"
-# 	local -n result_arr="$2"
-
-# 	# shellcheck disable=SC2034
-# 	mapfile -d $'\0' result_arr < \
-# 		<(find "$dir_path" -mindepth 1 -maxdepth 1 ! -type l -printf "%y%f\0" | sort -z)
-# }
-
-# get_mixed_items() {
-# 	# todo: arr1 arr2
-# 	local -n left_arr="$1"
-# 	local -n right_arr="$2"
-# 	local mode="$3"
-# 	# shellcheck disable=SC2178
-# 	local -n result_arr="$4"
-
-# 	case "$mode" in
-# 	union) comm_num="-12" ;;
-# 	left_only) comm_num="-23" ;;
-# 	right_only) comm_num="-13" ;;
-# 	*) return 1 ;;
-# 	esac
-
-# 	# shellcheck disable=SC2034
-# 	mapfile -d $'\0' result_arr < <(comm "$comm_num" -z \
-# 		<(printf "%s\0" "${left_arr[@]}") \
-# 		<(printf "%s\0" "${right_arr[@]}"))
-# }
-
-# _append_track() {
-# 	local track_path="$1"
-# 	local item_type="$2"
-# 	local own="$3"
-# 	local base_path="$4"
-# 	local sum="${5:-}"
-
-# 	if [[ "$item_type" == "f" ]]; then
-# 		printf "%s%s%s\0%s\0" "$item_type" "${OWN[$own]}" "$base_path" "$sum" >>"$track_path"
-# 	elif [[ "$item_type" == "d" ]]; then
-# 		printf "%s%s%s\0" "$item_type" "${OWN[$own]}" "$base_path" >>"$track_path"
-# 	fi
-# }
-
 # apply_local_change() {
 # 	local output_dir="$1"
 # 	local default_dir="$2"
@@ -335,9 +291,6 @@ set -e -u -o pipefail -C
 
 # # tail -f /dev/null
 
-PROFILE="uwu"
-USER="kana"
-
 create_test_env() {
 	local output_dir="$1"
 
@@ -374,24 +327,50 @@ debug() {
 	printf "%b[TEST] %s%b\n" "\033[1;36m" "$msg" "\033[0m" >&2
 }
 
-main_() {
-	local tmp_dir
-	tmp_dir="$(get_temp_dir)"
-	mkdir "$tmp_dir"
-	create_test_env "$tmp_dir"
-	debug "Created test data: '$tmp_dir'"
+get_items() {
+	local dir_path="$1"
+	local -n result_arr="$2"
 
-	tree "$tmp_dir"
-
-	debug "Clean up test dir"
-	rm -rf "$tmp_dir"
+	# shellcheck disable=SC2034
+	mapfile -d $'\0' result_arr < \
+		<(find "$dir_path" -mindepth 1 -maxdepth 1 ! -type l -printf "%y%f\0" | sort -z)
 }
 
-# _TRACKFILE="$TRACK_FILE" _PREFIX="$PREFIX" _USER="$USER" \
-# 	link "$HOME_DIR" "$OVERRIDE_DIR" "$DEFAULT_DIR"
-main_
+get_mixed_items() {
+	# todo: arr1 arr2
+	local -n left_arr="$1"
+	local -n right_arr="$2"
+	local mode="$3"
+	# shellcheck disable=SC2178
+	local -n result_arr="$4"
 
-link() {
+	case "$mode" in
+	union) comm_num="-12" ;;
+	left_only) comm_num="-23" ;;
+	right_only) comm_num="-13" ;;
+	*) return 1 ;;
+	esac
+
+	# shellcheck disable=SC2034
+	mapfile -d $'\0' result_arr < <(comm "$comm_num" -z \
+		<(printf "%s\0" "${left_arr[@]}") \
+		<(printf "%s\0" "${right_arr[@]}"))
+}
+
+append_path() {
+	local track_path="$1"
+	local item_type="$2"
+	local own="$3"
+	local base_path="$4"
+	local sum="${5:-}"
+
+	if [[ "$item_type" == "f" ]]; then
+		printf "%s%s%s\0%s\0" "$item_type" "${OWN[$own]}" "$base_path" "$sum" >>"$track_path"
+	elif [[ "$item_type" == "d" ]]; then
+		printf "%s%s%s\0" "$item_type" "${OWN[$own]}" "$base_path" >>"$track_path"
+	fi
+}
+apply_to_local() {
 	local output_dir="$1"
 	local override_dir="${2:-}" # Preferrer
 	local default_dir="${3:-}"
@@ -465,19 +444,46 @@ link() {
 			fi
 
 			if [[ "$type" == "d" ]]; then
-				_append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path"
+				append_path "$_TRACK_FILE" "$type" "$write_own" "$write_path"
 				install -m 0700 -o "$_USER" -g "$_USER" "$output_path" -d
 				if [[ "$own" == "union" ]]; then
-					link "$output_path" "$as_override_item" "$as_default_item"
+					apply_to_local "$output_path" "$as_override_item" "$as_default_item"
 				elif [[ "$own" == "override" ]]; then
-					link "$output_path" "$as_override_item" ""
+					apply_to_local "$output_path" "$as_override_item" ""
 				elif [[ "$own" == "default" ]]; then
-					link "$output_path" "" "$as_default_item"
+					apply_to_local "$output_path" "" "$as_default_item"
 				fi
 			elif [[ "$type" == "f" ]]; then
-				_append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path" "$sum"
+				append_path "$_TRACK_FILE" "$type" "$write_own" "$write_path" "$sum"
 				install -m 0700 -o "$_USER" -g "$_USER" "$repo_path" "$output_path"
 			fi
 		done
 	done
 }
+
+############## TESTER ##############
+USER="kana"
+PROFILE="uwu"
+PREFIX="$PROFILE#"
+
+main_() {
+	local tmp_dir
+	tmp_dir="$(get_temp_dir)"
+	mkdir "$tmp_dir"
+	create_test_env "$tmp_dir"
+	debug "Created test data: '$tmp_dir'"
+
+	local home_dir="$tmp_dir/default"
+	local default_dir="$tmp_dir/default"
+	local override_dir="$tmp_dir/override"
+
+	tree "$tmp_dir"
+
+	_TRACK_FILE="$TRACK_FILE" _PREFIX="$PREFIX" _USER="$USER" \
+		apply_to_local "$home_dir" "$override_dir" "$default_dir"
+
+	debug "Clean up test dir"
+	rm -rf "$tmp_dir"
+}
+
+main_
