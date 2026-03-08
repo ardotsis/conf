@@ -35,9 +35,9 @@ declare -Ar STATE=(
 
 declare -Ar STATE_CLR=(
 	[${STATE[_]}]=""
-	[${STATE[M]}]="${C[Y]}"
-	[${STATE[A]}]="${C[G]}"
-	[${STATE[D]}]="${C[R]}"
+	[${STATE[M]}]="${C[y]}"
+	[${STATE[A]}]="${C[g]}"
+	[${STATE[D]}]="${C[r]}"
 )
 
 is_contain() {
