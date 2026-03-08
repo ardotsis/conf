@@ -105,7 +105,6 @@ apply_to_repo() {
 		local -A new_item=() del_dir=()
 		local prefix_dir="" prefix_base=""
 		while :; do
-			# Read Item Header (Or EOF)
 			local type own
 			read_byte type || break
 			read_byte own
@@ -149,7 +148,6 @@ apply_to_repo() {
 					else
 						repo_path="$override_dir/$prefix$base"
 					fi
-					# Store prefix directory
 					if [[ "$type" == "d" ]]; then
 						prefix_base="$base"
 						prefix_dir="$repo_path"
@@ -170,7 +168,7 @@ apply_to_repo() {
 						state=${STATE[M]}
 					fi
 				else
-					state=${STATE[D]} # deleted (or dir)
+					state=${STATE[D]}
 				fi
 			else
 				if [[ -d "$home_path" ]]; then
@@ -179,7 +177,7 @@ apply_to_repo() {
 						new_item["$item"]=1
 					done < <(find "$home_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%p\0")
 				else
-					state=${STATE[D]} # deleted (or file)
+					state=${STATE[D]}
 					del_dir["$base"]=1
 				fi
 			fi
@@ -193,14 +191,8 @@ apply_to_repo() {
 				fi
 				;;
 			"${STATE[D]}")
-				# local usr_input
 				if [[ "$own" == "${OWN[union]}" ]]; then
-					# printf "($base) this item has alias on default profile.\nDo you want to delete it too?\n"
 					rm -rf "${default_dir:?}/$base"
-					# read -r usr_input </dev/tty
-					# if [[ "$usr_input" == "y" ]]; then
-					# 	rm -rf "$default_dir/$base"
-					# fi
 				fi
 				rm -rf "$repo_path"
 				;;
