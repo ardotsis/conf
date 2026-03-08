@@ -403,6 +403,7 @@ install_nvim() {
 	tgz_path=$(get_tmp_curl_file "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz")
 	tar -C "/opt" -xzf "$tgz_path"
 	rm -rf "$tgz_path"
+	ln -s /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim
 }
 
 install_zoxide() {
@@ -707,6 +708,7 @@ cmd_install() {
 	if [[ "$IS_DOCKER" == "false" ]]; then
 		_info "Executing Docker installation script.."
 		sh -c "$(curl -fsSL https://get.docker.com)"
+		usermod -aG docker "$username"
 	fi
 
 	local port_num="$((1024 + RANDOM % (65535 - 1024 + 1)))"
