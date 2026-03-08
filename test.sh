@@ -206,7 +206,7 @@ apply_to_repo() {
 			local new_base="${new_item:1+$output_dir_len+1}"
 			echo "N $new_base"
 			cp -r "${new_item:1}" "$default_dir/$new_base"
-			printfc "new item: $new_item" "${STATE_CLR[${STATE[A]}]}"
+			printfc "Added: $new_base" "${STATE_CLR[${STATE[A]}]}"
 		done
 
 	} <"$_TRACK_FILE"
