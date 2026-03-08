@@ -444,6 +444,7 @@ generate_test_data() {
 	touch "$b_dir/b_file"{1..3}
 	touch "$b_dir/b_dir/b_file"{1..3}
 	touch "$b_dir/u_dir/u_file"{1..6}
+
 }
 
 test_main() {
@@ -459,17 +460,22 @@ test_main() {
 	local tmp_dir
 	tmp_dir="$(get_temp_dir)"
 	mkdir "$tmp_dir"
-	generate_test_data "$tmp_dir"
 
 	# Homes
 	local repo_a_dir="$tmp_dir/a"
 	local repo_b_dir="$tmp_dir/b"
 	local local_dir="$tmp_dir/out"
+	generate_test_data "$tmp_dir"
 
 	# Track file
 	local user_id
 	user_id="$(id -u "$TEST_USER")"
 	local track_file="$tmp_dir/$user_id"
+
+	_reset() {
+		rm -rf "${tmp_dir:?}/"*
+		generate_test_data "$tmp_dir"
+	}
 
 	_run_apply_to_local() {
 		# Write track headers
@@ -479,16 +485,12 @@ test_main() {
 			apply_to_local "$local_dir" "$repo_b_dir" "$repo_a_dir"
 	}
 
-	_reset_local_dir() {
-		rm -f "$track_file"
-		rm -rf "${local_dir:?}/"*
-	}
-
 	_run_apply_to_repo() {
 		_TRACK_FILE="$track_file" \
 			apply_to_repo "$local_dir" "$repo_b_dir" "$repo_a_dir"
 	}
 
+	### Delete test
 	_run_del_test() {
 		local rm_dir="$1"
 		local callback="$2"
@@ -501,7 +503,6 @@ test_main() {
 		fi
 
 		rm -rf "$rm_dir"
-		# mkdir -p "$local_dir/u_dir/adsad"
 		_run_apply_to_repo
 
 		if "$callback"; then
@@ -511,10 +512,9 @@ test_main() {
 		fi
 		printf "\n"
 
-		_reset_local_dir
+		_reset
 	}
 
-	# Delete test
 	_del_a_dir() {
 		[[ ! -e "$repo_a_dir/a_dir" ]] && return 0 || return 1
 	}
@@ -524,6 +524,32 @@ test_main() {
 		[[ ! -e "$repo_a_dir/u_dir" && ! -e "$repo_b_dir/u_dir" ]] && return 0 || return 1
 	}
 	_run_del_test "$local_dir/u_dir" "_del_u_dir"
+
+	### Add test
+	_run_add_test() {
+		local add_dir="$1" # TODO: support file
+		local callback="$2"
+
+		# TODO: Detect not in tracked item (=root item)
+
+		_run_apply_to_local
+		mkdir "$add_dir"
+		_run_apply_to_repo
+
+		if "$callback"; then
+			_show_msg "$callback - Success" "${C[G]}"
+		else
+			_show_msg "$callback - Failed" "${C[R]}"
+		fi
+		printf "\n"
+
+		_reset
+	}
+
+	_add_kana_dir() {
+		[[ -e "$repo_a_dir/a_dir/kana" ]] && return 0 || return 1
+	}
+	_run_add_test "$local_dir/a_dir/kana" "_add_kana_dir"
 
 	# Clean up temp test dir
 	_show_msg "Clean up test dir" "${C[C]}"
