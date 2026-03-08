@@ -130,97 +130,6 @@ set -e -u -o pipefail -C
 # 	fi
 # }
 
-# link() {
-# 	local output_dir="$1"
-# 	local override_dir="${2:-}" # Preferrer
-# 	local default_dir="${3:-}"
-
-# 	if [[ -z "${output_dir_len+x}" ]]; then
-# 		local output_dir_len="${#output_dir}"
-# 	fi
-
-# 	local all_override_items=() all_default_items=()
-# 	# TODO: include item type (find command)
-# 	[[ -z "$override_dir" ]] || get_items "$override_dir" "all_override_items"
-# 	[[ -z "$default_dir" ]] || get_items "$default_dir" "all_default_items"
-
-# 	# shellcheck disable=SC2034
-# 	local union_items=() override_items=() default_items=()
-# 	if [[ -n "$override_dir" && -n "$default_dir" ]]; then
-# 		get_mixed_items "all_override_items" "all_default_items" "union" "union_items"
-# 		get_mixed_items "all_override_items" "all_default_items" "left_only" "override_items"
-# 		get_mixed_items "all_override_items" "all_default_items" "right_only" "default_items"
-# 	elif [[ -n "$override_dir" ]]; then
-# 		# shellcheck disable=SC2034
-# 		local override_items=("${all_override_items[@]}")
-# 	elif [[ -n "$default_dir" ]]; then
-# 		# shellcheck disable=SC2034
-# 		local default_items=("${all_default_items[@]}")
-# 	fi
-
-# 	local own prefixed_items=()
-# 	for own in "override" "union" "default"; do
-# 		local -n items="${own}_items"
-
-# 		local as_var
-# 		if [[ "$own" == "union" ]]; then
-# 			as_var="as_override_item" # choose override path
-# 		else
-# 			as_var="as_${own}_item"
-# 		fi
-
-# 		local item
-# 		for item in "${items[@]}"; do
-# 			[[ -z "$item" ]] && continue
-
-# 			local type="${item:0:1}"
-# 			local base="${item:1}"
-
-# 			local as_override_item="${override_dir}/${base}"
-# 			local as_default_item="${default_dir}/${base}"
-# 			local repo_path="${!as_var}"
-
-# 			local sum=""
-# 			if [[ "$type" == "f" ]]; then
-# 				sum="$(sha256sum "$repo_path" | cut -d ' ' -f1)"
-# 			fi
-
-# 			local output_path="${output_dir}/${base}"
-# 			local write_path="${output_path:$output_dir_len+1}"
-# 			local write_own="$own"
-
-# 			# Skip prefixed override path (for default)
-# 			if [[ "$own" == "default" ]] && is_contain "$base" "prefixed_items"; then
-# 				continue
-# 			fi
-
-# 			# Fix: <Prefixed Path> -> <Output Path>
-# 			if [[ "$own" == "override" && "$base" == "$PROFILE_PREFIX"* ]]; then
-# 				local origin_base="${base#"${PROFILE_PREFIX}"}"
-# 				output_path="${output_dir}/${origin_base}"
-# 				prefixed_items+=("$origin_base")
-# 				write_path="${output_path:$output_dir_len+1}"
-# 				write_own="prefixed"
-# 			fi
-
-# 			if [[ "$type" == "d" ]]; then
-# 				_append_track "$TRACK" "$type" "$write_own" "$write_path"
-# 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$output_path" -d
-# 				if [[ "$own" == "union" ]]; then
-# 					link "$output_path" "$as_override_item" "$as_default_item"
-# 				elif [[ "$own" == "override" ]]; then
-# 					link "$output_path" "$as_override_item" ""
-# 				elif [[ "$own" == "default" ]]; then
-# 					link "$output_path" "" "$as_default_item"
-# 				fi
-# 			elif [[ "$type" == "f" ]]; then
-# 				_append_track "$TRACK" "$type" "$write_own" "$write_path" "$sum"
-# 				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$repo_path" "$output_path"
-# 			fi
-# 		done
-# 	done
-# }
-
 # apply_local_change() {
 # 	local output_dir="$1"
 # 	local default_dir="$2"
@@ -373,8 +282,6 @@ set -e -u -o pipefail -C
 
 # useradd -s "/bin/zsh" -G "sudo" "$USER"
 # printf "%s\0%s\0%s\0" "$(id -u "$USER")" "$PROFILE" "<git_commit_id>" >>"$TRACK_FILE"
-# TRACK="$TRACK_FILE" PROFILE_PREFIX="$PREFIX" INSTALL_USER="$USER" \
-# 	link "$HOME_DIR" "$OVERRIDE_DIR" "$DEFAULT_DIR"
 
 # run_test() {
 # 	_show_msg() {
@@ -429,27 +336,31 @@ set -e -u -o pipefail -C
 # # tail -f /dev/null
 
 PROFILE="uwu"
+USER="kana"
 
 create_test_env() {
 	local output_dir="$1"
 
 	mkdir -p "$output_dir/"{default,override,home}
 
+	local default_home="$output_dir/default"
+	local override_home="$output_dir/override"
+
 	# Default directory
-	mkdir -p "$output_dir/default/"{defaultDir,union,my_folder}
-	printf "DEFAULT" >>"$output_dir/default/my_file"
-	touch "$output_dir/default/my_folder/defaultFile_"{1..3}.txt
-	touch "$output_dir/default/defaultFile_"{1..3}.txt
-	touch "$output_dir/default/defaultDir/defaultFile_"{1..3}.ini
-	touch "$output_dir/default/union/union_"{1..3}.sh
+	mkdir -p "$default_home/"{defaultDir,union,my_folder}
+	printf "DEFAULT" >>"$default_home/my_file"
+	touch "$default_home/my_folder/A_"{1..3}
+	touch "$default_home/A_"{1..3}
+	touch "$default_home/defaultDir/A_"{1..3}
+	touch "$default_home/union/U_"{1..3}
 
 	# Override directory
-	mkdir -p "$output_dir/override/"{overrideDir,union,$PROFILE#my_folder}
-	printf "OVERRIDE" >>"$output_dir/override/my_file"
-	touch "$output_dir/override/$PROFILE#my_folder/overrideFile_"{1..3}.txt # Prefixed directory
-	touch "$output_dir/override/overrideFile_"{1..3}.txt
-	touch "$output_dir/override/overrideDir/overrideFile_"{1..3}.ini
-	touch "$output_dir/override/union/union_"{1..5}.sh
+	mkdir -p "$override_home/"{overrideDir,union,$PROFILE#my_folder}
+	printf "OVERRIDE" >>"$override_home/my_file"
+	touch "$override_home/$PROFILE#my_folder/B_"{1..3} # Prefixed directory
+	touch "$override_home/B_"{1..3}
+	touch "$override_home/overrideDir/B_"{1..3}
+	touch "$override_home/union/U_"{1..6}
 }
 
 get_temp_dir() {
@@ -458,13 +369,115 @@ get_temp_dir() {
 	printf "/tmp/test-%s" "$random_str"
 }
 
-main_() {
-	local tmp_dir="$(get_temp_dir)"
-	echo "Create test dir: $tmp_dir"
-	mkdir "$tmp_dir"
-	create_test_env "$tmp_dir"
-
-	tree "$tmp_dir"
+debug() {
+	local msg="$1"
+	printf "%b[TEST] %s%b\n" "\033[1;36m" "$msg" "\033[0m" >&2
 }
 
+main_() {
+	local tmp_dir
+	tmp_dir="$(get_temp_dir)"
+	mkdir "$tmp_dir"
+	create_test_env "$tmp_dir"
+	debug "Created test data: '$tmp_dir'"
+
+	tree "$tmp_dir"
+
+	debug "Clean up test dir"
+	rm -rf "$tmp_dir"
+}
+
+# _TRACKFILE="$TRACK_FILE" _PREFIX="$PREFIX" _USER="$USER" \
+# 	link "$HOME_DIR" "$OVERRIDE_DIR" "$DEFAULT_DIR"
 main_
+
+link() {
+	local output_dir="$1"
+	local override_dir="${2:-}" # Preferrer
+	local default_dir="${3:-}"
+
+	if [[ -z "${output_dir_len+x}" ]]; then
+		local output_dir_len="${#output_dir}"
+	fi
+
+	local all_override_items=() all_default_items=()
+	# TODO: include item type (find command)
+	[[ -z "$override_dir" ]] || get_items "$override_dir" "all_override_items"
+	[[ -z "$default_dir" ]] || get_items "$default_dir" "all_default_items"
+
+	# shellcheck disable=SC2034
+	local union_items=() override_items=() default_items=()
+	if [[ -n "$override_dir" && -n "$default_dir" ]]; then
+		get_mixed_items "all_override_items" "all_default_items" "union" "union_items"
+		get_mixed_items "all_override_items" "all_default_items" "left_only" "override_items"
+		get_mixed_items "all_override_items" "all_default_items" "right_only" "default_items"
+	elif [[ -n "$override_dir" ]]; then
+		# shellcheck disable=SC2034
+		local override_items=("${all_override_items[@]}")
+	elif [[ -n "$default_dir" ]]; then
+		# shellcheck disable=SC2034
+		local default_items=("${all_default_items[@]}")
+	fi
+
+	local own prefixed_items=()
+	for own in "override" "union" "default"; do
+		local -n items="${own}_items"
+
+		local as_var
+		if [[ "$own" == "union" ]]; then
+			as_var="as_override_item" # choose override path
+		else
+			as_var="as_${own}_item"
+		fi
+
+		local item
+		for item in "${items[@]}"; do
+			[[ -z "$item" ]] && continue
+
+			local type="${item:0:1}"
+			local base="${item:1}"
+
+			local as_override_item="${override_dir}/${base}"
+			local as_default_item="${default_dir}/${base}"
+			local repo_path="${!as_var}"
+
+			local sum=""
+			if [[ "$type" == "f" ]]; then
+				sum="$(sha256sum "$repo_path" | cut -d ' ' -f1)"
+			fi
+
+			local output_path="${output_dir}/${base}"
+			local write_path="${output_path:$output_dir_len+1}"
+			local write_own="$own"
+
+			# Skip prefixed override path (for default)
+			if [[ "$own" == "default" ]] && is_contain "$base" "prefixed_items"; then
+				continue
+			fi
+
+			# Fix: <Prefixed Path> -> <Output Path>
+			if [[ "$own" == "override" && "$base" == "$_PREFIX"* ]]; then
+				local origin_base="${base#"${_PREFIX}"}"
+				output_path="${output_dir}/${origin_base}"
+				prefixed_items+=("$origin_base")
+				write_path="${output_path:$output_dir_len+1}"
+				write_own="prefixed"
+			fi
+
+			if [[ "$type" == "d" ]]; then
+				_append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path"
+				install -m 0700 -o "$_USER" -g "$_USER" "$output_path" -d
+				if [[ "$own" == "union" ]]; then
+					link "$output_path" "$as_override_item" "$as_default_item"
+				elif [[ "$own" == "override" ]]; then
+					link "$output_path" "$as_override_item" ""
+				elif [[ "$own" == "default" ]]; then
+					link "$output_path" "" "$as_default_item"
+				fi
+			elif [[ "$type" == "f" ]]; then
+				_append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path" "$sum"
+				install -m 0700 -o "$_USER" -g "$_USER" "$repo_path" "$output_path"
+			fi
+		done
+	done
+}
