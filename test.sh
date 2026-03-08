@@ -88,6 +88,8 @@ apply_to_repo() {
 	local override_dir="$2"
 	local default_dir="$3"
 
+	local output_dir_len="${#output_dir}"
+
 	_show_err() {
 		printf "apply_local_repo err: %s\n" "$1" >&2
 		exit 1
@@ -208,9 +210,10 @@ apply_to_repo() {
 		done
 
 		for new_item in "${!new_item[@]}"; do
-			# local new_type="${new_item:0:1}"
-			# local new_base="${new_item:1}"
-			# cp -r "$new_base" "$default_dir/$new_base"
+			# TODO: Refactor?
+			local new_base="${new_item:1+$output_dir_len+1}"
+			echo "N $new_base"
+			cp -r "${new_item:1}" "$default_dir/$new_base"
 			printfc "new item: $new_item" "${STATE_CLR[${STATE[A]}]}"
 		done
 
@@ -465,14 +468,13 @@ test_main() {
 	local repo_a_dir="$tmp_dir/a"
 	local repo_b_dir="$tmp_dir/b"
 	local local_dir="$tmp_dir/out"
-	generate_test_data "$tmp_dir"
 
 	# Track file
 	local user_id
 	user_id="$(id -u "$TEST_USER")"
 	local track_file="$tmp_dir/$user_id"
 
-	_reset() {
+	_build() {
 		rm -rf "${tmp_dir:?}/"*
 		generate_test_data "$tmp_dir"
 	}
@@ -495,6 +497,7 @@ test_main() {
 		local rm_dir="$1"
 		local callback="$2"
 
+		_build
 		_run_apply_to_local
 
 		if [[ ! -e "$rm_dir" ]]; then
@@ -511,8 +514,6 @@ test_main() {
 			_show_msg "$callback - Failed" "${C[R]}"
 		fi
 		printf "\n"
-
-		_reset
 	}
 
 	_del_a_dir() {
@@ -530,6 +531,7 @@ test_main() {
 		local add_dir="$1" # TODO: support file
 		local callback="$2"
 
+		_build
 		# TODO: Detect not in tracked item (=root item)
 
 		_run_apply_to_local
@@ -543,11 +545,9 @@ test_main() {
 		fi
 		printf "\n"
 
-		_reset
 	}
 
 	_add_kana_dir() {
-		tree "$repo_a_dir"
 		[[ -e "$repo_a_dir/a_dir/kana" ]] && return 0 || return 1
 	}
 	_run_add_test "$local_dir/a_dir/kana" "_add_kana_dir"
