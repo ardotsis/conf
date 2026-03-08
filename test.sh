@@ -429,20 +429,20 @@ generate_test_data() {
 	local b_dir="$dest_dir/b"
 
 	# base directory
-	mkdir -p "$a_dir/"{a_dir,u,p_dir}
+	mkdir -p "$a_dir/"{a_dir,u_dir,p_dir}
 	printf "a" >>"$a_dir/p_file"
 	touch "$a_dir/p_dir/a_file"{1..3}
 	touch "$a_dir/a_file"{1..3}
 	touch "$a_dir/a_dir/a_file"{1..3}
-	touch "$a_dir/u/u_file"{1..3}
+	touch "$a_dir/u_dir/u_file"{1..3}
 
 	# override directory
-	mkdir -p "$b_dir/"{b_dir,u,"$TEST_PREFIX"p_dir}
+	mkdir -p "$b_dir/"{b_dir,u_dir,"$TEST_PREFIX"p_dir}
 	printf "b" >>"$b_dir/${TEST_PREFIX}p_file"
 	touch "$b_dir/${TEST_PREFIX}p_dir/b_"{1..3}
 	touch "$b_dir/b_file"{1..3}
 	touch "$b_dir/b_dir/b_file"{1..3}
-	touch "$b_dir/u/u_file"{1..6}
+	touch "$b_dir/u_dir/u_file"{1..6}
 }
 
 test_main() {
@@ -483,7 +483,9 @@ test_main() {
 	### Test "apply_to_local"
 	_run_apply_to_local
 
+	### Test "apply_to_local"
 	rm -rf "$local_dir/a_dir"
+	# rm -rf "$local_dir/u_dir"
 	_run_apply_to_repo
 
 	if [[ ! -e "$default_dir/a_dir" ]]; then
@@ -493,7 +495,6 @@ test_main() {
 	fi
 
 	# _reset_local_dir
-	tree "$tmp_dir"
 
 	# Clean up temp test dir
 	debug "Clean up test dir"
