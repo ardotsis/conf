@@ -419,29 +419,30 @@ TEST_USER="kana"
 TEST_PROFILE="uwu"
 TEST_PREFIX="$(get_prefix "$TEST_PROFILE")"
 
+# *Has static rule
 generate_test_data() {
 	local dest_dir="$1"
 
-	mkdir -p "$dest_dir/"{A,B,OUT}
+	mkdir -p "$dest_dir/"{a,b,out}
 
-	local A_dir="$dest_dir/A"
-	local B_Dir="$dest_dir/B"
+	local a_dir="$dest_dir/a"
+	local b_dir="$dest_dir/b"
 
-	# Base directory
-	mkdir -p "$A_dir/"{A_Dir,U,P_Dir}
-	printf "A" >>"$A_dir/P_File"
-	touch "$A_dir/P_Dir/A_File"{1..3}
-	touch "$A_dir/A_File"{1..3}
-	touch "$A_dir/A_Dir/A_File"{1..3}
-	touch "$A_dir/U/U_File"{1..3}
+	# base directory
+	mkdir -p "$a_dir/"{a_dir,u,p_dir}
+	printf "a" >>"$a_dir/p_file"
+	touch "$a_dir/p_dir/a_file"{1..3}
+	touch "$a_dir/a_file"{1..3}
+	touch "$a_dir/a_dir/a_file"{1..3}
+	touch "$a_dir/u/u_file"{1..3}
 
-	# Override directory
-	mkdir -p "$B_Dir/"{B_Dir,U,"$TEST_PREFIX"P_Dir}
-	printf "B" >>"$B_Dir/${TEST_PREFIX}P_File"
-	touch "$B_Dir/${TEST_PREFIX}P_Dir/B_"{1..3}
-	touch "$B_Dir/B_File"{1..3}
-	touch "$B_Dir/B_Dir/B_File"{1..3}
-	touch "$B_Dir/U/U_File"{1..6}
+	# override directory
+	mkdir -p "$b_dir/"{b_dir,u,"$TEST_PREFIX"p_dir}
+	printf "b" >>"$b_dir/${TEST_PREFIX}p_file"
+	touch "$b_dir/${TEST_PREFIX}p_dir/b_"{1..3}
+	touch "$b_dir/b_file"{1..3}
+	touch "$b_dir/b_dir/b_file"{1..3}
+	touch "$b_dir/u/u_file"{1..6}
 }
 
 test_main() {
@@ -454,9 +455,9 @@ test_main() {
 	generate_test_data "$tmp_dir"
 	debug "Created test data: '$tmp_dir'"
 
-	local local_dir="$tmp_dir/OUT"
-	local default_dir="$tmp_dir/A"
-	local override_dir="$tmp_dir/B"
+	local local_dir="$tmp_dir/out"
+	local default_dir="$tmp_dir/a"
+	local override_dir="$tmp_dir/b"
 	local user_id
 	user_id="$(id -u "$TEST_USER")"
 	local track_file="$tmp_dir/$user_id"
@@ -481,7 +482,15 @@ test_main() {
 
 	### Test "apply_to_local"
 	_run_apply_to_local
+
+	rm -rf "$local_dir/a_dir"
 	_run_apply_to_repo
+
+	if [[ ! -e "$default_dir/a_dir" ]]; then
+		debug " test ok!"
+	else
+		debug " test failed!"
+	fi
 
 	# _reset_local_dir
 	tree "$tmp_dir"
