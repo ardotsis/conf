@@ -35,9 +35,9 @@ declare -Ar STATE=(
 
 declare -Ar STATE_CLR=(
 	[${STATE[_]}]=""
-	[${STATE[M]}]="${C[y]}"
-	[${STATE[A]}]="${C[g]}"
-	[${STATE[D]}]="${C[r]}"
+	[${STATE[M]}]="${C[Y]}"
+	[${STATE[A]}]="${C[G]}"
+	[${STATE[D]}]="${C[R]}"
 )
 
 is_contain() {
@@ -197,14 +197,12 @@ apply_to_repo() {
 				rm -rf "$repo_path"
 				;;
 			esac
-
 			printfc "($type:$own) $base" "${STATE_CLR[$state]}"
 		done
 
 		for new_item in "${!new_item[@]}"; do
 			local new_base="${new_item:1+$output_dir_len+1}" # TODO: Refactor
-			echo "N $new_base"
-			cp -r "${new_item:1}" "$default_dir/$new_base" # TODO: if 'd' or 'f'
+			cp -r "${new_item:1}" "$default_dir/$new_base"   # TODO: if 'd' or 'f'
 			printfc "Added: $new_base" "${STATE_CLR[${STATE[A]}]}"
 		done
 
@@ -342,8 +340,8 @@ apply_to_local() {
 				write_own="prefixed"
 			fi
 
+			append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path" "$sum"
 			if [[ "$type" == "d" ]]; then
-				append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path"
 				install -m 0700 -o "$_USER" -g "$_USER" "$output_path" -d
 				if [[ "$own" == "union" ]]; then
 					apply_to_local "$output_path" "$as_override_item" "$as_default_item"
@@ -353,7 +351,6 @@ apply_to_local() {
 					apply_to_local "$output_path" "" "$as_default_item"
 				fi
 			elif [[ "$type" == "f" ]]; then
-				append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path" "$sum"
 				install -m 0700 -o "$_USER" -g "$_USER" "$repo_path" "$output_path"
 			fi
 		done
@@ -389,7 +386,6 @@ generate_test_data() {
 	touch "$b_dir/b_file"{1..3}
 	touch "$b_dir/b_dir/b_file"{1..3}
 	touch "$b_dir/u_dir/u_file"{1..6}
-
 }
 
 test_main() {
@@ -497,6 +493,36 @@ test_main() {
 	# Clean up temp test dir
 	_show_msg "Clean up test dir" "${C[C]}"
 	rm -rf "$tmp_dir"
+
+	### Modify test
+	local modify_content="hello, world 1234"
+	_run_modify_test() {
+		local modify_file="$1"
+		local callback="$2"
+
+		_build
+
+		_run_apply_to_local
+		rm -f "$modify_file"
+		printf "%s" "$modify_content" >>"$modify_file"
+		_run_apply_to_repo
+
+		if "$callback"; then
+			_show_msg "$callback - Success" "${C[G]}"
+		else
+			_show_msg "$callback - Failed" "${C[R]}"
+		fi
+		printf "\n"
+
+	}
+
+	_modify_a_file1() {
+		if [[ "$(cat "$repo_a_dir/a_dir/a_file1")" == "$modify_content" ]]; then
+			return 0
+		fi
+		return 1
+	}
+	_run_modify_test "$local_dir/a_dir/a_file1" "_modify_a_file1"
 }
 
 test_main

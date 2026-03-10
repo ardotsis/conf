@@ -862,6 +862,11 @@ cmd_apply() {
 	fi
 }
 
+cmd_update() {
+	local current_git_commit
+	:
+}
+
 main_() {
 	_vars "BASH_VERSION"
 
