@@ -490,18 +490,16 @@ get_mixed_items() {
 declare -A OWN=(
 	[default]=1
 	[override]=2
-	[both]=3
+	[union]=3
 	[prefixed]=4
-	[ghost]=9
 )
 
-_append_track() {
+append_track() {
 	local track_path="$1"
-	#
 	local item_type="$2"
 	local own="$3"
 	local base_path="$4"
-	local sum="${5:-}" # file only
+	local sum="${5:-}"
 
 	if [[ "$item_type" == "f" ]]; then
 		printf "%s%s%s\0%s\0" "$item_type" "${OWN[$own]}" "$base_path" "$sum" >>"$track_path"
@@ -510,7 +508,31 @@ _append_track() {
 	fi
 }
 
-link() {
+get_sum() {
+	printf "%s" "$(sha256sum "$1" | cut -d ' ' -f1)"
+}
+
+printfc() {
+	local msg="$1"
+	local c="$2"
+	printf "%b%s%b\n" "$c" "$msg" "${C[0]}"
+}
+
+declare -Ar STATE=(
+	[_]=0
+	[M]=1 # Modified
+	[A]=2 # Added
+	[D]=3 # Deleted
+)
+
+declare -Ar STATE_CLR=(
+	[${STATE[_]}]=""
+	[${STATE[M]}]="${C[Y]}"
+	[${STATE[A]}]="${C[G]}"
+	[${STATE[D]}]="${C[R]}"
+)
+
+apply_to_local() {
 	local output_dir="$1"
 	local override_dir="${2:-}" # Preferrer
 	local default_dir="${3:-}"
@@ -525,9 +547,9 @@ link() {
 	[[ -z "$default_dir" ]] || get_items "$default_dir" "all_default_items"
 
 	# shellcheck disable=SC2034
-	local both_items=() override_items=() default_items=()
+	local union_items=() override_items=() default_items=()
 	if [[ -n "$override_dir" && -n "$default_dir" ]]; then
-		get_mixed_items "all_override_items" "all_default_items" "union" "both_items"
+		get_mixed_items "all_override_items" "all_default_items" "union" "union_items"
 		get_mixed_items "all_override_items" "all_default_items" "left_only" "override_items"
 		get_mixed_items "all_override_items" "all_default_items" "right_only" "default_items"
 	elif [[ -n "$override_dir" ]]; then
@@ -539,11 +561,11 @@ link() {
 	fi
 
 	local own prefixed_items=()
-	for own in "override" "both" "default"; do
+	for own in "override" "union" "default"; do
 		local -n items="${own}_items"
 
 		local as_var
-		if [[ "$own" == "both" ]]; then
+		if [[ "$own" == "union" ]]; then
 			as_var="as_override_item" # choose override path
 		else
 			as_var="as_${own}_item"
@@ -571,37 +593,161 @@ link() {
 
 			# Skip prefixed override path (for default)
 			if [[ "$own" == "default" ]] && is_contain "$base" "prefixed_items"; then
-				_debug "Skip '$base' from default index"
 				continue
 			fi
 
 			# Fix: <Prefixed Path> -> <Output Path>
-			if [[ "$own" == "override" && "$base" == "$PROFILE_PREFIX"* ]]; then
-				local origin_base="${base#"${PROFILE_PREFIX}"}"
+			if [[ "$own" == "override" && "$base" == "$_PREFIX"* ]]; then
+				local origin_base="${base#"${_PREFIX}"}"
 				output_path="${output_dir}/${origin_base}"
-				_debug "Add $own's prefixed item $base ($origin_base)"
 				prefixed_items+=("$origin_base")
 				write_path="${output_path:$output_dir_len+1}"
 				write_own="prefixed"
 			fi
 
-			_debug "Create: \"${LC["path"]}$output_path${C["0"]}\""
+			_debug "Create: $output_path"
+			append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path" "$sum"
 			if [[ "$type" == "d" ]]; then
-				_append_track "$TRACK" "$type" "$write_own" "$write_path"
-				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$output_path" -d
-				if [[ "$own" == "both" ]]; then
-					link "$output_path" "$as_override_item" "$as_default_item"
+				install -m 0700 -o "$_USER" -g "$_USER" "$output_path" -d
+				if [[ "$own" == "union" ]]; then
+					apply_to_local "$output_path" "$as_override_item" "$as_default_item"
 				elif [[ "$own" == "override" ]]; then
-					link "$output_path" "$as_override_item" ""
+					apply_to_local "$output_path" "$as_override_item" ""
 				elif [[ "$own" == "default" ]]; then
-					link "$output_path" "" "$as_default_item"
+					apply_to_local "$output_path" "" "$as_default_item"
 				fi
 			elif [[ "$type" == "f" ]]; then
-				_append_track "$TRACK" "$type" "$write_own" "$write_path" "$sum"
-				install -m 0700 -o "$INSTALL_USER" -g "$INSTALL_USER" "$repo_path" "$output_path"
+				install -m 0700 -o "$_USER" -g "$_USER" "$repo_path" "$output_path"
 			fi
 		done
 	done
+}
+
+apply_to_repo() {
+	local output_dir="$1"
+	local override_dir="$2"
+	local default_dir="$3"
+
+	local output_dir_len="${#output_dir}"
+
+	_show_err() {
+		printf "apply_local_repo err: %s\n" "$1" >&2
+		exit 1
+	}
+
+	{
+		local profile commit_id
+		read_by_null "profile"
+		read_by_null "commit_id"
+		local prefix
+		prefix="$(get_prefix "$profile")"
+
+		local -A new_item=() del_dir=()
+		local prefix_dir="" prefix_base=""
+		while :; do
+			local type own
+			read_byte type || break
+			read_byte own
+
+			# Read Item Contents
+			local base sum
+			if [[ "$type" == "f" ]]; then
+				read_by_null "base"
+				read_by_null "sum"
+			elif [[ "$type" == "d" ]]; then
+				read_by_null "base"
+			else
+				_show_err "unknown file type: '$type'"
+			fi
+
+			local in_dir="${base%/*}"
+			if [[ -v del_dir["$in_dir"] ]]; then
+				if [[ "$type" == "d" ]]; then
+					del_dir["$base"]=1
+				fi
+				printfc "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
+				continue
+			fi
+
+			# Resolve Repository Path
+			local repo_path has_repo_path=false
+			if [[ -n "$prefix_dir" ]]; then
+				if [[ "$base" == "$prefix_base/"* ]]; then
+					has_repo_path=true
+					repo_path=$prefix_dir/${base##*/}
+				else
+					prefix_base=""
+					prefix_dir=""
+				fi
+			fi
+
+			if ! $has_repo_path; then
+				if [[ "$own" == "${OWN[prefixed]}" ]]; then
+					if [[ "$base" == *"/"* ]]; then
+						repo_path="$override_dir/${base%/*}/$prefix${base##*/}"
+					else
+						repo_path="$override_dir/$prefix$base"
+					fi
+					if [[ "$type" == "d" ]]; then
+						prefix_base="$base"
+						prefix_dir="$repo_path"
+					fi
+				elif [[ "$own" == "${OWN[override]}" || "$own" == "${OWN[union]}" ]]; then
+					repo_path="$override_dir/$base"
+				elif [[ "$own" == "${OWN[default]}" ]]; then
+					repo_path="$default_dir/$base"
+				else
+					_show_err "unknown own type '$own'"
+				fi
+			fi
+
+			local home_path="$output_dir/$base" state=${STATE[_]}
+			if [[ "$type" == "f" ]]; then
+				if [[ -f "$home_path" ]]; then
+					if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
+						state=${STATE[M]}
+					fi
+				else
+					state=${STATE[D]}
+				fi
+			else
+				if [[ -d "$home_path" ]]; then
+					local item
+					while read_by_null item; do
+						new_item["$item"]=1
+					done < <(find "$home_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%p\0")
+				else
+					state=${STATE[D]}
+					del_dir["$base"]=1
+				fi
+			fi
+
+			case "$state" in
+			"${STATE[_]}" | "${STATE[M]}")
+				unset "new_item[$type$home_path]"
+				if [[ "$state" == "${STATE[M]}" ]]; then
+					rm -f "$repo_path"
+					install -o root -g root -m 700 "$home_path" "$repo_path"
+				fi
+				;;
+			"${STATE[D]}")
+				if [[ "$own" == "${OWN[union]}" ]]; then
+					rm -rf "${default_dir:?}/$base"
+				fi
+				rm -rf "$repo_path"
+				;;
+			esac
+			printfc "($type:$own) $base" "${STATE_CLR[$state]}"
+		done
+
+		for new_item in "${!new_item[@]}"; do
+			local new_base="${new_item:1+$output_dir_len+1}" # TODO: Refactor
+			cp -r "${new_item:1}" "$default_dir/$new_base"   # TODO: if 'd' or 'f'
+			printfc "Added: $new_base" "${STATE_CLR[${STATE[A]}]}"
+		done
+
+	} <"$_TRACK_FILE"
+
 }
 
 ##################################################
@@ -850,8 +996,8 @@ cmd_apply() {
 
 	printf "%s\0%s\0%s\0" "$(id -u "$username")" "$profile" "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" >>"$track_file"
 
-	TRACK="$track_file" PROFILE_PREFIX="${profile}#" INSTALL_USER="$username" \
-		link "$home" "$profile_dir" "$(get_home_profile_dir "default")"
+	_TRACK_FILE="$track_file" _PREFIX="${profile}#" _USER="$username" \
+		apply_to_local "$home" "$profile_dir" "$(get_home_profile_dir "default")"
 
 	if [[ -z "$profile" ]]; then
 		profile="default"
@@ -912,4 +1058,7 @@ main_() {
 	fi
 }
 
-main_ "$@"
+if [[ -z "${BASH_SOURCE[0]+x}" || "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	# Execute via pipeline or directly
+	main_ "$@"
+fi
