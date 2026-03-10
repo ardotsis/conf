@@ -11,7 +11,7 @@ param(
 $Docker = "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
 $env:DOCKER_CLI_HINTS = "false"
 $RepoDir = Split-Path -Path $PSScriptRoot
-$DockerfilesDir = "${RepoDir}\tests\dockerfiles"
+$DockerfilesDir = "${RepoDir}\dockerfiles"
 $Dockerfile = "${DockerfilesDir}\$Os"
 $ImageName = "conf-${Os}"
 $ImageTag = "latest"
@@ -21,7 +21,6 @@ $GuestVolumeDir = "/app-dev"
 if ($Clear) {
     Clear-Host
 }
-
 
 function Remove-Objects {
     [CmdletBinding()]

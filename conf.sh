@@ -508,6 +508,11 @@ append_track() {
 	fi
 }
 
+get_prefix() {
+	local profile_name="$1"
+	printf "%s#" "$profile_name"
+}
+
 read_by_null() {
 	local -n _ref="${1:-REPLY}"
 	IFS="" read -r -d $'\0' _ref
@@ -516,10 +521,6 @@ read_by_null() {
 read_byte() {
 	local -n _ref="${1:-REPLY}"
 	IFS="" read -r -n 1 _ref
-}
-
-get_prefix() {
-	printf "%s#" "$1"
 }
 
 get_sum() {
@@ -1010,7 +1011,7 @@ cmd_apply() {
 
 	printf "%s\0%s\0%s\0" "$(id -u "$username")" "$profile" "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" >>"$track_file"
 
-	_TRACK_FILE="$track_file" _PREFIX="${profile}#" _USER="$username" \
+	_TRACK_FILE="$track_file" _PREFIX="$(get_prefix "$profile")" _USER="$username" \
 		apply_to_local "$home" "$profile_dir" "$(get_home_profile_dir "default")"
 
 	if [[ -z "$profile" ]]; then
