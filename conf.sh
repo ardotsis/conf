@@ -508,6 +508,20 @@ append_track() {
 	fi
 }
 
+read_by_null() {
+	local -n _ref="${1:-REPLY}"
+	IFS="" read -r -d $'\0' _ref
+}
+
+read_byte() {
+	local -n _ref="${1:-REPLY}"
+	IFS="" read -r -n 1 _ref
+}
+
+get_prefix() {
+	printf "%s#" "$1"
+}
+
 get_sum() {
 	printf "%s" "$(sha256sum "$1" | cut -d ' ' -f1)"
 }
