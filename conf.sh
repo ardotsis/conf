@@ -487,6 +487,14 @@ get_mixed_items() {
 		<(printf "%s\0" "${right_arr[@]}"))
 }
 
+is_git_clean() {
+	if [[ -n $(git status --porcelain "$REPO_PROFILES_DIR") ]]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
 declare -A OWN=(
 	[default]=1
 	[override]=2
@@ -530,7 +538,7 @@ get_sum() {
 printfc() {
 	local msg="$1"
 	local c="$2"
-	printf "%b%s%b\n" "$c" "$msg" "${C[0]}"
+	printf "%b%s%b\n" "$c" "$msg" "${C[0]}" >&2
 }
 
 declare -Ar STATE=(
@@ -1024,8 +1032,22 @@ cmd_apply() {
 }
 
 cmd_update() {
+	# TODO: USER $SUDO for this OP!!! this is robust wayy
+
+	check_is_root
+
 	local current_git_commit
-	:
+	current_git_commit="$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)"
+
+	local user_id
+	user_id="$(id -u "$SUDO_USER")"
+
+	local track_file="$REPO_TRACKS_DIR/$user_id"
+	if [[ ! -e "$track_file" ]]; then
+		printfc "You need to apply repository file to the local first." "${C[R]}"
+		exit 1
+	fi
+
 }
 
 main_() {
@@ -1055,6 +1077,7 @@ main_() {
 		"install"
 		"adduser"
 		"apply"
+		"update"
 		"pull"
 	)
 
