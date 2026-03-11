@@ -804,7 +804,7 @@ setup_network() {
 	install -m 0644 -o root -g root "$tmpl_etc_dir/systemd/system/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
 	sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "/etc/iptables/rules.v4"
 
-	if [[ "$IS_DOCKER" == "false" ]]; then
+	if [[ "$DOCKER" == "false" ]]; then
 		# Reload sshd config
 		_info "Restart sshd service"
 		systemctl restart sshd
@@ -881,7 +881,7 @@ cmd_install() {
 	install_zoxide "$data_dir/bin" "$man1_dir"
 	install_starship "$data_dir/bin"
 
-	if [[ "$IS_DOCKER" == "false" ]]; then
+	if [[ "$DOCKER" == "false" ]]; then
 		_info "Executing Docker installation script.."
 		sh -c "$(curl -fsSL https://get.docker.com)"
 		usermod -aG docker "$username"
@@ -1053,7 +1053,7 @@ cmd_update() {
 		exit 1
 	fi
 
-	apply_to_local ""
+	apply_to_local
 }
 
 main_() {
@@ -1096,7 +1096,7 @@ main_() {
 	# Run command
 	INTERNAL=false "cmd_$mode" "${CMDS[@]:1}"
 
-	if $IS_DOCKER; then
+	if $DOCKER; then
 		printf "Keeping docker container running...\n"
 		tail -f /dev/null
 	fi
