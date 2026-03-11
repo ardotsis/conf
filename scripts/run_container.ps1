@@ -2,23 +2,33 @@
 param(
     [Parameter(Mandatory = $true)]
     [string] $Os,
-    [switch] $Build = $false,
-    [switch] $Cache = $false,
-    [switch] $Clear = $false,
-    [array] $Params
+    [switch] $Build,
+    [switch] $Cache,
+    [switch] $Test,
+
+    [array] $Params,
+
+    [switch] $ClearOutput
 )
 
-$Docker = "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
+# Disable unnecessary docker message
 $env:DOCKER_CLI_HINTS = "false"
-$RepoDir = Split-Path -Path $PSScriptRoot
-$DockerfilesDir = "${RepoDir}\dockerfiles"
-$Dockerfile = "${DockerfilesDir}\$Os"
+
+# Paths
+$RepoDir = Split-Path -Path $PSScriptRoot -Parent
+$DockerDir = "${RepoDir}\docker"
+
+# Docker env
+$Docker = "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
+$Dockerfile = "${DockerDir}\${Os}.Dockerfile"
 $ImageName = "conf-${Os}"
 $ImageTag = "latest"
-$ContainerName = "${ImageName}-cont"
-$GuestVolumeDir = "/app-dev"
+$ContainerName = "${ImageName}-container"
+$GuestAppDir = "/app"
+$GuestDevAppDir = "/app-dev"
 
-if ($Clear) {
+
+if ($ClearOutput) {
     Clear-Host
 }
 
@@ -120,14 +130,18 @@ function main() {
         Write-Output "--------- Docker Session ---------"
     }
 
+    $isTest = $Test.ToString().ToLower()
+
     $runArgs = @(
         "--rm",
         "--interactive",
         "--tty",
         "--hostname=somehost",
-        "--mount", "type=bind,source=$RepoDir,target=$GuestVolumeDir,readonly",
-        "--env", "INSTALL_SCRIPT_PARAMS=$Params",
-        "--env", "DOTFILES_VOLUME_DIR=$GuestVolumeDir",
+        "--mount", "type=bind,source=$RepoDir,target=$GuestDevAppDir,readonly",
+        "--env", "DOCKER_CONF_PARAMS=$Params",
+        "--env", "DOCKER_IS_TEST=$isTest",
+        "--env", "DOCKER_APP_DIR=$GuestAppDir",
+        "--env", "DOCKER_DEV_APP_DIR=$GuestDevAppDir",
         "--name", $ContainerName,
         $ImageName
     )

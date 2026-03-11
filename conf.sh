@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e -u -o pipefail -C
+set -euo pipefail -o noclobber
 
 # System
 declare -r TMP_DIR="/var/tmp"
@@ -7,6 +7,9 @@ declare -r DOCKER_VOLUME_DIR="/app"
 declare -r PORT_NUM_FILE="/etc/conf_port"
 # shellcheck disable=SC2155
 declare -r CURRENT_USER="$(whoami)"
+# shellcheck disable=SC2155
+declare -r CURRENT_USER_ID="$(id -u "$CURRENT_USER")"
+
 # Repository
 declare -r REPO_URL="https://github.com/ardotsis/conf.git"
 declare -r REPO_INSTALL_DIR="/usr/local/share/conf"
@@ -14,6 +17,7 @@ declare -r REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
 declare -r REPO_TRACKS_DIR="$REPO_DATA_DIR/tracks"
 declare -r REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
 declare -r REPO_PACKAGES_FILE="$REPO_PROFILES_DIR/packages"
+
 # User
 declare -r SECRET_FILENAME="conf_secret"
 declare -r PASSWD_LENGTH=72
@@ -89,11 +93,8 @@ get_home_profile_dir() {
 }
 
 is_root() {
-	if [[ "$(id -u)" == "0" ]]; then
-		return 0
-	else
-		return 1
-	fi
+	[[ "$CURRENT_USER_ID" == "0" ]] && return 0
+	return 1
 }
 
 is_contain() {
@@ -628,7 +629,7 @@ apply_to_local() {
 				write_own="prefixed"
 			fi
 
-			_debug "Create: $output_path"
+			_debug "Create: ${LC[path]}\"$output_path\"${C[0]}"
 			append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path" "$sum"
 			if [[ "$type" == "d" ]]; then
 				install -m 0700 -o "$_USER" -g "$_USER" "$output_path" -d
@@ -650,6 +651,7 @@ apply_to_repo() {
 	local output_dir="$1"
 	local override_dir="$2"
 	local default_dir="$3"
+	local current_git_commit="$4"
 
 	local output_dir_len="${#output_dir}"
 
@@ -662,6 +664,12 @@ apply_to_repo() {
 		local profile commit_id
 		read_by_null "profile"
 		read_by_null "commit_id"
+
+		if [[ "$current_git_commit" != "$commit_id" ]]; then
+			printfc "Wrong commit id (current: $current_git_commit last: $commit_id)" "${C[Y]}"
+			return 1
+		fi
+
 		local prefix
 		prefix="$(get_prefix "$profile")"
 
@@ -787,7 +795,7 @@ setup_network() {
 	[[ -e /etc/ssh ]] && rm -rf /etc/ssh
 	cp -r "$tmpl_etc_dir/ssh" /etc/ssh
 	sed -i "s/^Port [0-9]\+/Port $port_num/" /etc/ssh/sshd_config
-	ssh-keygen -A
+	ssh-keygen -A >/dev/null 2>&1
 
 	# /etc/iptables
 	[[ -e /etc/iptables ]] && rm -rf /etc/iptables
@@ -864,15 +872,15 @@ cmd_install() {
 	local data_dir="/usr/local"
 	local zsh_plugins_dir="$data_dir/share/zsh/plugins"
 
-	[[ ! -e "$zsh_plugins_dir" ]] && mkdir -p "$zsh_plugins_dir"
-	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$zsh_plugins_dir/zsh-autosuggestions"
-	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$zsh_plugins_dir/zsh-syntax-highlighting"
-	git clone "https://github.com/sindresorhus/pure.git" "$zsh_plugins_dir/pure"
+	# [[ ! -e "$zsh_plugins_dir" ]] && mkdir -p "$zsh_plugins_dir"
+	# git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$zsh_plugins_dir/zsh-autosuggestions"
+	# git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$zsh_plugins_dir/zsh-syntax-highlighting"
+	# git clone "https://github.com/sindresorhus/pure.git" "$zsh_plugins_dir/pure"
 
-	local man1_dir="$data_dir/share/man/man1"
-	[[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
-	install_zoxide "$data_dir/bin" "$man1_dir"
-	install_starship "$data_dir/bin"
+	# local man1_dir="$data_dir/share/man/man1"
+	# [[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
+	# install_zoxide "$data_dir/bin" "$man1_dir"
+	# install_starship "$data_dir/bin"
 
 	if [[ "$IS_DOCKER" == "false" ]]; then
 		_info "Executing Docker installation script.."
@@ -1015,8 +1023,8 @@ cmd_apply() {
 	local track_file
 	track_file="$REPO_TRACKS_DIR/$(id -u "$username")"
 	install -m 0644 /dev/null "$track_file"
-	# track header
 
+	# track header
 	printf "%s\0%s\0%s\0" "$(id -u "$username")" "$profile" "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" >>"$track_file"
 
 	_TRACK_FILE="$track_file" _PREFIX="$(get_prefix "$profile")" _USER="$username" \
@@ -1032,8 +1040,6 @@ cmd_apply() {
 }
 
 cmd_update() {
-	# TODO: USER $SUDO for this OP!!! this is robust wayy
-
 	check_is_root
 
 	local current_git_commit
@@ -1048,6 +1054,7 @@ cmd_update() {
 		exit 1
 	fi
 
+	apply_to_local ""
 }
 
 main_() {

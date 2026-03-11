@@ -1,6 +1,9 @@
 FROM debian:bookworm
+# FROM ubuntu:jammy
 
 COPY  . /app
+RUN cp /app/docker/entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 RUN apt-get update && \
     apt-get upgrade -y && \
@@ -15,5 +18,4 @@ RUN apt-get update && \
     tree \
     fzf
 
-# Simulate run script via pipeline (curl)
-CMD ["bash", "-c", "cat $DOTFILES_VOLUME_DIR/conf.sh | bash -s -- $INSTALL_SCRIPT_PARAMS"]
+ENTRYPOINT ["entrypoint.sh"]

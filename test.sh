@@ -1,5 +1,5 @@
-#!/bin/bash
-source /app-dev/conf.sh
+#!/usr/bin/env bash
+set -euo pipefail -o noclobber
 
 generate_test_data() {
 	local dest_dir="$1"
@@ -25,7 +25,6 @@ generate_test_data() {
 	touch "$b_dir/b_file"{1..3}
 	touch "$b_dir/b_dir/b_file"{1..3}
 	touch "$b_dir/u_dir/u_file"{1..6}
-
 }
 
 get_temp_path() {

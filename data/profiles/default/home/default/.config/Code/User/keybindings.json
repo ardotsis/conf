@@ -158,5 +158,9 @@
     "key": "ctrl+shift+r",
     "when": "config.workspaceKeybindings.myAwesomeTask.enabled"
   },
+  {
+    "key": "ctrl+n",
+    "command": "-workbench.action.files.newUntitledFile"
+  },
   // ======== conf ========
 ]

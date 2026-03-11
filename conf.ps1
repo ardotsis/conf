@@ -1,6 +1,4 @@
-# !!! Temporary patch script
-# !!! Temporary patch script
-# !!! Temporary patch script
+# *Temporary patch script.
 
 [CmdletBinding()]
 param()
