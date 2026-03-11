@@ -78,8 +78,14 @@ test_main() {
 	}
 
 	_run_apply_to_repo() {
+		local -a unlinks_ref
+
 		_TRACK_FILE="$track_file" \
-			apply_to_repo "$local_dir" "$repo_b_dir" "$repo_a_dir" "$TEST_GIT_COMMIT_ID"
+			apply_to_repo "$local_dir" "$repo_b_dir" "$repo_a_dir" "unlinks_ref"
+
+		for item in "${unlinks_ref[@]}"; do
+			echo "unlink: $item"
+		done
 	}
 
 	### Delete test

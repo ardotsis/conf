@@ -12,7 +12,10 @@ declare -r CURRENT_USER_ID="$(id -u "$CURRENT_USER")"
 # Docker env
 declare -r DOCKER_APP_DIR
 declare -r DOCKER_DEV_APP_DIR
-declare -r DOCKER
+
+if [[ -z "${IS_DOCKER+x}" ]]; then
+	declare -r DOCKER
+fi
 
 # Repository
 declare -r REPO_URL="https://github.com/ardotsis/conf.git"
@@ -650,7 +653,7 @@ apply_to_repo() {
 	local output_dir="$1"
 	local override_dir="$2"
 	local default_dir="$3"
-	local current_git_commit="$4"
+	local -n arr_ref="$5"
 
 	local output_dir_len="${#output_dir}"
 
@@ -676,6 +679,7 @@ apply_to_repo() {
 		local prefix_dir="" prefix_base=""
 		while :; do
 			local type own
+
 			read_byte type || break
 			read_byte own
 
@@ -759,6 +763,11 @@ apply_to_repo() {
 					rm -f "$repo_path"
 					install -o root -g root -m 700 "$home_path" "$repo_path"
 				fi
+
+				if [[ "$base" != *"/"* ]]; then
+					arr_ref+=("$base")
+				fi
+
 				;;
 			"${STATE[D]}")
 				if [[ "$own" == "${OWN[union]}" ]]; then
@@ -1047,13 +1056,24 @@ cmd_update() {
 	local user_id
 	user_id="$(id -u "$SUDO_USER")"
 
+	if [[ "$user_id" == "0" ]]; then
+		echo "root!?? not implemented. sorryyy"
+		exit 1
+	fi
+
 	local track_file="$REPO_TRACKS_DIR/$user_id"
+
 	if [[ ! -e "$track_file" ]]; then
 		printfc "You need to apply repository file to the local first." "${C[R]}"
 		exit 1
 	fi
 
-	apply_to_local
+	# Get track file header
+	{
+		read_by_null
+	} <"$track_file"
+
+	# apply_to_repo "/home/$SUDO_USER" ""
 }
 
 main_() {
