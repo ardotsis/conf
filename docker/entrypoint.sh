@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-set -euo pipefail -o noclobber
+set -e
+
+read -ra params <<<"$DOCKER_CONF_PARAMS"
+
+if [[ -z "${DOCKER+x}" ]]; then
+	printf "Please use Docker to test conf. (Not implemented yet)"
+	exit 1
+fi
 
 if $DOCKER_IS_TEST; then
-	:
+	"$DOCKER_DEV_APP_DIR"/test.sh
 else
-	:
+	# Simulate execute via curl
+	cat "$DOCKER_DEV_APP_DIR"/conf.sh | bash -s -- "${params[@]}"
 fi

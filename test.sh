@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail -o noclobber
 
+# shellcheck disable=SC1091
+source "$DOCKER_DEV_APP_DIR"/conf.sh
+
+TEST_GIT_COMMIT_ID="some_git_commit_id"
+
 generate_test_data() {
 	local dest_dir="$1"
 	local prefix="$2"
@@ -66,7 +71,7 @@ test_main() {
 
 	_run_apply_to_local() {
 		# Write track headers
-		printf "%s\0%s\0" "$profile" "<git_commit_id>" >>"$track_file"
+		printf "%s\0%s\0" "$profile" "$TEST_GIT_COMMIT_ID" >>"$track_file"
 
 		_TRACK_FILE="$track_file" _PREFIX="$prefix" _USER="$user" \
 			apply_to_local "$local_dir" "$repo_b_dir" "$repo_a_dir"
@@ -74,7 +79,7 @@ test_main() {
 
 	_run_apply_to_repo() {
 		_TRACK_FILE="$track_file" \
-			apply_to_repo "$local_dir" "$repo_b_dir" "$repo_a_dir"
+			apply_to_repo "$local_dir" "$repo_b_dir" "$repo_a_dir" "$TEST_GIT_COMMIT_ID"
 	}
 
 	### Delete test

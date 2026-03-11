@@ -1,8 +1,10 @@
 FROM debian:bookworm
-# FROM ubuntu:jammy
 
-COPY  . /app
-RUN cp /app/docker/entrypoint.sh /usr/local/bin/
+ARG GUEST_APP_DIR
+ARG GUEST_ENTRYPOINT_FILE
+
+COPY . ${GUEST_APP_DIR}
+RUN cp ${GUEST_ENTRYPOINT_FILE} /usr/local/bin/
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 RUN apt-get update && \

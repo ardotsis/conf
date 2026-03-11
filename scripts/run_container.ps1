@@ -5,28 +5,26 @@ param(
     [switch] $Build,
     [switch] $Cache,
     [switch] $Test,
-
     [array] $Params,
-
     [switch] $ClearOutput
 )
-
-# Disable unnecessary docker message
-$env:DOCKER_CLI_HINTS = "false"
 
 # Paths
 $RepoDir = Split-Path -Path $PSScriptRoot -Parent
 $DockerDir = "${RepoDir}\docker"
 
-# Docker env
+# Docker system
+$env:DOCKER_CLI_HINTS = "false" # Disable unnecessary docker message
 $Docker = "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
-$Dockerfile = "${DockerDir}\${Os}.Dockerfile"
 $ImageName = "conf-${Os}"
 $ImageTag = "latest"
 $ContainerName = "${ImageName}-container"
+$Dockerfile = "${DockerDir}\${Os}.Dockerfile"
+
 $GuestAppDir = "/app"
 $GuestDevAppDir = "/app-dev"
-
+$EntrypointFile = "${DockerDir}\entrypoint.sh"
+$GuestEntrypointFile = $EntrypointFile.Replace("$RepoDir", "$GuestAppDir").Replace("\", "/")
 
 if ($ClearOutput) {
     Clear-Host
@@ -111,12 +109,20 @@ function main() {
             -type "img" `
             -ids (Get-ObjectIds -type "img" -filter "reference=$ImageName") | Out-Null
 
-        if ($Cache) {
-            & $Docker build --file "$Dockerfile" --tag "${ImageName}:${ImageTag}" "$RepoDir"
+        $buildArgs = [System.Collections.Generic.List[string]]::new([string[]]@(
+                "build",
+                "--file", "$Dockerfile",
+                "--tag", "${ImageName}:${ImageTag}",
+                "--build-arg", "GUEST_APP_DIR=$GuestAppDir",
+                "--build-arg", "GUEST_ENTRYPOINT_FILE=$GuestEntrypointFile",
+                "$RepoDir"
+            ))
+
+        if (-not $Cache) {
+            $buildArgs.Insert(1, "--no-cache")
         }
-        else {
-            & $Docker build --no-cache --file "$Dockerfile" --tag "${ImageName}:${ImageTag}" "$RepoDir"
-        }
+
+        & $Docker $buildArgs
     }
     else {
         Write-Verbose "Delete old containers"
@@ -133,11 +139,13 @@ function main() {
     $isTest = $Test.ToString().ToLower()
 
     $runArgs = @(
+        "run",
         "--rm",
         "--interactive",
         "--tty",
         "--hostname=somehost",
         "--mount", "type=bind,source=$RepoDir,target=$GuestDevAppDir,readonly",
+        "--env", "DOCKER=true",
         "--env", "DOCKER_CONF_PARAMS=$Params",
         "--env", "DOCKER_IS_TEST=$isTest",
         "--env", "DOCKER_APP_DIR=$GuestAppDir",
@@ -146,7 +154,7 @@ function main() {
         $ImageName
     )
 
-    & $Docker run @runArgs
+    & $Docker @runArgs
 }
 
 main

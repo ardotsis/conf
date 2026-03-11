@@ -27,7 +27,7 @@ You'll need:
 Run container
 
 ```powershell
-.\scripts\run_container.ps1 -Os debian -Params @("-dk","-d", "-l", "-luv", "kana", "install", "kana", "uwu") -Verbose
+.\scripts\run_container.ps1 -Os debian -Params @("-d", "-l", "-luv", "kana", "install", "kana", "uwu") -Verbose
 ```
 
 Execute in container

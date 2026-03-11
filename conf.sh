@@ -3,12 +3,16 @@ set -euo pipefail -o noclobber
 
 # System
 declare -r TMP_DIR="/var/tmp"
-declare -r DOCKER_VOLUME_DIR="/app"
 declare -r PORT_NUM_FILE="/etc/conf_port"
 # shellcheck disable=SC2155
 declare -r CURRENT_USER="$(whoami)"
 # shellcheck disable=SC2155
 declare -r CURRENT_USER_ID="$(id -u "$CURRENT_USER")"
+
+# Docker env
+declare -r DOCKER_APP_DIR
+declare -r DOCKER_DEV_APP_DIR
+declare -r DOCKER
 
 # Repository
 declare -r REPO_URL="https://github.com/ardotsis/conf.git"
@@ -67,9 +71,6 @@ declare -Ar _OPTION_MAP=(
 
 	[--debug]="flag:false"
 	[-d]="debug"
-
-	[--docker]="flag:false"
-	[-dk]="docker"
 
 	["--show-log"]="flag:false"
 	[-l]="show-log"
@@ -130,7 +131,6 @@ print_help() {
 
 	printf "Options:\n"
 	printf "$fmt" "-d,  --debug" "Enable debug mode"
-	printf "$fmt" "-dk, --docker" "Enable Docker mode"
 	printf "\n"
 
 	printf "Commands:\n"
@@ -239,7 +239,6 @@ if ! parse_args "_OPTION" "CMDS" "_PARSE_ERR_MSG" "$@"; then
 fi
 
 declare -r IS_DEBUG="${_OPTION["debug"]}"
-declare -r IS_DOCKER="${_OPTION["docker"]}"
 declare -r SHOW_LOG="${_OPTION["show-log"]}"
 declare -r SHOW_HELP="${_OPTION["help"]}"
 declare -r SHOW_VERSION="${_OPTION["version"]}"
@@ -847,7 +846,7 @@ cmd_install() {
 
 	# Install conf repository
 	if $IS_DEBUG; then
-		ln -sf "$DOCKER_VOLUME_DIR" "$REPO_INSTALL_DIR"
+		ln -sf "$DOCKER_APP_DIR" "$REPO_INSTALL_DIR"
 	else
 		git clone -b main "$REPO_URL" "$REPO_INSTALL_DIR"
 	fi
@@ -872,15 +871,15 @@ cmd_install() {
 	local data_dir="/usr/local"
 	local zsh_plugins_dir="$data_dir/share/zsh/plugins"
 
-	# [[ ! -e "$zsh_plugins_dir" ]] && mkdir -p "$zsh_plugins_dir"
-	# git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$zsh_plugins_dir/zsh-autosuggestions"
-	# git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$zsh_plugins_dir/zsh-syntax-highlighting"
-	# git clone "https://github.com/sindresorhus/pure.git" "$zsh_plugins_dir/pure"
+	[[ ! -e "$zsh_plugins_dir" ]] && mkdir -p "$zsh_plugins_dir"
+	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$zsh_plugins_dir/zsh-autosuggestions"
+	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$zsh_plugins_dir/zsh-syntax-highlighting"
+	git clone "https://github.com/sindresorhus/pure.git" "$zsh_plugins_dir/pure"
 
-	# local man1_dir="$data_dir/share/man/man1"
-	# [[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
-	# install_zoxide "$data_dir/bin" "$man1_dir"
-	# install_starship "$data_dir/bin"
+	local man1_dir="$data_dir/share/man/man1"
+	[[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
+	install_zoxide "$data_dir/bin" "$man1_dir"
+	install_starship "$data_dir/bin"
 
 	if [[ "$IS_DOCKER" == "false" ]]; then
 		_info "Executing Docker installation script.."

@@ -162,5 +162,12 @@
     "key": "ctrl+n",
     "command": "-workbench.action.files.newUntitledFile"
   },
-  // ======== conf ========
+  {
+    "key": "ctrl+shift+w",
+    "command": "-workbench.action.closeWindow"
+  },
+  {
+    "key": "ctrl+shift+w",
+    "command": "workbench.action.closeOtherEditors"
+  }
 ]

@@ -22,7 +22,7 @@ if (-not $WorkDir) {
 $Docker = "docker.exe"
 $env:DOCKER_CLI_HINTS = "false"
 $ImageName = "conf-${Os}"
-$ContainerName = "${ImageName}-cont"
+$ContainerName = "${ImageName}-container"
 
 & $Docker exec `
     --interactive `
