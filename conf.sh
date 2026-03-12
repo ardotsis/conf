@@ -13,8 +13,8 @@ declare -r CURRENT_USER_ID="$(id -u "$CURRENT_USER")"
 declare -r DOCKER_APP_DIR
 declare -r DOCKER_DEV_APP_DIR
 
-if [[ -z "${IS_DOCKER+x}" ]]; then
-	declare -r DOCKER
+if [[ -z "${DOCKER+x}" ]]; then
+	declare -r DOCKER=false
 fi
 
 # Repository
@@ -558,6 +558,14 @@ declare -Ar STATE_CLR=(
 	[${STATE[D]}]="${C[R]}"
 )
 
+track() {
+	HEADER_FMT="%s\0"
+
+	# <item_type><own_num><base_path><sum>
+	local item_type own_num base_path sum
+	ITEM_FMT="%.1s%.1s%s\0%s\0"
+}
+
 apply_to_local() {
 	local output_dir="$1"
 	local override_dir="${2:-}" # Preferrer
@@ -653,139 +661,128 @@ apply_to_repo() {
 	local output_dir="$1"
 	local override_dir="$2"
 	local default_dir="$3"
-	local -n arr_ref="$5"
+	local -n arr_ref="$4"
 
-	local output_dir_len="${#output_dir}"
-
+	# TODO: Deprecated
 	_show_err() {
 		printf "apply_local_repo err: %s\n" "$1" >&2
 		exit 1
 	}
 
-	{
-		local profile commit_id
-		read_by_null "profile"
-		read_by_null "commit_id"
+	local prefix
+	prefix="$(get_prefix "$profile")"
 
-		if [[ "$current_git_commit" != "$commit_id" ]]; then
-			printfc "Wrong commit id (current: $current_git_commit last: $commit_id)" "${C[Y]}"
-			return 1
+	local -A new_item=() del_dir=()
+	local prefix_dir="" prefix_base=""
+	local output_dir_len="${#output_dir}"
+
+	while :; do
+		local type own
+
+		read_byte type || break
+		read_byte own
+
+		# Read Item Contents
+		local base sum
+		if [[ "$type" == "f" ]]; then
+			read_by_null "base"
+			read_by_null "sum"
+		elif [[ "$type" == "d" ]]; then
+			read_by_null "base"
+		else
+			_show_err "unknown file type: '$type'"
 		fi
 
-		local prefix
-		prefix="$(get_prefix "$profile")"
-
-		local -A new_item=() del_dir=()
-		local prefix_dir="" prefix_base=""
-		while :; do
-			local type own
-
-			read_byte type || break
-			read_byte own
-
-			# Read Item Contents
-			local base sum
-			if [[ "$type" == "f" ]]; then
-				read_by_null "base"
-				read_by_null "sum"
-			elif [[ "$type" == "d" ]]; then
-				read_by_null "base"
-			else
-				_show_err "unknown file type: '$type'"
+		local in_dir="${base%/*}"
+		if [[ -v del_dir["$in_dir"] ]]; then
+			if [[ "$type" == "d" ]]; then
+				del_dir["$base"]=1
 			fi
+			printfc "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
+			continue
+		fi
 
-			local in_dir="${base%/*}"
-			if [[ -v del_dir["$in_dir"] ]]; then
+		# Resolve Repository Path
+		local repo_path has_repo_path=false
+		if [[ -n "$prefix_dir" ]]; then
+			if [[ "$base" == "$prefix_base/"* ]]; then
+				has_repo_path=true
+				repo_path=$prefix_dir/${base##*/}
+			else
+				prefix_base=""
+				prefix_dir=""
+			fi
+		fi
+
+		if ! $has_repo_path; then
+			if [[ "$own" == "${OWN[prefixed]}" ]]; then
+				if [[ "$base" == *"/"* ]]; then
+					repo_path="$override_dir/${base%/*}/$prefix${base##*/}"
+				else
+					repo_path="$override_dir/$prefix$base"
+				fi
 				if [[ "$type" == "d" ]]; then
-					del_dir["$base"]=1
+					prefix_base="$base"
+					prefix_dir="$repo_path"
 				fi
-				printfc "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
-				continue
+			elif [[ "$own" == "${OWN[override]}" || "$own" == "${OWN[union]}" ]]; then
+				repo_path="$override_dir/$base"
+			elif [[ "$own" == "${OWN[default]}" ]]; then
+				repo_path="$default_dir/$base"
+			else
+				_show_err "unknown own type '$own'"
 			fi
+		fi
 
-			# Resolve Repository Path
-			local repo_path has_repo_path=false
-			if [[ -n "$prefix_dir" ]]; then
-				if [[ "$base" == "$prefix_base/"* ]]; then
-					has_repo_path=true
-					repo_path=$prefix_dir/${base##*/}
-				else
-					prefix_base=""
-					prefix_dir=""
-				fi
-			fi
-
-			if ! $has_repo_path; then
-				if [[ "$own" == "${OWN[prefixed]}" ]]; then
-					if [[ "$base" == *"/"* ]]; then
-						repo_path="$override_dir/${base%/*}/$prefix${base##*/}"
-					else
-						repo_path="$override_dir/$prefix$base"
-					fi
-					if [[ "$type" == "d" ]]; then
-						prefix_base="$base"
-						prefix_dir="$repo_path"
-					fi
-				elif [[ "$own" == "${OWN[override]}" || "$own" == "${OWN[union]}" ]]; then
-					repo_path="$override_dir/$base"
-				elif [[ "$own" == "${OWN[default]}" ]]; then
-					repo_path="$default_dir/$base"
-				else
-					_show_err "unknown own type '$own'"
-				fi
-			fi
-
-			local home_path="$output_dir/$base" state=${STATE[_]}
-			if [[ "$type" == "f" ]]; then
-				if [[ -f "$home_path" ]]; then
-					if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
-						state=${STATE[M]}
-					fi
-				else
-					state=${STATE[D]}
+		local home_path="$output_dir/$base" state=${STATE[_]}
+		if [[ "$type" == "f" ]]; then
+			if [[ -f "$home_path" ]]; then
+				if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
+					state=${STATE[M]}
 				fi
 			else
-				if [[ -d "$home_path" ]]; then
-					local item
-					while read_by_null item; do
-						new_item["$item"]=1
-					done < <(find "$home_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%p\0")
-				else
-					state=${STATE[D]}
-					del_dir["$base"]=1
-				fi
+				state=${STATE[D]}
+			fi
+		else
+			if [[ -d "$home_path" ]]; then
+				local item
+				while read_by_null item; do
+					new_item["$item"]=1
+				done < <(find "$home_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%p\0")
+			else
+				state=${STATE[D]}
+				del_dir["$base"]=1
+			fi
+		fi
+
+		case "$state" in
+		"${STATE[_]}" | "${STATE[M]}")
+			unset "new_item[$type$home_path]"
+			if [[ "$state" == "${STATE[M]}" ]]; then
+				rm -f "$repo_path"
+				install -o root -g root -m 700 "$home_path" "$repo_path"
 			fi
 
-			case "$state" in
-			"${STATE[_]}" | "${STATE[M]}")
-				unset "new_item[$type$home_path]"
-				if [[ "$state" == "${STATE[M]}" ]]; then
-					rm -f "$repo_path"
-					install -o root -g root -m 700 "$home_path" "$repo_path"
-				fi
+			if [[ "$base" != *"/"* ]]; then
+				arr_ref+=("$base")
+			fi
 
-				if [[ "$base" != *"/"* ]]; then
-					arr_ref+=("$base")
-				fi
+			;;
+		"${STATE[D]}")
+			if [[ "$own" == "${OWN[union]}" ]]; then
+				rm -rf "${default_dir:?}/$base"
+			fi
+			rm -rf "$repo_path"
+			;;
+		esac
+		printfc "($type:$own) $base" "${STATE_CLR[$state]}"
+	done
 
-				;;
-			"${STATE[D]}")
-				if [[ "$own" == "${OWN[union]}" ]]; then
-					rm -rf "${default_dir:?}/$base"
-				fi
-				rm -rf "$repo_path"
-				;;
-			esac
-			printfc "($type:$own) $base" "${STATE_CLR[$state]}"
-		done
-
-		for new_item in "${!new_item[@]}"; do
-			local new_base="${new_item:1+$output_dir_len+1}" # TODO: Refactor
-			cp -r "${new_item:1}" "$default_dir/$new_base"   # TODO: if 'd' or 'f'
-			printfc "Added: $new_base" "${STATE_CLR[${STATE[A]}]}"
-		done
-
-	} <"$_TRACK_FILE"
+	for new_item in "${!new_item[@]}"; do
+		local new_base="${new_item:1+$output_dir_len+1}" # TODO: Refactor
+		cp -r "${new_item:1}" "$default_dir/$new_base"   # TODO: if 'd' or 'f'
+		printfc "Added: $new_base" "${STATE_CLR[${STATE[A]}]}"
+	done
 
 }
 
@@ -855,9 +852,18 @@ cmd_install() {
 
 	# Install conf repository
 	if $IS_DEBUG; then
+		# Repository (Container)
 		ln -sf "$DOCKER_APP_DIR" "$REPO_INSTALL_DIR"
+
+		# conf bin (Volume)
+		ln -sf "$DOCKER_DEV_APP_DIR/conf.sh" "/usr/local/bin/conf"
 	else
+		# Repository
 		git clone -b main "$REPO_URL" "$REPO_INSTALL_DIR"
+
+		# conf bin
+		ln -sf "$REPO_INSTALL_DIR/conf.sh" "/usr/local/bin/conf"
+		chmod +x "$REPO_INSTALL_DIR/conf.sh"
 	fi
 
 	if [[ ! -e "$REPO_TRACKS_DIR" ]]; then
@@ -870,9 +876,6 @@ cmd_install() {
 			install_package "$pkg_name"
 		fi
 	done <"$REPO_PACKAGES_FILE"
-
-	ln -sf "$REPO_INSTALL_DIR/conf.sh" "/usr/local/bin/conf"
-	chmod +x "$REPO_INSTALL_DIR/conf.sh"
 
 	# Install binaries
 	install_nvim
@@ -1050,6 +1053,10 @@ cmd_apply() {
 cmd_update() {
 	check_is_root
 
+	# TODO: git restore?? (to set specifc commit)
+	echo "CLeanning up profiles dir... (some changes on repo gonnabe lost!!!)"
+	git -C "$REPO_INSTALL_DIR" clean -fdx "$REPO_PROFILES_DIR"
+
 	local current_git_commit
 	current_git_commit="$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)"
 
@@ -1068,12 +1075,31 @@ cmd_update() {
 		exit 1
 	fi
 
+	local current_commit_id
+	current_commit_id="$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)"
+
 	# Get track file header
 	{
-		read_by_null
+		local user_id profile last_commit_id
+		read_by_null user_id
+		read_by_null profile
+		read_by_null last_commit_id
+
+		if [[ "$last_commit_id" != "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" ]]; then
+			echo "$last_commit_id $current_commit_id"
+			exit 1
+		fi
+
+		local -a unlink_items
+		apply_to_repo \
+			"/home/$SUDO_USER" \
+			"$(get_home_profile_dir "uwu")" \
+			"$(get_home_profile_dir "default")" \
+			"unlink_items"
+
+		# TODO: unlink TESTETSTT
 	} <"$track_file"
 
-	# apply_to_repo "/home/$SUDO_USER" ""
 }
 
 main_() {
