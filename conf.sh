@@ -1054,8 +1054,8 @@ cmd_update() {
 	check_is_root
 
 	# TODO: git restore?? (to set specifc commit)
-	echo "CLeanning up profiles dir... (some changes on repo gonnabe lost!!!)"
-	git -C "$REPO_INSTALL_DIR" clean -fdx "$REPO_PROFILES_DIR"
+	# echo "CLeanning up profiles dir... (some changes on repo gonnabe lost!!!)"
+	# git -C "$REPO_INSTALL_DIR" clean -fdx "$REPO_PROFILES_DIR"
 
 	local current_git_commit
 	current_git_commit="$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)"
@@ -1098,8 +1098,22 @@ cmd_update() {
 			"unlink_items"
 
 		# TODO: unlink TESTETSTT
+		for unlink_item in "${unlink_items[@]}"; do
+			echo "unlink: $unlink_item"
+			mv "$unlink_item" ".conf-$(get_safe_random_str 6)#$unlink_item"
+		done
+
 	} <"$track_file"
 
+	local username=$SUDO_USER
+	local home="/home/$SUDO_USER"
+	local profile_dir="$(get_home_profile_dir "$profile")"
+
+	rm -f "$track_file"
+	printf "%s\0%s\0%s\0" "$(id -u "$username")" "$profile" "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" >>"$track_file"
+
+	_TRACK_FILE="$track_file" _PREFIX="$(get_prefix "$profile")" _USER="$username" \
+		apply_to_local "$home" "$profile_dir" "$(get_home_profile_dir "default")"
 }
 
 main_() {
