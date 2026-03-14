@@ -24,7 +24,7 @@ prompt pure
 ### Plugins
 eval "$(zoxide init zsh)"
 source "$Z_PLUGIN_DIR/zsh-autosuggestions/zsh-autosuggestions.zsh"
-source "$Z_PLUGIN_DIR/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" # MUST BE LAST
+source "$Z_PLUGIN_DIR/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh" # MUST BE LAST
 
 ### SSH Agent (https://grep.koditi.my/reuse-existing-ssh-agent)
 # Function to find existing SSH agent

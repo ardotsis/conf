@@ -491,7 +491,10 @@ get_mixed_items() {
 }
 
 is_git_clean() {
-	if [[ -n $(git status --porcelain "$REPO_PROFILES_DIR") ]]; then
+	local repo_path="$1"
+	local repo_dir="${2:-$repo_path}"
+
+	if [[ -n "$(git -C "$repo_path" status --porcelain "$repo_dir")" ]]; then
 		return 0
 	else
 		return 1
@@ -885,7 +888,7 @@ cmd_install() {
 
 	[[ ! -e "$zsh_plugins_dir" ]] && mkdir -p "$zsh_plugins_dir"
 	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$zsh_plugins_dir/zsh-autosuggestions"
-	git clone "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$zsh_plugins_dir/zsh-syntax-highlighting"
+	git clone "https://github.com/zdharma-continuum/fast-syntax-highlighting" "$zsh_plugins_dir/fast-syntax-highlighting"
 	git clone "https://github.com/sindresorhus/pure.git" "$zsh_plugins_dir/pure"
 
 	local man1_dir="$data_dir/share/man/man1"
@@ -1086,7 +1089,7 @@ cmd_update() {
 		read_by_null last_commit_id
 
 		if [[ "$last_commit_id" != "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" ]]; then
-			echo "$last_commit_id $current_commit_id"
+			echo "wrong commit!: $last_commit_id $current_commit_id"
 			exit 1
 		fi
 
@@ -1100,7 +1103,7 @@ cmd_update() {
 		# TODO: unlink TESTETSTT
 		for unlink_item in "${unlink_items[@]}"; do
 			echo "unlink: $unlink_item"
-			mv "$unlink_item" ".conf-$(get_safe_random_str 6)#$unlink_item"
+			mv "$unlink_item" ".conf_$(get_safe_random_str 6)#$unlink_item"
 		done
 
 	} <"$track_file"
