@@ -21,7 +21,7 @@ declare -r DOCKER_DEV_APP_DIR
 declare -r REPO_URL="https://github.com/ardotsis/conf.git"
 declare -r REPO_INSTALL_DIR="/usr/local/share/conf"
 declare -r REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
-declare -r REPO_TRACKS_DIR="$REPO_DATA_DIR/tracks"
+declare -r REPO_USER_DIR="$REPO_DATA_DIR/user"
 declare -r REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
 declare -r REPO_PACKAGES_FILE="$REPO_PROFILES_DIR/packages"
 declare -ar COMMANDS=(
@@ -928,8 +928,8 @@ cmd_install() {
 		chmod +x "$REPO_INSTALL_DIR/conf.sh"
 	fi
 
-	if [[ ! -e "$REPO_TRACKS_DIR" ]]; then
-		mkdir "$REPO_TRACKS_DIR"
+	if [[ ! -e "$REPO_USER_DIR" ]]; then
+		mkdir "$REPO_USER_DIR"
 	fi
 
 	local pkg_name
@@ -993,6 +993,7 @@ cmd_adduser() {
 	passwd="$(get_random_str $PASSWD_LENGTH)"
 	add_user "$username" "$passwd"
 
+	mkdir "$REPO_USER_DIR/$username"
 	if [[ "$DOCKER" == "false" ]]; then
 		usermod -aG docker "$username"
 	fi
@@ -1092,7 +1093,7 @@ cmd_apply() {
 	fi
 
 	local track_file
-	track_file="$REPO_TRACKS_DIR/$(id -u "$username")"
+	track_file="$REPO_USER_DIR/$username/track"
 	install -m 0644 /dev/null "$track_file"
 
 	# track header
@@ -1132,7 +1133,7 @@ cmd_update() {
 		exit 1
 	fi
 
-	local track_file="$REPO_TRACKS_DIR/$user_id"
+	local track_file="$REPO_USER_DIR/$user_id"
 
 	if [[ ! -e "$track_file" ]]; then
 		printfc "You need to apply repository file to the local first." "${C[R]}"
