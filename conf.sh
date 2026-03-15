@@ -836,6 +836,10 @@ apply_to_repo() {
 		printfc "($type:$own) $base" "${STATE_CLR[$state]}"
 	done
 
+	if ((${#new_item[@]} > 0)); then
+		no_change="false"
+	fi
+
 	for new_item in "${!new_item[@]}"; do
 		local new_base="${new_item:1+$output_dir_len+1}" # TODO: Refactor
 		cp -r "${new_item:1}" "$default_dir/$new_base"   # TODO: if 'd' or 'f'
@@ -1039,7 +1043,7 @@ cmd_adduser() {
 	### This Host -> Git
 	local ssh_git_passphrase
 	ssh_git_passphrase="$(get_random_str $PASSWD_LENGTH)"
-	local git_filename="git"
+	local git_filename="id_git"
 	ssh-keygen -t ed25519 -b 4096 -f "$ssh_dir/$git_filename" -N "$ssh_git_passphrase" -C "" >/dev/null 2>&1
 	{
 		printf "# SSH passphrase for Git\n%s\n\n" "$ssh_git_passphrase"
@@ -1151,7 +1155,7 @@ cmd_update() {
 		read_by_null profile
 		read_by_null last_commit_id
 
-		if [[ "$last_commit_id" != "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" ]]; then
+		if [[ "$last_commit_id" != "$current_git_commit" ]]; then
 			echo "different commit! (unlink (no save) -> pull): $last_commit_id $current_commit_id"
 			exit 1
 		fi
@@ -1168,19 +1172,15 @@ cmd_update() {
 		fi
 
 		_debug "Backing up"
-		tar -C "/home/$username" -czf "$REPO_USER_DIR/$username/$current_commit_id.tar.gz" "${unlink_items[@]}"
+		tar -C "/home/$username" -czf "$REPO_USER_DIR/$username/$current_git_commit.tar.gz" "${unlink_items[@]}"
 
 		# TODO: unlink TESTETSTT
 		for unlink_item in "${unlink_items[@]}"; do
 			echo "unlink: $unlink_item"
 			rm -rf "$unlink_item"
-			# TOOD: tar zip
+			echo "$unlink_item"
 		done
 	} <"$track_file"
-
-	# mv "$unlink_item" ".conf_$(get_safe_random_str 6)#$unlink_item"
-	#
-	echo "${unlink_items[@]}"
 
 	git_conf config --global user.email "you@example.com"
 	git_conf config --global user.name "Your Name"
@@ -1188,7 +1188,7 @@ cmd_update() {
 	git_conf commit -m "Updated by $username" --no-verify
 
 	local home="/home/$SUDO_USER"
-	local profile_dir="$(get_home_profile_dir "$profile")"
+	local profile_dir="$(get_home_profile_dir "$profile")" # TODO: fix profile is empty
 
 	rm -f "$track_file"
 	printf "%s\0%s\0%s\0" "$(id -u "$username")" "$profile" "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" >>"$track_file"
