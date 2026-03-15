@@ -862,7 +862,7 @@ setup_network() {
 	[[ -e /etc/ssh ]] && rm -rf /etc/ssh
 	cp -r "$tmpl_etc_dir/ssh" /etc/ssh
 	sed -i "s/^Port [0-9]\+/Port $port_num/" /etc/ssh/sshd_config
-	ssh-keygen -A >/dev/null 2>&1 &
+	ssh-keygen -A
 
 	# /etc/iptables
 	[[ -e /etc/iptables ]] && rm -rf /etc/iptables
