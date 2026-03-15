@@ -1,10 +1,11 @@
 FROM debian:bookworm
 
 ARG GUEST_APP_DIR
-ARG GUEST_ENTRYPOINT_FILE
+ARG GUEST_DOCKER_DIR
 
-COPY . ${GUEST_APP_DIR}
-RUN cp ${GUEST_ENTRYPOINT_FILE} /usr/local/bin/
+# Install source code
+COPY . "${GUEST_APP_DIR}"
+RUN cp "${GUEST_DOCKER_DIR}/entrypoint.sh" /usr/local/bin/
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 RUN apt-get update && \
@@ -19,5 +20,9 @@ RUN apt-get update && \
     zsh \
     tree \
     fzf
+
+RUN chmod +x "${GUEST_DOCKER_DIR}/pre_install.sh"
+RUN ".${GUEST_DOCKER_DIR}/pre_install.sh" "${GUEST_APP_DIR}"
+
 
 ENTRYPOINT ["entrypoint.sh"]

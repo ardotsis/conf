@@ -3,21 +3,21 @@ set -euo pipefail -o noclobber
 
 # System
 declare -r TMP_DIR="/var/tmp"
+declare -r LOCAL_DIR="/usr/local"
 declare -r PORT_NUM_FILE="/etc/conf_port"
 # shellcheck disable=SC2155
 declare -r CURRENT_USER="$(whoami)"
 # shellcheck disable=SC2155
 declare -r CURRENT_USER_ID="$(id -u "$CURRENT_USER")"
 
-# Docker env
-declare -r DOCKER_APP_DIR
-declare -r DOCKER_DEV_APP_DIR
-
+# Docker environment
 if [[ -z "${DOCKER+x}" ]]; then
 	declare -r DOCKER=false
 fi
+declare -r DOCKER_APP_DIR
+declare -r DOCKER_DEV_APP_DIR
 
-# Repository
+# conf repository
 declare -r REPO_URL="https://github.com/ardotsis/conf.git"
 declare -r REPO_INSTALL_DIR="/usr/local/share/conf"
 declare -r REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
@@ -28,6 +28,14 @@ declare -r REPO_PACKAGES_FILE="$REPO_PROFILES_DIR/packages"
 # User
 declare -r SECRET_FILENAME="conf_secret"
 declare -r PASSWD_LENGTH=72
+
+# ZSH
+declare -r ZSH_PLUGINS_DIR="$LOCAL_DIR/share/zsh/plugins"
+declare -ar ZSH_PLUGIN_REPOS=(
+	zsh-users/zsh-autosuggestions
+	zdharma-continuum/fast-syntax-highlighting
+	sindresorhus/pure
+)
 
 declare -Ar C=(
 	[0]="\033[0m" # Reset
@@ -400,10 +408,34 @@ get_tmp_curl_file() {
 	printf "%s" "$tmp_path"
 }
 
-install_nvim() {
-	local tgz_path
+install_zsh_plugins() {
+	local zsh_plugins_dir="$1"
 
+	if [[ -e "$zsh_plugins_dir" ]]; then
+		_warn "ZSH plugins are already installed."
+		return 0
+	fi
+
+	mkdir -p "$zsh_plugins_dir"
+
+	local repo
+	for repo in "${ZSH_PLUGIN_REPOS[@]}"; do
+		_info "Install ZSH plugin ($repo)"
+		local dirname="${repo#*/}"
+		local clone_url="https://github.com/$repo.git"
+		git clone "$clone_url" "$zsh_plugins_dir/$dirname"
+	done
+}
+
+install_nvim() {
+	if [[ -e "/opt/nvim-linux-x86_64" ]]; then
+		_warn "Neovim is already installed."
+		return 0
+	fi
+
+	local tgz_path
 	tgz_path=$(get_tmp_curl_file "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz")
+
 	tar -C "/opt" -xzf "$tgz_path"
 	rm -rf "$tgz_path"
 	ln -s /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim
@@ -412,6 +444,11 @@ install_nvim() {
 install_zoxide() {
 	local bin_dir="$1"
 	local man1_dir="$2"
+
+	if [[ -e "$bin_dir/zoxide" ]]; then
+		_warn "zoxide are already installed."
+		return 0
+	fi
 
 	local tgz_path
 	tgz_path=$(get_tmp_curl_file "https://github.com/ajeetdsouza/zoxide/releases/latest/download/zoxide-0.9.9-x86_64-unknown-linux-musl.tar.gz")
@@ -426,6 +463,11 @@ install_zoxide() {
 
 install_starship() {
 	local bin_dir="$1"
+
+	if [[ -e "$bin_dir/starship" ]]; then
+		_warn "Starship are already installed."
+		return 0
+	fi
 
 	local tgz_path
 	tgz_path=$(get_tmp_curl_file "https://github.com/starship/starship/releases/download/v1.24.2/starship-x86_64-unknown-linux-musl.tar.gz")
@@ -803,7 +845,7 @@ setup_network() {
 	[[ -e /etc/ssh ]] && rm -rf /etc/ssh
 	cp -r "$tmpl_etc_dir/ssh" /etc/ssh
 	sed -i "s/^Port [0-9]\+/Port $port_num/" /etc/ssh/sshd_config
-	ssh-keygen -A >/dev/null 2>&1
+	ssh-keygen -A >/dev/null 2>&1 &
 
 	# /etc/iptables
 	[[ -e /etc/iptables ]] && rm -rf /etc/iptables
@@ -881,20 +923,15 @@ cmd_install() {
 	done <"$REPO_PACKAGES_FILE"
 
 	# Install binaries
-	install_nvim
-
 	local data_dir="/usr/local"
-	local zsh_plugins_dir="$data_dir/share/zsh/plugins"
 
-	[[ ! -e "$zsh_plugins_dir" ]] && mkdir -p "$zsh_plugins_dir"
-	git clone "https://github.com/zsh-users/zsh-autosuggestions.git" "$zsh_plugins_dir/zsh-autosuggestions"
-	git clone "https://github.com/zdharma-continuum/fast-syntax-highlighting" "$zsh_plugins_dir/fast-syntax-highlighting"
-	git clone "https://github.com/sindresorhus/pure.git" "$zsh_plugins_dir/pure"
+	install_zsh_plugins "$ZSH_PLUGINS_DIR"
+	install_nvim
+	install_starship "$data_dir/bin"
 
 	local man1_dir="$data_dir/share/man/man1"
 	[[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
 	install_zoxide "$data_dir/bin" "$man1_dir"
-	install_starship "$data_dir/bin"
 
 	if [[ "$DOCKER" == "false" ]]; then
 		_info "Executing Docker installation script.."

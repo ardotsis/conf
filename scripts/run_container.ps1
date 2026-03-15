@@ -23,8 +23,8 @@ $Dockerfile = "${DockerDir}\${Os}.Dockerfile"
 
 $GuestAppDir = "/app"
 $GuestDevAppDir = "/app-dev"
-$EntrypointFile = "${DockerDir}\entrypoint.sh"
-$GuestEntrypointFile = $EntrypointFile.Replace("$RepoDir", "$GuestAppDir").Replace("\", "/")
+$GuestDockerDir = $DockerDir.Replace("$RepoDir", "$GuestAppDir").Replace("\", "/")
+
 
 if ($ClearOutput) {
     Clear-Host
@@ -114,7 +114,7 @@ function main() {
                 "--file", "$Dockerfile",
                 "--tag", "${ImageName}:${ImageTag}",
                 "--build-arg", "GUEST_APP_DIR=$GuestAppDir",
-                "--build-arg", "GUEST_ENTRYPOINT_FILE=$GuestEntrypointFile",
+                "--build-arg", "GUEST_DOCKER_DIR=$GuestDockerDir",
                 "$RepoDir"
             ))
 
