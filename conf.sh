@@ -17,7 +17,7 @@ fi
 declare -r DOCKER_APP_DIR
 declare -r DOCKER_DEV_APP_DIR
 
-# conf app
+# app
 declare -r REPO_URL="https://github.com/ardotsis/conf.git"
 declare -r REPO_INSTALL_DIR="/usr/local/share/conf"
 declare -r REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
