@@ -17,13 +17,20 @@ fi
 declare -r DOCKER_APP_DIR
 declare -r DOCKER_DEV_APP_DIR
 
-# conf repository
+# conf app
 declare -r REPO_URL="https://github.com/ardotsis/conf.git"
 declare -r REPO_INSTALL_DIR="/usr/local/share/conf"
 declare -r REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
 declare -r REPO_TRACKS_DIR="$REPO_DATA_DIR/tracks"
 declare -r REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
 declare -r REPO_PACKAGES_FILE="$REPO_PROFILES_DIR/packages"
+declare -ar COMMANDS=(
+	"install"
+	"adduser"
+	"apply"
+	"update"
+	"pull"
+)
 
 # User
 declare -r SECRET_FILENAME="conf_secret"
@@ -187,11 +194,11 @@ parse_args() {
 	local i last_i input
 	i=0
 	last_i=$(("${#args[@]}" - 1))
-	skip_index=false
+	skip_index="false"
 
 	for input in "${args[@]}"; do
 		if [[ $skip_index == "true" ]]; then
-			skip_index=false
+			skip_index="false"
 			i=$((i + 1))
 			continue
 		fi
@@ -206,12 +213,12 @@ parse_args() {
 
 			local insert_val
 			if [[ "$option_type" == "flag" ]]; then
-				insert_val=true
+				insert_val="true"
 			elif [[ "$option_type" == "value" ]]; then
-				skip_index=true
+				skip_index="true"
 				local val_i=$((i + 1))
 				if ((val_i > last_i)); then
-					err_msg="$(get_err_msg "'$input' require a value." true)"
+					err_msg="$(get_err_msg "'$input' require a value." "true")"
 					return 1
 				fi
 				insert_val="${args["$val_i"]}"
@@ -226,7 +233,7 @@ parse_args() {
 		else
 			if [[ "$input" == "-"* ]]; then
 				# shellcheck disable=SC2034
-				err_msg="$(get_err_msg "'$input' is not a conf option." true)"
+				err_msg="$(get_err_msg "'$input' is not a conf option." "true")"
 				return 1
 			else
 				break
@@ -750,10 +757,10 @@ apply_to_repo() {
 		fi
 
 		# Resolve Repository Path
-		local repo_path has_repo_path=false
+		local repo_path has_repo_path="false"
 		if [[ -n "$prefix_dir" ]]; then
 			if [[ "$base" == "$prefix_base/"* ]]; then
-				has_repo_path=true
+				has_repo_path="true"
 				repo_path=$prefix_dir/${base##*/}
 			else
 				prefix_base=""
@@ -946,7 +953,6 @@ cmd_install() {
 	if [[ "$DOCKER" == "false" ]]; then
 		_info "Executing Docker installation script.."
 		sh -c "$(curl -fsSL https://get.docker.com)"
-		usermod -aG docker "$username"
 	fi
 
 	local port_num="$((1024 + RANDOM % (65535 - 1024 + 1)))"
@@ -958,7 +964,7 @@ cmd_install() {
 	fi
 
 	if [[ -n "$username" ]]; then
-		INTERNAL=true cmd_adduser "$username" "$profile"
+		INTERNAL="true" cmd_adduser "$username" "$profile"
 	fi
 }
 
@@ -986,6 +992,10 @@ cmd_adduser() {
 	local passwd
 	passwd="$(get_random_str $PASSWD_LENGTH)"
 	add_user "$username" "$passwd"
+
+	if [[ "$DOCKER" == "false" ]]; then
+		usermod -aG docker "$username"
+	fi
 
 	local secret_file="$home/$SECRET_FILENAME"
 
@@ -1050,7 +1060,7 @@ cmd_adduser() {
 	chown "$username:$username" "$ssh_dir/"*
 	chmod 0600 "$ssh_dir/"*
 
-	INTERNAL=true cmd_apply "$username" "$profile"
+	INTERNAL="true" cmd_apply "$username" "$profile"
 }
 
 cmd_apply() {
@@ -1158,7 +1168,8 @@ cmd_update() {
 		# TODO: unlink TESTETSTT
 		for unlink_item in "${unlink_items[@]}"; do
 			echo "unlink: $unlink_item"
-			mv "$unlink_item" ".conf_$(get_safe_random_str 6)#$unlink_item"
+			# mv "$unlink_item" ".conf_$(get_safe_random_str 6)#$unlink_item"
+			# TOOD: tar zip
 		done
 	} <"$track_file"
 
@@ -1166,7 +1177,7 @@ cmd_update() {
 
 	git_conf config --global user.email "you@example.com"
 	git_conf config --global user.name "Your Name"
-	git_conf add -A
+	git_conf add "$REPO_PROFILES_DIR"
 	git_conf commit -m "Updated by $username" --no-verify
 
 	local home="/home/$SUDO_USER"
@@ -1193,7 +1204,7 @@ main_() {
 	fi
 
 	if (("${#CMDS[@]}" == 0)); then
-		printf "%s\n" "$(get_err_msg "Please specify the conf command." true)" >&2
+		printf "%s\n" "$(get_err_msg "Please specify the conf command." "true")" >&2
 		return 1
 	fi
 
@@ -1202,22 +1213,14 @@ main_() {
 	fi
 
 	# shellcheck disable=SC2034
-	local -ar modes=(
-		"install"
-		"adduser"
-		"apply"
-		"update"
-		"pull"
-	)
-
-	local mode="${CMDS[0]}"
-	if ! is_contain "$mode" "modes"; then
-		printf "%s\n" "$(get_err_msg "'$mode' is not conf command." true)" >&2
+	local cmd="${CMDS[0]}"
+	if ! is_contain "$cmd" "COMMANDS"; then
+		printf "%s\n" "$(get_err_msg "'$cmd' is not conf command." "true")" >&2
 		exit 1
 	fi
 
 	# Run command
-	INTERNAL=false "cmd_$mode" "${CMDS[@]:1}"
+	INTERNAL="false" "cmd_$cmd" "${CMDS[@]:1}"
 
 	if [[ $DOCKER == "true" ]]; then
 		printf "Keeping docker container running...\n"

@@ -22,7 +22,7 @@ $ContainerName = "${ImageName}-container"
 $Dockerfile = "${DockerDir}\${Os}.Dockerfile"
 
 $GuestAppDir = "/app"
-$GuestDevAppDir = "/app-dev"
+$GuestDevAppDir = "/app-live"
 $GuestDockerDir = $DockerDir.Replace("$RepoDir", "$GuestAppDir").Replace("\", "/")
 
 

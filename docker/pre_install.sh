@@ -4,7 +4,7 @@ set -e
 declare -r _DOCKER_APP_DIR="$1"
 source "$_DOCKER_APP_DIR/conf.sh"
 
-main_() {
+pre_install() {
 	# ZSH plugins
 	install_zsh_plugins "$ZSH_PLUGINS_DIR"
 
@@ -20,4 +20,4 @@ main_() {
 	install_starship "$LOCAL_DIR/bin"
 }
 
-main_
+pre_install
