@@ -1117,6 +1117,7 @@ git_conf() {
 
 cmd_update() {
 	check_is_root
+	local username="$SUDO_USER"
 
 	# TODO: git restore?? (to set specifc commit)
 	# echo "CLeanning up profiles dir... (some changes on repo gonnabe lost!!!)"
@@ -1133,7 +1134,7 @@ cmd_update() {
 		exit 1
 	fi
 
-	local track_file="$REPO_USER_DIR/$user_id"
+	local track_file="$REPO_USER_DIR/$username/track"
 
 	if [[ ! -e "$track_file" ]]; then
 		printfc "You need to apply repository file to the local first." "${C[R]}"
@@ -1166,15 +1167,20 @@ cmd_update() {
 			return 0
 		fi
 
+		_debug "Backing up"
+		tar -C "/home/$username" -czf "$REPO_USER_DIR/$username/$current_commit_id.tar.gz" "${unlink_items[@]}"
+
 		# TODO: unlink TESTETSTT
 		for unlink_item in "${unlink_items[@]}"; do
 			echo "unlink: $unlink_item"
-			# mv "$unlink_item" ".conf_$(get_safe_random_str 6)#$unlink_item"
+			rm -rf "$unlink_item"
 			# TOOD: tar zip
 		done
 	} <"$track_file"
 
-	local username="$SUDO_USER"
+	# mv "$unlink_item" ".conf_$(get_safe_random_str 6)#$unlink_item"
+	#
+	echo "${unlink_items[@]}"
 
 	git_conf config --global user.email "you@example.com"
 	git_conf config --global user.name "Your Name"
