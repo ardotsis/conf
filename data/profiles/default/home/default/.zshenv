@@ -28,3 +28,8 @@ export Z_PLUGIN_DIR="/usr/local/share/zsh/plugins"
 ### Paths
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="/opt/nvim-linux-x86_64/bin:$PATH"
+
+# Ubuntu only
+if (( ${${(@f)"$(</etc/os-release)"}[(I)ID*=*ubuntu]} )); then
+  skip_global_compinit=1
+fi

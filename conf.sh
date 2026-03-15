@@ -12,7 +12,7 @@ declare -r CURRENT_USER_ID="$(id -u "$CURRENT_USER")"
 
 # Docker environment
 if [[ -z "${DOCKER+x}" ]]; then
-	declare -r DOCKER=false
+	declare -r DOCKER="false"
 fi
 declare -r DOCKER_APP_DIR
 declare -r DOCKER_DEV_APP_DIR
@@ -160,7 +160,7 @@ get_err_msg() {
 	local with_tip="${2:-false}"
 
 	local tip=""
-	if $with_tip; then
+	if [[ $with_tip == "true" ]]; then
 		tip=" See 'conf --help'."
 	fi
 	printf "conf: %s%s\n" "$msg" "$tip"
@@ -190,7 +190,7 @@ parse_args() {
 	skip_index=false
 
 	for input in "${args[@]}"; do
-		if $skip_index; then
+		if [[ $skip_index == "true" ]]; then
 			skip_index=false
 			i=$((i + 1))
 			continue
@@ -277,7 +277,7 @@ _log() {
 
 	local timestamp
 	timestamp="$(date "+%Y-%m-%d %H:%M:%S")"
-	if $SHOW_LOG; then
+	if [[ $SHOW_LOG == "true" ]]; then
 		printf "[%s] [%b%s%b] [%s:%s] %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$msg" >&2
 	fi
 }
@@ -332,7 +332,7 @@ clr() {
 	local clr="$2"
 	local with_quote="${3-:}"
 
-	if $with_quote; then
+	if [[ $with_quote == "true" ]]; then
 		local q='"'
 	else
 		local q=''
@@ -708,6 +708,8 @@ apply_to_repo() {
 	local default_dir="$3"
 	local -n arr_ref="$4"
 
+	local no_change="true"
+
 	# TODO: Deprecated
 	_show_err() {
 		printf "apply_local_repo err: %s\n" "$1" >&2
@@ -800,6 +802,10 @@ apply_to_repo() {
 			fi
 		fi
 
+		if [[ "$state" != "${STATE[_]}" ]]; then
+			no_change="false"
+		fi
+
 		case "$state" in
 		"${STATE[_]}" | "${STATE[M]}")
 			unset "new_item[$type$home_path]"
@@ -828,6 +834,10 @@ apply_to_repo() {
 		cp -r "${new_item:1}" "$default_dir/$new_base"   # TODO: if 'd' or 'f'
 		printfc "Added: $new_base" "${STATE_CLR[${STATE[A]}]}"
 	done
+
+	if [[ "$no_change" == "true" ]]; then
+		return 3
+	fi
 
 }
 
@@ -896,7 +906,7 @@ cmd_install() {
 	fi
 
 	# Install conf repository
-	if $IS_DEBUG; then
+	if [[ $IS_DEBUG == "true" ]]; then
 		# Repository (Container)
 		ln -sf "$DOCKER_APP_DIR" "$REPO_INSTALL_DIR"
 
@@ -1019,7 +1029,7 @@ cmd_adduser() {
 	local ssh_git_passphrase
 	ssh_git_passphrase="$(get_random_str $PASSWD_LENGTH)"
 	local git_filename="git"
-	ssh-keygen -t ed25519 -b 4096 -f "$ssh_dir/$git_filename" -N "$ssh_git_passphrase" -C ""
+	ssh-keygen -t ed25519 -b 4096 -f "$ssh_dir/$git_filename" -N "$ssh_git_passphrase" -C "" >/dev/null 2>&1
 	{
 		printf "# SSH passphrase for Git\n%s\n\n" "$ssh_git_passphrase"
 		printf "# SSH public key for Git\n"
@@ -1090,6 +1100,10 @@ cmd_apply() {
 	fi
 }
 
+git_conf() {
+	git -C "$REPO_INSTALL_DIR" "$@"
+}
+
 cmd_update() {
 	check_is_root
 
@@ -1126,26 +1140,35 @@ cmd_update() {
 		read_by_null last_commit_id
 
 		if [[ "$last_commit_id" != "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" ]]; then
-			echo "wrong commit!: $last_commit_id $current_commit_id"
+			echo "different commit! (unlink (no save) -> pull): $last_commit_id $current_commit_id"
 			exit 1
 		fi
 
 		local -a unlink_items
-		apply_to_repo \
+		if ! apply_to_repo \
 			"/home/$SUDO_USER" \
 			"$(get_home_profile_dir "uwu")" \
 			"$(get_home_profile_dir "default")" \
-			"unlink_items"
+			"unlink_items"; then
+
+			_debug "no local change. return earlier (exit code: $?)"
+			return 0
+		fi
 
 		# TODO: unlink TESTETSTT
 		for unlink_item in "${unlink_items[@]}"; do
 			echo "unlink: $unlink_item"
 			mv "$unlink_item" ".conf_$(get_safe_random_str 6)#$unlink_item"
 		done
-
 	} <"$track_file"
 
-	local username=$SUDO_USER
+	local username="$SUDO_USER"
+
+	git_conf config --global user.email "you@example.com"
+	git_conf config --global user.name "Your Name"
+	git_conf add -A
+	git_conf commit -m "Updated by $username" --no-verify
+
 	local home="/home/$SUDO_USER"
 	local profile_dir="$(get_home_profile_dir "$profile")"
 
@@ -1159,19 +1182,19 @@ cmd_update() {
 main_() {
 	_vars "BASH_VERSION"
 
-	if [[ (($# -eq 0)) ]] || $SHOW_HELP; then
+	if [[ (($# -eq 0)) ]] || [[ $SHOW_HELP == "true" ]]; then
 		print_help
-		exit 0
+		return 0
 	fi
 
-	if $SHOW_VERSION; then
+	if [[ $SHOW_VERSION == "true" ]]; then
 		print_version
-		exit 0
+		return 0
 	fi
 
 	if (("${#CMDS[@]}" == 0)); then
 		printf "%s\n" "$(get_err_msg "Please specify the conf command." true)" >&2
-		exit 1
+		return 1
 	fi
 
 	if [[ -n "$LOVE" ]]; then
@@ -1196,7 +1219,7 @@ main_() {
 	# Run command
 	INTERNAL=false "cmd_$mode" "${CMDS[@]:1}"
 
-	if $DOCKER; then
+	if [[ $DOCKER == "true" ]]; then
 		printf "Keeping docker container running...\n"
 		tail -f /dev/null
 	fi

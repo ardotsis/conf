@@ -1,4 +1,4 @@
-FROM debian:bookworm
+FROM ubuntu:jammy
 
 ARG GUEST_APP_DIR
 ARG GUEST_DOCKER_DIR
