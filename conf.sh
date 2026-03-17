@@ -632,7 +632,11 @@ apply_to_local() {
 	local override_dir="${2:-}" # Preferrer
 	local default_dir="${3:-}"
 
-	if [[ -z "${output_dir_len+x}" ]]; then
+	if [[ -z "${_INIT+x}" ]]; then
+		local _INIT="false"
+		local _PREFIX
+		_PREFIX="$(get_prefix "$_PROFILE")"
+		write_track_header "$_TRACK_FILE" "$(id -u "$_USER")" "$_PROFILE"
 		local output_dir_len="${#output_dir}"
 	fi
 
@@ -734,7 +738,7 @@ apply_to_repo() {
 	local prefix
 	prefix="$(get_prefix "$profile")"
 
-	local -A new_item=() del_dir=()
+	local -A added_items=() del_dirs=()
 	local prefix_dir="" prefix_base=""
 	local output_dir_len="${#output_dir}"
 
@@ -756,11 +760,11 @@ apply_to_repo() {
 		fi
 
 		local in_dir="${base%/*}"
-		if [[ -v del_dir["$in_dir"] ]]; then
+		if [[ -v del_dirs["$in_dir"] ]]; then
 			if [[ "$type" == "d" ]]; then
-				del_dir["$base"]=1
+				del_dirs["$base"]=1
 			fi
-			printf_splash "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
+			# printf_splash "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
 			continue
 		fi
 
@@ -809,11 +813,11 @@ apply_to_repo() {
 			if [[ -d "$home_path" ]]; then
 				local item
 				while read_by_null item; do
-					new_item["$item"]=1
+					added_items["$item"]=1
 				done < <(find "$home_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%p\0")
 			else
 				state=${STATE[D]}
-				del_dir["$base"]=1
+				del_dirs["$base"]=1
 			fi
 		fi
 
@@ -823,7 +827,7 @@ apply_to_repo() {
 
 		case "$state" in
 		"${STATE[_]}" | "${STATE[M]}")
-			unset "new_item[$type$home_path]"
+			unset "added_items[$type$home_path]"
 			if [[ "$state" == "${STATE[M]}" ]]; then
 				rm -f "$repo_path"
 				install_cmd -o root -g root -m 700 "$home_path" "$repo_path"
@@ -841,17 +845,17 @@ apply_to_repo() {
 			rm -rf "$repo_path"
 			;;
 		esac
-		printf_splash "($type:$own) $base" "${STATE_CLR[$state]}"
+		# printf_splash "($type:$own) $base" "${STATE_CLR[$state]}"
 	done
 
-	if ((${#new_item[@]} > 0)); then
+	if ((${#added_items[@]} > 0)); then
 		no_change="false"
 	fi
 
-	for new_item in "${!new_item[@]}"; do
-		local new_base="${new_item:1+$output_dir_len+1}" # TODO: Refactor
-		cp -r "${new_item:1}" "$default_dir/$new_base"   # TODO: if 'd' or 'f'
-		printf_splash "Added: $new_base" "${STATE_CLR[${STATE[A]}]}"
+	for added_items in "${!added_items[@]}"; do
+		local new_base="${added_items:1+$output_dir_len+1}" # TODO: Refactor
+		cp -r "${added_items:1}" "$default_dir/$new_base"   # TODO: if 'd' or 'f'
+		# printf_splash "Added: $new_base" "${STATE_CLR[${STATE[A]}]}"
 	done
 
 	if [[ "$no_change" == "true" ]]; then
@@ -1103,10 +1107,7 @@ cmd_apply() {
 	track_file="$REPO_USER_DIR/$username/track"
 	install_cmd -m 0644 /dev/null "$track_file"
 
-	# track header
-	printf "%s\0%s\0%s\0" "$(id -u "$username")" "$profile" "$(get_git_commit_id)" >>"$track_file"
-
-	_TRACK_FILE="$track_file" _PREFIX="$(get_prefix "$profile")" _USER="$username" \
+	_TRACK_FILE="$track_file" _PROFILE="$profile" _USER="$username" \
 		apply_to_local "$home" "$profile_dir" "$(get_home_profile_dir "default")"
 
 	if [[ -z "$profile" ]]; then
@@ -1120,6 +1121,15 @@ cmd_apply() {
 
 git_conf() {
 	git -C "$REPO_INSTALL_DIR" "$@"
+}
+
+write_track_header() {
+	local filepath="$1"
+	local user_id="$2"
+	local profile="$3"
+
+	printf "%s\0%s\0%s\0" \
+		"$user_id" "$profile" "$(get_git_commit_id)" >>"$filepath"
 }
 
 cmd_update() {
@@ -1184,9 +1194,7 @@ cmd_update() {
 
 	# Update track data
 	rm -f "$track_file"
-	printf "%s\0%s\0%s\0" "$user_id" "$profile" "$(get_git_commit_id)" >>"$track_file"
-
-	_TRACK_FILE="$track_file" _PREFIX="$(get_prefix "$profile")" _USER="$username" \
+	_TRACK_FILE="$track_file" _PROFILE="$profile" _USER="$username" \
 		apply_to_local "$home" "$profile_dir" "$default_dir"
 }
 
