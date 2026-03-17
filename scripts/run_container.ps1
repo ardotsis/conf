@@ -6,7 +6,7 @@ param(
     [switch] $Cache,
     [switch] $Test,
     [array] $Params,
-    [switch] $ClearOutput
+    [switch] $CleanStart
 )
 
 # Paths
@@ -26,7 +26,7 @@ $GuestDevAppDir = "/app-live"
 $GuestDockerDir = $DockerDir.Replace("$RepoDir", "$GuestAppDir").Replace("\", "/")
 
 
-if ($ClearOutput) {
+if ($CleanStart) {
     Clear-Host
 }
 

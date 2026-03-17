@@ -17,20 +17,13 @@ fi
 declare -r DOCKER_APP_DIR
 declare -r DOCKER_DEV_APP_DIR
 
-# app
+# App
 declare -r REPO_URL="https://github.com/ardotsis/conf.git"
 declare -r REPO_INSTALL_DIR="/usr/local/share/conf"
 declare -r REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
 declare -r REPO_USER_DIR="$REPO_DATA_DIR/user"
 declare -r REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
 declare -r REPO_PACKAGES_FILE="$REPO_PROFILES_DIR/packages"
-declare -ar COMMANDS=(
-	"install"
-	"adduser"
-	"apply"
-	"update"
-	"pull"
-)
 
 # User
 declare -r SECRET_FILENAME="conf_secret"
@@ -171,6 +164,11 @@ get_err_msg() {
 		tip=" See 'conf --help'."
 	fi
 	printf "conf: %s%s\n" "$msg" "$tip"
+}
+
+install_cmd() {
+	_debug "Create item: ${C[y]}$*${C[0]}"
+	install "${@}"
 }
 
 parse_args() {
@@ -419,7 +417,7 @@ install_zsh_plugins() {
 	local zsh_plugins_dir="$1"
 
 	if [[ -e "$zsh_plugins_dir" ]]; then
-		_warn "ZSH plugins are already installed."
+		_debug "ZSH plugins are already installed."
 		return 0
 	fi
 
@@ -436,7 +434,7 @@ install_zsh_plugins() {
 
 install_nvim() {
 	if [[ -e "/opt/nvim-linux-x86_64" ]]; then
-		_warn "Neovim is already installed."
+		_debug "Neovim is already installed."
 		return 0
 	fi
 
@@ -453,7 +451,7 @@ install_zoxide() {
 	local man1_dir="$2"
 
 	if [[ -e "$bin_dir/zoxide" ]]; then
-		_warn "zoxide are already installed."
+		_debug "zoxide is already installed."
 		return 0
 	fi
 
@@ -472,7 +470,7 @@ install_starship() {
 	local bin_dir="$1"
 
 	if [[ -e "$bin_dir/starship" ]]; then
-		_warn "Starship are already installed."
+		_debug "Starship is already installed."
 		return 0
 	fi
 
@@ -492,11 +490,9 @@ build_home() {
 	mkdir "$home/.local"/{bin,share,state}
 	mkdir "$home/.cache/zsh"
 	mkdir "$home/.local/share/zsh"
-	# mkdir -p "${DF_DATA["backups_dir"]}"
 
 	chown -R "$username:$username" "$home"
 	chmod -R 700 "$home"
-	# install -m 0600 -o "$username" -g "$username" /dev/null "${DF_DATA["secret"]}"
 }
 
 add_user() {
@@ -691,10 +687,9 @@ apply_to_local() {
 				write_own="prefixed"
 			fi
 
-			_debug "Create: ${LC[path]}\"$output_path\"${C[0]}"
 			append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path" "$sum"
 			if [[ "$type" == "d" ]]; then
-				install -m 0700 -o "$_USER" -g "$_USER" "$output_path" -d
+				install_cmd -m 0700 -o "$_USER" -g "$_USER" "$output_path" -d
 				if [[ "$own" == "union" ]]; then
 					apply_to_local "$output_path" "$as_override_item" "$as_default_item"
 				elif [[ "$own" == "override" ]]; then
@@ -703,7 +698,7 @@ apply_to_local() {
 					apply_to_local "$output_path" "" "$as_default_item"
 				fi
 			elif [[ "$type" == "f" ]]; then
-				install -m 0700 -o "$_USER" -g "$_USER" "$repo_path" "$output_path"
+				install_cmd -m 0700 -o "$_USER" -g "$_USER" "$repo_path" "$output_path"
 			fi
 		done
 	done
@@ -818,7 +813,7 @@ apply_to_repo() {
 			unset "new_item[$type$home_path]"
 			if [[ "$state" == "${STATE[M]}" ]]; then
 				rm -f "$repo_path"
-				install -o root -g root -m 700 "$home_path" "$repo_path"
+				install_cmd -o root -g root -m 700 "$home_path" "$repo_path"
 			fi
 
 			if [[ "$base" != *"/"* ]]; then
@@ -866,14 +861,15 @@ setup_network() {
 	[[ -e /etc/ssh ]] && rm -rf /etc/ssh
 	cp -r "$tmpl_etc_dir/ssh" /etc/ssh
 	sed -i "s/^Port [0-9]\+/Port $port_num/" /etc/ssh/sshd_config
-	ssh-keygen -A
+	_debug "Generating SSH host keys..."
+	ssh-keygen -A >/dev/null
 
 	# /etc/iptables
 	[[ -e /etc/iptables ]] && rm -rf /etc/iptables
 	cp -r "$tmpl_etc_dir/iptables" /etc/iptables
 
 	# /etc/systemd/system/iptables-restore.service
-	install -m 0644 -o root -g root "$tmpl_etc_dir/systemd/system/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
+	install_cmd -m 0644 -o root -g root "$tmpl_etc_dir/systemd/system/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
 	sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "/etc/iptables/rules.v4"
 
 	if [[ "$DOCKER" == "false" ]]; then
@@ -892,6 +888,20 @@ check_is_root() {
 	if ! is_root; then
 		printf "%b%s%b\n" "${C[R]}" "$(get_err_msg "Root access required for this operation.")" "${C[0]}"
 		exit 1
+	fi
+}
+
+get_conf_user() {
+	SUDO_CMD=$(ps -p $PPID -o args=)
+	echo "$SUDO_CMD"
+}
+
+get_home() {
+	local username="$1"
+	if [[ "$username" == "root" ]]; then
+		printf "/root"
+	else
+		printf "/home/%s" "$username"
 	fi
 }
 
@@ -1005,7 +1015,7 @@ cmd_adduser() {
 	local secret_file="$home/$SECRET_FILENAME"
 
 	# Store password into "~/.conf/secret"
-	install -m 0400 -o "$username" -g "$username" /dev/null "$secret_file"
+	install_cmd -m 0400 -o "$username" -g "$username" /dev/null "$secret_file"
 	printf "Password: %s\n\n" "$passwd" >>"$home/$SECRET_FILENAME"
 
 	if ! $INTERNAL; then
@@ -1098,7 +1108,7 @@ cmd_apply() {
 
 	local track_file
 	track_file="$REPO_USER_DIR/$username/track"
-	install -m 0644 /dev/null "$track_file"
+	install_cmd -m 0644 /dev/null "$track_file"
 
 	# track header
 	printf "%s\0%s\0%s\0" "$(id -u "$username")" "$profile" "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" >>"$track_file"
@@ -1221,18 +1231,28 @@ main_() {
 
 	# shellcheck disable=SC2034
 	local cmd="${CMDS[0]}"
-	if ! is_contain "$cmd" "COMMANDS"; then
+	local cmd_func="cmd_$cmd"
+	if ! declare -F "$cmd_func" >/dev/null 2>&1; then
 		printf "%s\n" "$(get_err_msg "'$cmd' is not conf command." "true")" >&2
 		exit 1
 	fi
 
 	# Run command
-	INTERNAL="false" "cmd_$cmd" "${CMDS[@]:1}"
+	INTERNAL="false" "$cmd_func" "${CMDS[@]:1}"
 
 	if [[ $DOCKER == "true" ]]; then
 		printf "Keeping docker container running...\n"
 		tail -f /dev/null
 	fi
+}
+
+cmd_test() {
+	local username home
+	username="$(get_conf_user)"
+	home="$(get_home "$username")"
+
+	echo "username: $username"
+	echo "home: $home"
 }
 
 if [[ -z "${BASH_SOURCE[0]+x}" || "${BASH_SOURCE[0]}" == "${0}" ]]; then

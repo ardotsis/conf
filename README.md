@@ -24,13 +24,13 @@ You'll need:
 
 ### Windows
 
-Run container
+Run container example
 
 ```powershell
-.\scripts\run_container.ps1 -Os debian -Params @("-d", "-l", "-luv", "kana", "install", "kana", "uwu") -Verbose
+.\scripts\run_container.ps1 -Os debian -Params @("--debug", "--show-log", "install", "kana", "uwu") -CleanStart
 ```
 
-Execute in container
+Execute in container example
 
 ```powershell
 .\scripts\exec_docker.ps1 -Os debian -Username kana -Exec zsh
