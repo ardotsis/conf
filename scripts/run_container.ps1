@@ -143,7 +143,7 @@ function main() {
         "--rm",
         "--interactive",
         "--tty",
-        "--hostname=somehost",
+        "--hostname=$Os",
         "--mount", "type=bind,source=$RepoDir,target=$GuestDevAppDir,readonly",
         "--env", "DOCKER=true",
         "--env", "DOCKER_CONF_PARAMS=$Params",

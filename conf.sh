@@ -8,7 +8,6 @@ declare -r PORT_NUM_FILE="/etc/conf_port"
 # shellcheck disable=SC2155
 declare -r CURRENT_USER="$(whoami)"
 # shellcheck disable=SC2155
-declare -r CURRENT_USER_ID="$(id -u "$CURRENT_USER")"
 
 # Docker environment
 if [[ -z "${DOCKER+x}" ]]; then
@@ -24,6 +23,7 @@ declare -r REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
 declare -r REPO_USER_DIR="$REPO_DATA_DIR/user"
 declare -r REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
 declare -r REPO_PACKAGES_FILE="$REPO_PROFILES_DIR/packages"
+declare -r TRACK_FILENAME="track"
 
 # User
 declare -r SECRET_FILENAME="conf_secret"
@@ -90,6 +90,10 @@ declare -Ar _OPTION_MAP=(
 	[-luv]="love"
 )
 
+get_git_commit_id() {
+	printf "%s" "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)"
+}
+
 get_profile_dir() {
 	local profile="$1"
 	printf "%s/%s" "$REPO_PROFILES_DIR" "$profile"
@@ -105,7 +109,7 @@ get_home_profile_dir() {
 }
 
 is_root() {
-	[[ "$CURRENT_USER_ID" == "0" ]] && return 0
+	[[ "$(id -u "$CURRENT_USER")" == "0" ]] && return 0
 	return 1
 }
 
@@ -163,6 +167,7 @@ get_err_msg() {
 	if [[ $with_tip == "true" ]]; then
 		tip=" See 'conf --help'."
 	fi
+
 	printf "conf: %s%s\n" "$msg" "$tip"
 }
 
@@ -497,10 +502,10 @@ build_home() {
 
 add_user() {
 	local username="$1"
-	local passwd="$2"
+	local password="$2"
 
 	useradd -s "/bin/zsh" -G "sudo" "$username"
-	printf "%s:%s" "$username" "$passwd" | chpasswd
+	printf "%s:%s" "$username" "$password" | chpasswd
 	printf "%s ALL=(ALL) NOPASSWD: ALL\n" "$username" >>"/etc/sudoers.d/$username"
 	build_home "$username"
 }
@@ -586,10 +591,18 @@ get_sum() {
 	printf "%s" "$(sha256sum "$1" | cut -d ' ' -f1)"
 }
 
-printfc() {
+printf_splash() {
 	local msg="$1"
-	local c="$2"
-	printf "%b%s%b\n" "$c" "$msg" "${C[0]}" >&2
+	local color_ascii="$2"
+	printf "%b%s%b\n" "$color_ascii" "$msg" "${C[0]}" >&2
+}
+
+error() {
+	printf "%b%s%b\n" "${C[R]}" "$1" "${C[0]}" >&2
+}
+
+warn() {
+	printf "%b%s%b\n" "${C[Y]}" "$1" "${C[0]}" >&2
 }
 
 declare -Ar STATE=(
@@ -747,7 +760,7 @@ apply_to_repo() {
 			if [[ "$type" == "d" ]]; then
 				del_dir["$base"]=1
 			fi
-			printfc "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
+			printf_splash "($type:$own) ├─ $base" "${STATE_CLR[$state]}"
 			continue
 		fi
 
@@ -828,7 +841,7 @@ apply_to_repo() {
 			rm -rf "$repo_path"
 			;;
 		esac
-		printfc "($type:$own) $base" "${STATE_CLR[$state]}"
+		printf_splash "($type:$own) $base" "${STATE_CLR[$state]}"
 	done
 
 	if ((${#new_item[@]} > 0)); then
@@ -838,7 +851,7 @@ apply_to_repo() {
 	for new_item in "${!new_item[@]}"; do
 		local new_base="${new_item:1+$output_dir_len+1}" # TODO: Refactor
 		cp -r "${new_item:1}" "$default_dir/$new_base"   # TODO: if 'd' or 'f'
-		printfc "Added: $new_base" "${STATE_CLR[${STATE[A]}]}"
+		printf_splash "Added: $new_base" "${STATE_CLR[${STATE[A]}]}"
 	done
 
 	if [[ "$no_change" == "true" ]]; then
@@ -884,18 +897,6 @@ setup_network() {
 	fi
 }
 
-check_is_root() {
-	if ! is_root; then
-		printf "%b%s%b\n" "${C[R]}" "$(get_err_msg "Root access required for this operation.")" "${C[0]}"
-		exit 1
-	fi
-}
-
-get_conf_user() {
-	SUDO_CMD=$(ps -p $PPID -o args=)
-	echo "$SUDO_CMD"
-}
-
 get_home() {
 	local username="$1"
 	if [[ "$username" == "root" ]]; then
@@ -909,19 +910,10 @@ cmd_install() {
 	local username="${1:-}"
 	local profile="${2:-}"
 
-	check_is_root
-
 	if [[ -e "$REPO_INSTALL_DIR" ]]; then
-		printf "%b%s\n%s%b\n" "${C[y]}" "conf is already installed." "Use 'adduser' command to create new user." "${C[0]}"
+		warn "conf is already installed." "Use 'adduser' command to create new conf user."
 		exit 1
 	fi
-
-	if is_cmd_exist ufw; then
-		_info "Uninstall UFW"
-		ufw disable
-		remove_package "ufw"
-	fi
-
 	if ! is_cmd_exist "git"; then
 		install_package "git"
 	fi
@@ -942,8 +934,11 @@ cmd_install() {
 		chmod +x "$REPO_INSTALL_DIR/conf.sh"
 	fi
 
+	git_conf config --global user.email "you@example.com"
+	git_conf config --global user.name "Your Name"
+
 	if [[ ! -e "$REPO_USER_DIR" ]]; then
-		mkdir "$REPO_USER_DIR"
+		mkdir -p "$REPO_USER_DIR"
 	fi
 
 	local pkg_name
@@ -986,8 +981,6 @@ cmd_adduser() {
 	local username="${1:-}"
 	local profile="${2:-}"
 
-	check_is_root
-
 	if [[ "$username" == "root" ]]; then
 		cmd_apply "$username" "$profile"
 		return 0
@@ -1006,8 +999,8 @@ cmd_adduser() {
 	local passwd
 	passwd="$(get_random_str $PASSWD_LENGTH)"
 	add_user "$username" "$passwd"
-
 	mkdir "$REPO_USER_DIR/$username"
+
 	if [[ "$DOCKER" == "false" ]]; then
 		usermod -aG docker "$username"
 	fi
@@ -1111,7 +1104,7 @@ cmd_apply() {
 	install_cmd -m 0644 /dev/null "$track_file"
 
 	# track header
-	printf "%s\0%s\0%s\0" "$(id -u "$username")" "$profile" "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" >>"$track_file"
+	printf "%s\0%s\0%s\0" "$(id -u "$username")" "$profile" "$(get_git_commit_id)" >>"$track_file"
 
 	_TRACK_FILE="$track_file" _PREFIX="$(get_prefix "$profile")" _USER="$username" \
 		apply_to_local "$home" "$profile_dir" "$(get_home_profile_dir "default")"
@@ -1130,81 +1123,71 @@ git_conf() {
 }
 
 cmd_update() {
-	check_is_root
-	local username="$SUDO_USER"
+	local username user_id home user_data_dir track_file
 
-	# TODO: git restore?? (to set specifc commit)
-	# echo "CLeanning up profiles dir... (some changes on repo gonnabe lost!!!)"
-	# git -C "$REPO_INSTALL_DIR" clean -fdx "$REPO_PROFILES_DIR"
-
-	local current_git_commit
-	current_git_commit="$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)"
-
-	local user_id
-	user_id="$(id -u "$SUDO_USER")"
-
-	if [[ "$user_id" == "0" ]]; then
-		echo "root!?? not implemented. sorryyy"
-		exit 1
-	fi
-
-	local track_file="$REPO_USER_DIR/$username/track"
+	username="${SUDO_USER:-$CURRENT_USER}"
+	user_id="$(id -u "$username")"
+	home="$(get_home "$username")"
+	user_data_dir="$REPO_USER_DIR/$username"
+	track_file="$user_data_dir/$TRACK_FILENAME"
 
 	if [[ ! -e "$track_file" ]]; then
-		printfc "You need to apply repository file to the local first." "${C[R]}"
+		warn "No track file. Try 'apply' command first."
 		exit 1
 	fi
 
 	local current_commit_id
-	current_commit_id="$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)"
+	current_commit_id="$(get_git_commit_id)"
 
-	# Get track file header
 	{
-		local user_id profile last_commit_id
-		read_by_null user_id
+		# shellcheck disable=SC2034
+		local _ profile track_commit_id
+		read_by_null _ # old user id
 		read_by_null profile
-		read_by_null last_commit_id
+		read_by_null track_commit_id
 
-		if [[ "$last_commit_id" != "$current_git_commit" ]]; then
-			echo "different commit! (unlink (no save) -> pull): $last_commit_id $current_commit_id"
+		local default_dir profile_dir
+		default_dir="$(get_home_profile_dir "default")"
+		profile_dir="$(get_home_profile_dir "$profile")"
+
+		if [[ "$current_commit_id" != "$track_commit_id" ]]; then
+			warn "You need to apply latest version of git snapshot."
 			exit 1
 		fi
 
 		local -a unlink_items
 		if ! apply_to_repo \
-			"/home/$SUDO_USER" \
-			"$(get_home_profile_dir "uwu")" \
-			"$(get_home_profile_dir "default")" \
+			"$home" \
+			"$profile_dir" \
+			"$default_dir" \
 			"unlink_items"; then
 
-			_debug "no local change. return earlier (exit code: $?)"
+			# No change
+			_debug "No change on '$home'"
 			return 0
 		fi
 
-		_debug "Backing up"
-		tar -C "/home/$username" -czf "$REPO_USER_DIR/$username/$current_git_commit.tar.gz" "${unlink_items[@]}"
+		local archive_path="$user_data_dir/$current_commit_id.tar.gz"
+		_debug "Backup current home ($archive_path)"
+		tar -C "$home" -czf "$archive_path" "${unlink_items[@]}"
 
-		# TODO: unlink TESTETSTT
 		for unlink_item in "${unlink_items[@]}"; do
-			echo "unlink: $unlink_item"
+			_debug "Unlink: $unlink_item"
 			rm -rf "$unlink_item"
-			echo "$unlink_item"
 		done
+
 	} <"$track_file"
 
-	git_conf config --global user.email "you@example.com"
-	git_conf config --global user.name "Your Name"
-	git_conf add "$REPO_PROFILES_DIR"
-	git_conf commit -m "Updated by $username" --no-verify
+	_debug "Committing..."
+	git_conf add "$REPO_PROFILES_DIR" >/dev/null 2>&1
+	git_conf commit -m "$username updates $profile" --no-verify >/dev/null 2>&1
 
-	local home="/home/$SUDO_USER"
-	local profile_dir="$(get_home_profile_dir "$profile")" # TODO: fix profile is empty
-
+	# Update track data
 	rm -f "$track_file"
-	printf "%s\0%s\0%s\0" "$(id -u "$username")" "$profile" "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)" >>"$track_file"
+	printf "%s\0%s\0%s\0" "$user_id" "$profile" "$(get_git_commit_id)" >>"$track_file"
 
 	_TRACK_FILE="$track_file" _PREFIX="$(get_prefix "$profile")" _USER="$username" \
-		apply_to_local "$home" "$profile_dir" "$(get_home_profile_dir "default")"
+		apply_to_local "$home" "$profile_dir" "$default_dir"
 }
 
 main_() {
@@ -1229,17 +1212,22 @@ main_() {
 		printf "i love you %s.\n" "$LOVE"
 	fi
 
-	# shellcheck disable=SC2034
 	local cmd="${CMDS[0]}"
 	local cmd_func="cmd_$cmd"
+
 	if ! declare -F "$cmd_func" >/dev/null 2>&1; then
 		printf "%s\n" "$(get_err_msg "'$cmd' is not conf command." "true")" >&2
 		exit 1
 	fi
 
-	# Run command
-	INTERNAL="false" "$cmd_func" "${CMDS[@]:1}"
+	if ! is_root; then
+		error "Permission denied (you must be root)"
+		return 1
+	else
+		INTERNAL="false" "$cmd_func" "${CMDS[@]:1}"
+	fi
 
+	# Run command
 	if [[ $DOCKER == "true" ]]; then
 		printf "Keeping docker container running...\n"
 		tail -f /dev/null
@@ -1247,15 +1235,17 @@ main_() {
 }
 
 cmd_test() {
-	local username home
-	username="$(get_conf_user)"
+	local username home user_data_dir
+	username="${SUDO_USER:-$CURRENT_USER}"
 	home="$(get_home "$username")"
-
-	echo "username: $username"
-	echo "home: $home"
+	user_data_dir="$REPO_USER_DIR/$username"
 }
 
-if [[ -z "${BASH_SOURCE[0]+x}" || "${BASH_SOURCE[0]}" == "${0}" ]]; then
-	# Execute via pipeline or directly
+if [[ -z "${BASH_SOURCE[0]+x}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
+	# Execute directly, Pipeline
 	main_ "$@"
 fi
+
+# TODO: git restore?? (to set specifc commit)
+# echo "CLeanning up profiles dir... (some changes on repo gonnabe lost!!!)"
+# git -C "$REPO_INSTALL_DIR" clean -fdx "$REPO_PROFILES_DIR"

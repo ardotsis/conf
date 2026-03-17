@@ -9,7 +9,7 @@
 ### `kana@host`
 
 ```sh
-curl -fsSL get.ardotsis.com/conf | bash -s -- -l install kana
+curl -fsSL get.ardotsis.com/conf | bash -s -- install kana
 ```
 
 You'll need:
