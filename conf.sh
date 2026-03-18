@@ -9,8 +9,16 @@ declare -r CURRENT_USER="$(whoami)"
 # shellcheck disable=SC2155
 
 # Docker environment
+declare -r DOCKER_IS_DOCKER
 declare -r DOCKER_APP_DIR
 declare -r DOCKER_DEV_APP_DIR
+
+if [[ "$1" == "_docker-entrypoint" ]]; then
+	declare -r IS_DOCKER_ENTRYPOINT="true"
+	shift
+else
+	declare -r IS_DOCKER_ENTRYPOINT="false"
+fi
 
 # App
 declare -r REPO_URL="https://github.com/ardotsis/conf.git"
@@ -80,8 +88,6 @@ declare -Ar _OPTION_MAP=(
 
 	[--debug]="flag:false"
 	[-d]="debug"
-
-	[--docker]="flag:false"
 
 	["--show-log"]="flag:false"
 	[-l]="show-log"
@@ -260,7 +266,6 @@ if ! parse_args "_OPTION" "CMDS" "_PARSE_ERR_MSG" "$@"; then
 fi
 
 declare -r IS_DEBUG="${_OPTION["debug"]}"
-declare -r IS_DOCKER="${_OPTION["docker"]}"
 declare -r SHOW_LOG="${_OPTION["show-log"]}"
 declare -r SHOW_HELP="${_OPTION["help"]}"
 declare -r SHOW_VERSION="${_OPTION["version"]}"
@@ -885,7 +890,7 @@ install_etc() {
 	install_cmd -m 0644 -o root -g root "$tmpl_etc_dir/systemd/system/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
 	sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "/etc/iptables/rules.v4"
 
-	if [[ "$IS_DOCKER" == "false" ]]; then
+	if [[ "$DOCKER_IS_DOCKER" == "false" ]]; then
 		# Reload sshd config
 		_info "Restart sshd service"
 		systemctl restart sshd
@@ -974,7 +979,7 @@ cmd_init() {
 	[[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
 	install_zoxide "$LOCAL_DIR/bin" "$man1_dir"
 
-	if [[ "$IS_DOCKER" == "false" ]]; then
+	if [[ "$DOCKER_IS_DOCKER" == "false" ]]; then
 		_info "Executing Docker installation script.."
 		sh -c "$(curl -fsSL https://get.docker.com)"
 	fi
@@ -1010,11 +1015,12 @@ cmd_adduser() {
 	##################################
 	if [[ "$username" != "root" ]] && is_usr_exist "$username"; then
 		_info "$username is already exist. Backup and deleting..."
+		local home="/home/$username"
 		if [[ -e "$home" ]]; then
 			mv "$home" "$home.old_$(get_safe_random_str 16)"
 		fi
 
-		deluser --remove-all-files --backup-to "/home" "$username"
+		deluser "$username"
 	fi
 
 	local passwd
@@ -1025,7 +1031,7 @@ cmd_adduser() {
 	update_conf_user_env "$username"
 	mkdir "$_USER_DATA_DIR"
 
-	if [[ "$IS_DOCKER" == "false" ]]; then
+	if [[ "$DOCKER_IS_DOCKER" == "false" ]]; then
 		usermod -aG docker "$_USERNAME"
 	fi
 
@@ -1033,15 +1039,8 @@ cmd_adduser() {
 	install_cmd -m 0400 -o "$_USERNAME" -g "$_USERNAME" /dev/null "$secret_file"
 	printf "Password: %s\n\n" "$passwd" >>"$secret_file"
 
-	if ! $_INTERNAL; then
-		info "%bAdded '%s' successfully.%b\n" "${C[G]}" "$_USERNAME" "${C[0]}"
-	fi
-
 	# Set up SSH
-	## Create SSH home correctly
 	local ssh_dir="$_HOME/.ssh"
-	# install -m 0600 -o "$_USERNAME" -g "$_USERNAME" /dev/null "$ssh_dir/authorized_keys"
-	# install -m 0600 -o "$_USERNAME" -g "$_USERNAME" /dev/null "$ssh_dir/config"
 
 	local ssh_publickey
 	if [[ "$IS_DEBUG" == "true" ]]; then
@@ -1091,6 +1090,10 @@ cmd_adduser() {
 
 	chown "$_USERNAME:$_USERNAME" "$ssh_dir/"*
 	chmod 0600 "$ssh_dir/"*
+
+	if ! $_INTERNAL; then
+		info "Added '$_USERNAME' successfully."
+	fi
 
 	_INTERNAL="true" cmd_apply "$profile"
 }
@@ -1186,6 +1189,7 @@ cmd_update() {
 }
 
 main_() {
+	_debug "args: $*"
 	_vars "BASH_VERSION"
 
 	if [[ (($# -eq 0)) ]] || [[ $SHOW_HELP == "true" ]]; then
@@ -1225,7 +1229,7 @@ main_() {
 
 	_debug "conf command exit with $? code"
 
-	if [[ $IS_DOCKER == "true" ]]; then
+	if [[ $IS_DOCKER_ENTRYPOINT == "true" ]]; then
 		printf "Keeping docker container running...\n"
 		tail -f /dev/null
 	fi
