@@ -910,7 +910,6 @@ get_home() {
 
 get_conf_user_envs() {
 	local new_username="$1"
-
 	local -n username=_USERNAME
 	local -n user_id=_USER_ID
 	local -n home=_HOME
@@ -1018,7 +1017,6 @@ cmd_adduser() {
 		deluser --remove-all-files --backup-to "/home" "$username"
 	fi
 
-	##### Create User #####
 	local passwd
 	passwd="$(get_random_str $PASSWD_LENGTH)"
 	add_user "$username" "$passwd"
