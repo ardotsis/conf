@@ -319,8 +319,8 @@ error() { printf "%b%s%b\n" "${C[R]}" "$1" "${C[0]}" >&2; }
 draw_box() {
 	local txt="$1"
 	local width="$2"
-	local comment_style="${3:-false}"
 
+	local s="#"
 	local inner=$((width - 2))
 	local txt_len=${#txt}
 
@@ -329,18 +329,15 @@ draw_box() {
 	local left=$((space / 2))
 	local right=$((space - left))
 
-	$comment_style && printf "# "
-	printf '%*s\n' "$width" | tr ' ' '='
+	printf '%*s\n' "$width" | tr ' ' $s
 
-	$comment_style && printf "# "
-	printf "="
+	printf "$s"
 	printf '%*s' "$left"
 	printf "%s" "$txt"
 	printf '%*s' "$right"
-	printf "=\n"
+	printf "$s\n"
 
-	$comment_style && printf "# "
-	printf '%*s\n' "$width" | tr ' ' '='
+	printf '%*s\n' "$width" | tr ' ' $s
 }
 
 clr() {
@@ -866,16 +863,17 @@ apply_to_repo() {
 #                    Commands                    #
 ##################################################
 install_etc() {
+	# TODO: Set permission correctly
+
 	local ssh_port="$1"
 	_debug "using default etc (not implemented yet)"
 
-	# TODO: chown, chmod
 	local tmpl_etc_dir="$REPO_PROFILES_DIR/default/etc"
 
 	# /etc/ssh
 	[[ -e /etc/ssh ]] && rm -rf /etc/ssh
 	cp -r "$tmpl_etc_dir/ssh" /etc/ssh
-	sed -i "s/^Port [0-9]\+/Port $port_num/" /etc/ssh/sshd_config
+	sed -i "s/^Port [0-9]\+/Port $ssh_port/" /etc/ssh/sshd_config
 	_debug "Generating SSH host keys..."
 	ssh-keygen -A >/dev/null
 
@@ -929,9 +927,9 @@ cmd_init() {
 		exit 1
 	fi
 
-	# ==================================
-	# =      Install APT Packages      =
-	# ==================================
+	##################################
+	#      Install APT Packages      #
+	##################################
 	! is_cmd_exist git && install_package git
 	is_cmd_exist ufw && remove_package ufw # uninstall iptables's wrapper
 
@@ -942,9 +940,9 @@ cmd_init() {
 		fi
 	done <"$REPO_PACKAGES_FILE"
 
-	# ==================================
-	# =    Install conf Repository     =
-	# ==================================
+	##################################
+	#    Install conf Repository     #
+	##################################
 	if [[ $IS_DEBUG == "true" ]]; then
 		# Repository (Docker Copied Repository)
 		ln -sf "$DOCKER_APP_DIR" "$REPO_INSTALL_DIR"
@@ -963,9 +961,9 @@ cmd_init() {
 	git_conf config --global user.email "mona_lisa@example.com"
 	git_conf config --global user.name "Mona Lisa"
 
-	# ==================================
-	# = Install binaries & ZSH plugins =
-	# ==================================
+	##################################
+	# Install binaries & ZSH plugins #
+	##################################
 	install_zsh_plugins "$ZSH_PLUGINS_DIR"
 	install_nvim
 	install_starship "$LOCAL_DIR/bin"
@@ -979,9 +977,9 @@ cmd_init() {
 		sh -c "$(curl -fsSL https://get.docker.com)"
 	fi
 
-	# ==================================
-	# =       Install etc (WIP)        =
-	# ==================================
+	##################################
+	#       Install etc (WIP)        #
+	##################################
 	local ssh_port="$((1024 + RANDOM % (65535 - 1024 + 1)))"
 	printf "%s" "$ssh_port" >>"$SSH_PORT_FILE"
 	install_etc "$ssh_port"
@@ -1005,9 +1003,9 @@ cmd_adduser() {
 		return 1
 	fi
 
-	# ==================================
-	# =       Reset Target User        =
-	# ==================================
+	##################################
+	#       Reset Target User        #
+	##################################
 	if [[ "$username" != "root" ]] && is_usr_exist "$username"; then
 		_info "$username is already exist. Backup and deleting..."
 		if [[ -e "$home" ]]; then

@@ -27,7 +27,7 @@ You'll need:
 Run container example
 
 ```powershell
-.\scripts\run_container.ps1 -Os debian -Params @("--debug", "--show-log", "install", "kana", "uwu") -CleanStart
+.\scripts\run_container.ps1 -Os debian -Params @("--debug", "--show-log", "init", "kana", "uwu") -CleanStart
 ```
 
 Execute in container example
