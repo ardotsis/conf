@@ -4,7 +4,6 @@ set -euo pipefail -o noclobber
 # System
 declare -r TMP_DIR="/var/tmp"
 declare -r LOCAL_DIR="/usr/local"
-declare -r PORT_NUM_FILE="/etc/conf_port"
 # shellcheck disable=SC2155
 declare -r CURRENT_USER="$(whoami)"
 # shellcheck disable=SC2155
@@ -23,7 +22,9 @@ declare -r REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
 declare -r REPO_USER_DIR="$REPO_DATA_DIR/user"
 declare -r REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
 declare -r REPO_PACKAGES_FILE="$REPO_PROFILES_DIR/packages"
+declare -r SSH_PORT_FILE="$REPO_DATA_DIR/ssh_port"
 declare -r TRACK_FILENAME="track"
+declare -r DEFAULT_PROFILE_NAME="default"
 
 # User
 declare -r SECRET_FILENAME="conf_secret"
@@ -311,30 +312,35 @@ _vars() {
 	_log "debug" "$msg"
 }
 
-draw_line() {
-	# TODO: Refactor
+info() { printf "%b%s%b\n" "${C[G]}" "$1" "${C[0]}" >&2; }
+warn() { printf "%b%s%b\n" "${C[Y]}" "$1" "${C[0]}" >&2; }
+error() { printf "%b%s%b\n" "${C[R]}" "$1" "${C[0]}" >&2; }
+
+draw_box() {
 	local txt="$1"
+	local width="$2"
+	local comment_style="${3:-false}"
 
-	local a_bar_min=1
-	local len=80
-	local margin=4
-	local label="="
+	local inner=$((width - 2))
+	local txt_len=${#txt}
 
-	local bar_len=$((len - ${#txt} - margin * 2))
+	local space=$((inner - txt_len))
+	((space < 0)) && return 1
+	local left=$((space / 2))
+	local right=$((space - left))
 
-	if ((bar_len < (2 * a_bar_min))); then
-		return 1
-	fi
+	$comment_style && printf "# "
+	printf '%*s\n' "$width" | tr ' ' '='
 
-	local right=$((bar_len / 2))
-	local left=$((bar_len - right))
+	$comment_style && printf "# "
+	printf "="
+	printf '%*s' "$left"
+	printf "%s" "$txt"
+	printf '%*s' "$right"
+	printf "=\n"
 
-	printf '%*s' "$right" | tr ' ' "$label"
-	printf '%*s' "$margin"
-	printf "%b" "$txt"
-	printf '%*s' "$margin"
-	printf '%*s' "$left" | tr ' ' "$label"
-	printf "\n"
+	$comment_style && printf "# "
+	printf '%*s\n' "$width" | tr ' ' '='
 }
 
 clr() {
@@ -595,14 +601,6 @@ printf_splash() {
 	local msg="$1"
 	local color_ascii="$2"
 	printf "%b%s%b\n" "$color_ascii" "$msg" "${C[0]}" >&2
-}
-
-error() {
-	printf "%b%s%b\n" "${C[R]}" "$1" "${C[0]}" >&2
-}
-
-warn() {
-	printf "%b%s%b\n" "${C[Y]}" "$1" "${C[0]}" >&2
 }
 
 declare -Ar STATE=(
@@ -867,7 +865,7 @@ apply_to_repo() {
 ##################################################
 #                    Commands                    #
 ##################################################
-setup_network() {
+install_etc() {
 	local ssh_port="$1"
 	_debug "using default etc (not implemented yet)"
 
@@ -910,74 +908,92 @@ get_home() {
 	fi
 }
 
-cmd_install() {
+get_conf_user_envs() {
+	local new_username="$1"
+
+	local -n username=_USERNAME
+	local -n user_id=_USER_ID
+	local -n home=_HOME
+	local -n user_data_dir=_USER_DATA_DIR
+	username="$new_username"
+	user_id="$(id -u "$username")"
+	home="$(get_home "$username")"
+	user_data_dir="$REPO_USER_DIR/$username"
+}
+
+cmd_init() {
 	local username="${1:-}"
-	local profile="${2:-}"
+	local profile="${2:-$DEFAULT_PROFILE_NAME}"
 
 	if [[ -e "$REPO_INSTALL_DIR" ]]; then
 		warn "conf is already installed." "Use 'adduser' command to create new conf user."
 		exit 1
 	fi
-	if ! is_cmd_exist "git"; then
-		install_package "git"
-	fi
 
-	# Install conf repository
-	if [[ $IS_DEBUG == "true" ]]; then
-		# Repository (Container)
-		ln -sf "$DOCKER_APP_DIR" "$REPO_INSTALL_DIR"
+	# ==================================
+	# =      Install APT Packages      =
+	# ==================================
+	! is_cmd_exist git && install_package git
+	is_cmd_exist ufw && remove_package ufw # uninstall iptables's wrapper
 
-		# conf bin (Volume)
-		ln -sf "$DOCKER_DEV_APP_DIR/conf.sh" "/usr/local/bin/conf"
-	else
-		# Repository
-		git clone -b main "$REPO_URL" "$REPO_INSTALL_DIR"
-
-		# conf bin
-		ln -sf "$REPO_INSTALL_DIR/conf.sh" "/usr/local/bin/conf"
-		chmod +x "$REPO_INSTALL_DIR/conf.sh"
-	fi
-
-	git_conf config --global user.email "you@example.com"
-	git_conf config --global user.name "Your Name"
-
-	if [[ ! -e "$REPO_USER_DIR" ]]; then
-		mkdir -p "$REPO_USER_DIR"
-	fi
-
-	local pkg_name
-	while read -r pkg_name; do
-		if ! is_cmd_exist "$pkg_name"; then
-			install_package "$pkg_name"
+	local my_package
+	while read -r my_package; do
+		if ! is_cmd_exist "$my_package"; then
+			install_package "$my_package"
 		fi
 	done <"$REPO_PACKAGES_FILE"
 
-	# Install binaries
-	local data_dir="/usr/local"
+	# ==================================
+	# =    Install conf Repository     =
+	# ==================================
+	if [[ $IS_DEBUG == "true" ]]; then
+		# Repository (Docker Copied Repository)
+		ln -sf "$DOCKER_APP_DIR" "$REPO_INSTALL_DIR"
+		# conf bin (Docker Volume Repository)
+		ln -sf "$DOCKER_DEV_APP_DIR/conf.sh" "/usr/local/bin/conf"
+	else
+		# Repository (Git)
+		git clone -b main "$REPO_URL" "$REPO_INSTALL_DIR"
+		# conf bin (Git)
+		ln -sf "$REPO_INSTALL_DIR/conf.sh" "/usr/local/bin/conf"
+		chmod +x "$REPO_INSTALL_DIR/conf.sh"
+	fi
+	# <conf repo>/data/user
+	[[ ! -e "$REPO_USER_DIR" ]] && mkdir -p "$REPO_USER_DIR"
 
+	git_conf config --global user.email "mona_lisa@example.com"
+	git_conf config --global user.name "Mona Lisa"
+
+	# ==================================
+	# = Install binaries & ZSH plugins =
+	# ==================================
 	install_zsh_plugins "$ZSH_PLUGINS_DIR"
 	install_nvim
-	install_starship "$data_dir/bin"
+	install_starship "$LOCAL_DIR/bin"
 
-	local man1_dir="$data_dir/share/man/man1"
+	local man1_dir="$LOCAL_DIR/share/man/man1"
 	[[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
-	install_zoxide "$data_dir/bin" "$man1_dir"
+	install_zoxide "$LOCAL_DIR/bin" "$man1_dir"
 
 	if [[ "$DOCKER" == "false" ]]; then
 		_info "Executing Docker installation script.."
 		sh -c "$(curl -fsSL https://get.docker.com)"
 	fi
 
-	local port_num="$((1024 + RANDOM % (65535 - 1024 + 1)))"
-	printf "%s" "$port_num" >>"$PORT_NUM_FILE"
-	setup_network "$port_num"
+	# ==================================
+	# =       Install etc (WIP)        =
+	# ==================================
+	local ssh_port="$((1024 + RANDOM % (65535 - 1024 + 1)))"
+	printf "%s" "$ssh_port" >>"$SSH_PORT_FILE"
+	install_etc "$ssh_port"
 
-	if ! $INTERNAL; then
+	# After Install
+	if [[ $_INTERNAL == "false" ]]; then
 		printf "%b%s%b\n" "${C[G]}" "conf has installed." "${C[0]}"
 	fi
 
 	if [[ -n "$username" ]]; then
-		INTERNAL="true" cmd_adduser "$username" "$profile"
+		_INTERNAL="true" cmd_adduser "$username" "$profile"
 	fi
 }
 
@@ -985,45 +1001,49 @@ cmd_adduser() {
 	local username="${1:-}"
 	local profile="${2:-}"
 
-	if [[ "$username" == "root" ]]; then
-		cmd_apply "$username" "$profile"
-		return 0
+	if [[ -z "$username" ]]; then
+		warn "Please specify the username."
+		return 1
 	fi
 
-	local home="/home/$username"
-	# Backup home directory
-	if is_usr_exist "$username"; then
-		_info "Backup current home directory"
+	# ==================================
+	# =       Reset Target User        =
+	# ==================================
+	if [[ "$username" != "root" ]] && is_usr_exist "$username"; then
+		_info "$username is already exist. Backup and deleting..."
 		if [[ -e "$home" ]]; then
 			mv "$home" "$home.old_$(get_safe_random_str 16)"
 		fi
-		deluser "$username"
+
+		deluser --remove-all-files --backup-to "/home" "$username"
 	fi
 
+	##### Create User #####
 	local passwd
 	passwd="$(get_random_str $PASSWD_LENGTH)"
 	add_user "$username" "$passwd"
-	mkdir "$REPO_USER_DIR/$username"
+
+	##### Create User (Use Env) #####
+	get_conf_user_envs "$username"
+	mkdir "$_USER_DATA_DIR"
 
 	if [[ "$DOCKER" == "false" ]]; then
-		usermod -aG docker "$username"
+		usermod -aG docker "$_USERNAME"
 	fi
 
-	local secret_file="$home/$SECRET_FILENAME"
+	local secret_file="$_HOME/$SECRET_FILENAME"
+	install_cmd -m 0400 -o "$_USERNAME" -g "$_USERNAME" /dev/null "$secret_file"
+	printf "Password: %s\n\n" "$passwd" >>"$secret_file"
 
-	# Store password into "~/.conf/secret"
-	install_cmd -m 0400 -o "$username" -g "$username" /dev/null "$secret_file"
-	printf "Password: %s\n\n" "$passwd" >>"$home/$SECRET_FILENAME"
-
-	if ! $INTERNAL; then
-		printf "%bAdded '%s' successfully.%b\n" "${C[G]}" "$username" "${C[0]}"
+	if ! $_INTERNAL; then
+		info "%bAdded '%s' successfully.%b\n" "${C[G]}" "$_USERNAME" "${C[0]}"
 	fi
 
 	# Set up SSH
 	## Create SSH home correctly
-	local ssh_dir="$home/.ssh"
-	# install -m 0600 -o "$username" -g "$username" /dev/null "$ssh_dir/authorized_keys"
-	# install -m 0600 -o "$username" -g "$username" /dev/null "$ssh_dir/config"
+	local ssh_dir="$_HOME/.ssh"
+	# install -m 0600 -o "$_USERNAME" -g "$_USERNAME" /dev/null "$ssh_dir/authorized_keys"
+	# install -m 0600 -o "$_USERNAME" -g "$_USERNAME" /dev/null "$ssh_dir/config"
 
 	local ssh_publickey
 	if [[ "$IS_DEBUG" == "true" ]]; then
@@ -1034,14 +1054,14 @@ cmd_adduser() {
 	printf "%s" "$ssh_publickey" >>"$ssh_dir/authorized_keys"
 
 	local ssh_port
-	ssh_port=$(<"$PORT_NUM_FILE")
+	ssh_port=$(<"$SSH_PORT_FILE")
 	### Create template example
 	{
 		printf "# Client's SSH template\n"
 		printf "Host yourhost\n"
 		printf "  HostName %s\n" "$(curl -fsSL https://api.ipify.org)"
 		printf "  Port %s\n" "$ssh_port"
-		printf "  User %s\n" "$username"
+		printf "  User %s\n" "$_USERNAME"
 		printf "  IdentityFile ~/.ssh/%s\n" "yourhost"
 		printf "  IdentitiesOnly yes\n"
 		printf "\n"
@@ -1069,52 +1089,26 @@ cmd_adduser() {
 	} >>"$ssh_dir/config"
 	rm -f "$ssh_dir/${git_filename}.pub"
 
-	chown "$username:$username" "$ssh_dir/"*
+	chown "$_USERNAME:$_USERNAME" "$ssh_dir/"*
 	chmod 0600 "$ssh_dir/"*
 
-	INTERNAL="true" cmd_apply "$username" "$profile"
+	_INTERNAL="true" cmd_apply "$profile"
 }
 
 cmd_apply() {
-	case "$INTERNAL" in
-	# Via user
-	false)
-		local username="$CURRENT_USER"
-		local profile="$1"
-		;;
-	# Via function
-	true)
-		local username="$1"
-		local profile="$2"
-		;;
-	esac
+	local profile="${1:-}"
 
-	_vars "username" "profile"
-
-	local profile_dir=""
-	if [[ -n "$profile" ]]; then
+	local profile_dir
+	if [[ -z "$profile" || "$profile" == "$DEFAULT_PROFILE_NAME" ]]; then
+		profile_dir=""
+	else
 		profile_dir="$(get_home_profile_dir "$profile")"
 	fi
 
-	local home
-	if [[ "$username" == "root" ]]; then
-		home="/root"
-	else
-		home="/home/$username"
-	fi
+	_TRACK_FILE="$_USER_DATA_DIR/$TRACK_FILENAME" _PROFILE="$profile" _USER="$username" \
+		apply_to_local "$_HOME" "$profile_dir" "$(get_home_profile_dir "$DEFAULT_PROFILE_NAME")"
 
-	local track_file
-	track_file="$REPO_USER_DIR/$username/track"
-	install_cmd -m 0644 /dev/null "$track_file"
-
-	_TRACK_FILE="$track_file" _PROFILE="$profile" _USER="$username" \
-		apply_to_local "$home" "$profile_dir" "$(get_home_profile_dir "default")"
-
-	if [[ -z "$profile" ]]; then
-		profile="default"
-	fi
-
-	if ! $INTERNAL; then
+	if ! $_INTERNAL; then
 		printf "%bApplied '%s' profile.%b\n" "${C[G]}" "$profile" "${C[0]}"
 	fi
 }
@@ -1133,12 +1127,13 @@ write_track_header() {
 }
 
 cmd_update() {
-	local username user_id home user_data_dir track_file
+	# TODO: git restore?? (to set specifc commit)
+	# echo "CLeanning up profiles dir... (some changes on repo gonnabe lost!!!)"
+	# git -C "$REPO_INSTALL_DIR" clean -fdx "$REPO_PROFILES_DIR"
 
-	username="${SUDO_USER:-$CURRENT_USER}"
-	user_id="$(id -u "$username")"
-	home="$(get_home "$username")"
-	user_data_dir="$REPO_USER_DIR/$username"
+	local user_data_dir track_file
+
+	user_data_dir="$REPO_USER_DIR/$_USERNAME"
 	track_file="$user_data_dir/$TRACK_FILENAME"
 
 	if [[ ! -e "$track_file" ]]; then
@@ -1157,7 +1152,7 @@ cmd_update() {
 		read_by_null track_commit_id
 
 		local default_dir profile_dir
-		default_dir="$(get_home_profile_dir "default")"
+		default_dir="$(get_home_profile_dir "$DEFAULT_PROFILE_NAME")"
 		profile_dir="$(get_home_profile_dir "$profile")"
 
 		if [[ "$current_commit_id" != "$track_commit_id" ]]; then
@@ -1190,12 +1185,12 @@ cmd_update() {
 
 	_debug "Committing..."
 	git_conf add "$REPO_PROFILES_DIR" >/dev/null 2>&1
-	git_conf commit -m "$username updates $profile" --no-verify >/dev/null 2>&1
+	git_conf commit -m "$_USERNAME updates conf" --no-verify >/dev/null 2>&1
 
 	# Update track data
 	rm -f "$track_file"
-	_TRACK_FILE="$track_file" _PROFILE="$profile" _USER="$username" \
-		apply_to_local "$home" "$profile_dir" "$default_dir"
+
+	_INTERNAL="true" cmd_apply "$profile"
 }
 
 main_() {
@@ -1232,28 +1227,21 @@ main_() {
 		error "Permission denied (you must be root)"
 		return 1
 	else
-		INTERNAL="false" "$cmd_func" "${CMDS[@]:1}"
+		_SUDO_USER="${SUDO_USER:-$CURRENT_USER}" _INTERNAL="false" \
+			"$cmd_func" "${CMDS[@]:1}"
 	fi
 
-	# Run command
+	_debug "conf command exit with $? code"
+
 	if [[ $DOCKER == "true" ]]; then
 		printf "Keeping docker container running...\n"
 		tail -f /dev/null
 	fi
 }
 
-cmd_test() {
-	local username home user_data_dir
-	username="${SUDO_USER:-$CURRENT_USER}"
-	home="$(get_home "$username")"
-	user_data_dir="$REPO_USER_DIR/$username"
-}
+# if [[ -z "${BASH_SOURCE[0]+x}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
+# 	# Execute directly, Pipeline
+# 	main_ "$@"
+# fi
 
-if [[ -z "${BASH_SOURCE[0]+x}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
-	# Execute directly, Pipeline
-	main_ "$@"
-fi
-
-# TODO: git restore?? (to set specifc commit)
-# echo "CLeanning up profiles dir... (some changes on repo gonnabe lost!!!)"
-# git -C "$REPO_INSTALL_DIR" clean -fdx "$REPO_PROFILES_DIR"
+draw_box "Reset Target User" 34 true

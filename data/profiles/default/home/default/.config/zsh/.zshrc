@@ -1,6 +1,10 @@
 ### General
 setopt histignorealldups sharehistory
+
 bindkey -e
+bindkey "^[[1;5C" forward-word
+bindkey "^[[1;5D" backward-word
+
 HISTSIZE=1000
 SAVEHIST=1000
 HISTFILE="$Z_HIST_FILE"
