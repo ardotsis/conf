@@ -1,5 +1,7 @@
 # User data
-data/user/
+data/*
+!data/profiles/
+!data/profiles/**
 
 # VSCode
 .history/

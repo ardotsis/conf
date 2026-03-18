@@ -145,7 +145,6 @@ function main() {
         "--tty",
         "--hostname=$Os",
         "--mount", "type=bind,source=$RepoDir,target=$GuestDevAppDir,readonly",
-        "--env", "DOCKER=true",
         "--env", "DOCKER_CONF_PARAMS=$Params",
         "--env", "DOCKER_IS_TEST=$isTest",
         "--env", "DOCKER_APP_DIR=$GuestAppDir",

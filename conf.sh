@@ -9,9 +9,6 @@ declare -r CURRENT_USER="$(whoami)"
 # shellcheck disable=SC2155
 
 # Docker environment
-if [[ -z "${DOCKER+x}" ]]; then
-	declare -r DOCKER="false"
-fi
 declare -r DOCKER_APP_DIR
 declare -r DOCKER_DEV_APP_DIR
 
@@ -21,9 +18,9 @@ declare -r REPO_INSTALL_DIR="/usr/local/share/conf"
 declare -r REPO_DATA_DIR="$REPO_INSTALL_DIR/data"
 declare -r REPO_USER_DIR="$REPO_DATA_DIR/user"
 declare -r REPO_PROFILES_DIR="$REPO_DATA_DIR/profiles"
-declare -r REPO_PACKAGES_FILE="$REPO_PROFILES_DIR/packages"
 declare -r SSH_PORT_FILE="$REPO_DATA_DIR/ssh_port"
 declare -r TRACK_FILENAME="track"
+declare -r PACKAGE_LIST_FILENAME="packages"
 declare -r DEFAULT_PROFILE_NAME="default"
 
 # User
@@ -83,6 +80,8 @@ declare -Ar _OPTION_MAP=(
 
 	[--debug]="flag:false"
 	[-d]="debug"
+
+	[--docker]="flag:false"
 
 	["--show-log"]="flag:false"
 	[-l]="show-log"
@@ -261,6 +260,7 @@ if ! parse_args "_OPTION" "CMDS" "_PARSE_ERR_MSG" "$@"; then
 fi
 
 declare -r IS_DEBUG="${_OPTION["debug"]}"
+declare -r IS_DOCKER="${_OPTION["docker"]}"
 declare -r SHOW_LOG="${_OPTION["show-log"]}"
 declare -r SHOW_HELP="${_OPTION["help"]}"
 declare -r SHOW_VERSION="${_OPTION["version"]}"
@@ -720,7 +720,7 @@ apply_to_repo() {
 	local output_dir="$1"
 	local override_dir="$2"
 	local default_dir="$3"
-	local -n arr_ref="$4"
+	local -n arr_ref="$4" # todo fix name
 
 	local no_change="true"
 
@@ -863,9 +863,9 @@ apply_to_repo() {
 #                    Commands                    #
 ##################################################
 install_etc() {
-	# TODO: Set permission correctly
-
 	local ssh_port="$1"
+
+	# TODO: Set permission correctly
 	_debug "using default etc (not implemented yet)"
 
 	local tmpl_etc_dir="$REPO_PROFILES_DIR/default/etc"
@@ -885,7 +885,7 @@ install_etc() {
 	install_cmd -m 0644 -o root -g root "$tmpl_etc_dir/systemd/system/iptables-restore.service" "/etc/systemd/system/iptables-restore.service"
 	sed -i "s|^-A INPUT -p tcp --dport [0-9]\+ -j ACCEPT$|-A INPUT -p tcp --dport $ssh_port -j ACCEPT|" "/etc/iptables/rules.v4"
 
-	if [[ "$DOCKER" == "false" ]]; then
+	if [[ "$IS_DOCKER" == "false" ]]; then
 		# Reload sshd config
 		_info "Restart sshd service"
 		systemctl restart sshd
@@ -906,16 +906,19 @@ get_home() {
 	fi
 }
 
-get_conf_user_envs() {
+update_conf_user_env() {
 	local new_username="$1"
+
 	local -n username=_USERNAME
 	local -n user_id=_USER_ID
 	local -n home=_HOME
 	local -n user_data_dir=_USER_DATA_DIR
+	local -n track_file=_TRACK_FILE
 	username="$new_username"
 	user_id="$(id -u "$username")"
 	home="$(get_home "$username")"
 	user_data_dir="$REPO_USER_DIR/$username"
+	track_file="$user_data_dir/$TRACK_FILENAME"
 }
 
 cmd_init() {
@@ -928,38 +931,37 @@ cmd_init() {
 	fi
 
 	##################################
+	#    Install conf Repository     #
+	##################################
+	if [[ $IS_DEBUG == "true" ]]; then
+		ln -sf "$DOCKER_APP_DIR" "$REPO_INSTALL_DIR"               # Repository (Docker Copied Repository)
+		ln -sf "$DOCKER_DEV_APP_DIR/conf.sh" "/usr/local/bin/conf" # conf bin (Docker Volume Repository)
+	else
+		git clone -b main "$REPO_URL" "$REPO_INSTALL_DIR"        # Repository (Git)
+		ln -sf "$REPO_INSTALL_DIR/conf.sh" "/usr/local/bin/conf" # conf bin (Git)
+		chmod +x "$REPO_INSTALL_DIR/conf.sh"
+	fi
+
+	[[ ! -e "$REPO_USER_DIR" ]] && mkdir -p "$REPO_USER_DIR"
+	git_conf config --global user.email "mona_lisa@example.com"
+	git_conf config --global user.name "Mona Lisa"
+
+	##################################
 	#      Install APT Packages      #
 	##################################
 	! is_cmd_exist git && install_package git
 	is_cmd_exist ufw && remove_package ufw # uninstall iptables's wrapper
+
+	_debug "use default package list file (not implemented yet)"
+	local packages
+	packages="$(get_profile_dir "$DEFAULT_PROFILE_NAME")/$PACKAGE_LIST_FILENAME"
 
 	local my_package
 	while read -r my_package; do
 		if ! is_cmd_exist "$my_package"; then
 			install_package "$my_package"
 		fi
-	done <"$REPO_PACKAGES_FILE"
-
-	##################################
-	#    Install conf Repository     #
-	##################################
-	if [[ $IS_DEBUG == "true" ]]; then
-		# Repository (Docker Copied Repository)
-		ln -sf "$DOCKER_APP_DIR" "$REPO_INSTALL_DIR"
-		# conf bin (Docker Volume Repository)
-		ln -sf "$DOCKER_DEV_APP_DIR/conf.sh" "/usr/local/bin/conf"
-	else
-		# Repository (Git)
-		git clone -b main "$REPO_URL" "$REPO_INSTALL_DIR"
-		# conf bin (Git)
-		ln -sf "$REPO_INSTALL_DIR/conf.sh" "/usr/local/bin/conf"
-		chmod +x "$REPO_INSTALL_DIR/conf.sh"
-	fi
-	# <conf repo>/data/user
-	[[ ! -e "$REPO_USER_DIR" ]] && mkdir -p "$REPO_USER_DIR"
-
-	git_conf config --global user.email "mona_lisa@example.com"
-	git_conf config --global user.name "Mona Lisa"
+	done <"$packages"
 
 	##################################
 	# Install binaries & ZSH plugins #
@@ -972,7 +974,7 @@ cmd_init() {
 	[[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
 	install_zoxide "$LOCAL_DIR/bin" "$man1_dir"
 
-	if [[ "$DOCKER" == "false" ]]; then
+	if [[ "$IS_DOCKER" == "false" ]]; then
 		_info "Executing Docker installation script.."
 		sh -c "$(curl -fsSL https://get.docker.com)"
 	fi
@@ -1020,10 +1022,10 @@ cmd_adduser() {
 	add_user "$username" "$passwd"
 
 	##### Create User (Use Env) #####
-	get_conf_user_envs "$username"
+	update_conf_user_env "$username"
 	mkdir "$_USER_DATA_DIR"
 
-	if [[ "$DOCKER" == "false" ]]; then
+	if [[ "$IS_DOCKER" == "false" ]]; then
 		usermod -aG docker "$_USERNAME"
 	fi
 
@@ -1051,6 +1053,7 @@ cmd_adduser() {
 
 	local ssh_port
 	ssh_port=$(<"$SSH_PORT_FILE")
+
 	### Create template example
 	{
 		printf "# Client's SSH template\n"
@@ -1083,6 +1086,7 @@ cmd_adduser() {
 		printf "  IdentitiesOnly yes\n"
 		printf "\n"
 	} >>"$ssh_dir/config"
+
 	rm -f "$ssh_dir/${git_filename}.pub"
 
 	chown "$_USERNAME:$_USERNAME" "$ssh_dir/"*
@@ -1101,7 +1105,7 @@ cmd_apply() {
 		profile_dir="$(get_home_profile_dir "$profile")"
 	fi
 
-	_TRACK_FILE="$_USER_DATA_DIR/$TRACK_FILENAME" _PROFILE="$profile" _USER="$username" \
+	_TRACK_FILE="$_USER_DATA_DIR/$TRACK_FILENAME" _PROFILE="$profile" _USER="$_USERNAME" \
 		apply_to_local "$_HOME" "$profile_dir" "$(get_home_profile_dir "$DEFAULT_PROFILE_NAME")"
 
 	if ! $_INTERNAL; then
@@ -1123,16 +1127,8 @@ write_track_header() {
 }
 
 cmd_update() {
-	# TODO: git restore?? (to set specifc commit)
-	# echo "CLeanning up profiles dir... (some changes on repo gonnabe lost!!!)"
-	# git -C "$REPO_INSTALL_DIR" clean -fdx "$REPO_PROFILES_DIR"
-
-	local user_data_dir track_file
-
-	user_data_dir="$REPO_USER_DIR/$_USERNAME"
-	track_file="$user_data_dir/$TRACK_FILENAME"
-
-	if [[ ! -e "$track_file" ]]; then
+	# git_conf clean -fdx "$REPO_PROFILES_DIR"
+	if [[ ! -e "$_TRACK_FILE" ]]; then
 		warn "No track file. Try 'apply' command first."
 		exit 1
 	fi
@@ -1158,33 +1154,33 @@ cmd_update() {
 
 		local -a unlink_items
 		if ! apply_to_repo \
-			"$home" \
+			"$_HOME" \
 			"$profile_dir" \
 			"$default_dir" \
 			"unlink_items"; then
 
 			# No change
-			_debug "No change on '$home'"
+			_debug "No change on '$_HOME'"
 			return 0
 		fi
 
-		local archive_path="$user_data_dir/$current_commit_id.tar.gz"
+		local archive_path="$_USER_DATA_DIR/$current_commit_id.tar.gz"
 		_debug "Backup current home ($archive_path)"
-		tar -C "$home" -czf "$archive_path" "${unlink_items[@]}"
+		tar -C "$_HOME" -czf "$archive_path" "${unlink_items[@]}"
 
 		for unlink_item in "${unlink_items[@]}"; do
 			_debug "Unlink: $unlink_item"
 			rm -rf "$unlink_item"
 		done
 
-	} <"$track_file"
+	} <"$_TRACK_FILE"
 
 	_debug "Committing..."
 	git_conf add "$REPO_PROFILES_DIR" >/dev/null 2>&1
 	git_conf commit -m "$_USERNAME updates conf" --no-verify >/dev/null 2>&1
 
 	# Update track data
-	rm -f "$track_file"
+	rm -f "$_TRACK_FILE"
 
 	_INTERNAL="true" cmd_apply "$profile"
 }
@@ -1223,21 +1219,19 @@ main_() {
 		error "Permission denied (you must be root)"
 		return 1
 	else
-		_SUDO_USER="${SUDO_USER:-$CURRENT_USER}" _INTERNAL="false" \
-			"$cmd_func" "${CMDS[@]:1}"
+		update_conf_user_env "${SUDO_USER:-$CURRENT_USER}"
+		_INTERNAL="false" "$cmd_func" "${CMDS[@]:1}"
 	fi
 
 	_debug "conf command exit with $? code"
 
-	if [[ $DOCKER == "true" ]]; then
+	if [[ $IS_DOCKER == "true" ]]; then
 		printf "Keeping docker container running...\n"
 		tail -f /dev/null
 	fi
 }
 
-# if [[ -z "${BASH_SOURCE[0]+x}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
-# 	# Execute directly, Pipeline
-# 	main_ "$@"
-# fi
-
-draw_box "Reset Target User" 34 true
+if [[ -z "${BASH_SOURCE[0]+x}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
+	# Execute directly, Pipeline
+	main_ "$@"
+fi
