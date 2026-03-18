@@ -1003,7 +1003,7 @@ cmd_init() {
 
 cmd_adduser() {
 	local username="${1:-}"
-	local profile="${2:-}"
+	local profile="${2:-$DEFAULT_PROFILE_NAME}"
 
 	if [[ -z "$username" ]]; then
 		warn "Please specify the username."
@@ -1099,13 +1099,17 @@ cmd_adduser() {
 }
 
 cmd_apply() {
-	local profile="${1:-}"
+	local profile="${1:-$DEFAULT_PROFILE_NAME}"
 
 	local profile_dir
 	if [[ -z "$profile" || "$profile" == "$DEFAULT_PROFILE_NAME" ]]; then
 		profile_dir=""
 	else
 		profile_dir="$(get_home_profile_dir "$profile")"
+		if [[ ! -e "$profile_dir" ]]; then
+			error "'$profile' profile doesn't exist."
+			return 1
+		fi
 	fi
 
 	_TRACK_FILE="$_USER_DATA_DIR/$TRACK_FILENAME" _PROFILE="$profile" _USER="$_USERNAME" \
