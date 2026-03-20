@@ -594,18 +594,13 @@ declare -Ar STATE_CLR=(
 	[${STATE[D]}]="${C[R]}"
 )
 
-apply_to_local() {
+# shellcheck disable=SC2329
+patch_mix() {
 	local L_dir="${1:-}"
 	local R_dir="${2:-}"
 	local MIX_dir="$3"
 
-	if [[ -z "${_INIT+x}" ]]; then
-		local _INIT="false"
-		local _PREFIX
-		_PREFIX="$(get_prefix "$_PROFILE")"
-		write_track_header "$_TRACK_FILE" "$(id -u "$_USER")" "$_PROFILE" "$_GIT_COMMIT_ID"
-		local MIX_dir_len="${#MIX_dir}"
-	fi
+	[[ -z "${MIX_dir_len+x}" ]] && local MIX_dir_len="${#MIX_dir}"
 
 	local all_R_items=() all_L_items=()
 	[[ -z "$R_dir" ]] || get_items "$R_dir" "all_R_items"
@@ -656,12 +651,11 @@ apply_to_local() {
 			local write_path="${mix_path:$MIX_dir_len+1}"
 			local write_own="$own"
 
-			# Skip prefixed override path (for default)
+			# if "L" has "RR" item
 			if [[ "$own" == "L" ]] && is_contain "$base" "RR_items"; then
 				continue
 			fi
 
-			# Fix: <Prefixed Path> -> <Output Path>
 			if [[ "$own" == "R" && "$base" == "$_PREFIX"* ]]; then
 				local restored_base="${base#"${_PREFIX}"}"
 				mix_path="${MIX_dir}/${restored_base}"
@@ -670,19 +664,19 @@ apply_to_local() {
 				write_own="RR"
 			fi
 
-			append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path" "$sum"
+			append_track "$_TRACK" "$type" "$write_own" "$write_path" "$sum"
 
 			if [[ "$type" == "d" ]]; then
-				install_cmd -m 0700 -o "$_USER" -g "$_USER" "$mix_path" -d
+				install_cmd -m 0700 -o "$_OWNER" -g "$_OWNER" "$mix_path" -d
 				if [[ "$own" == "U" ]]; then
-					apply_to_local "$as_L_item" "$as_R_item" "$mix_path"
+					patch_mix "$as_L_item" "$as_R_item" "$mix_path"
 				elif [[ "$own" == "R" ]]; then
-					apply_to_local "" "$as_R_item" "$mix_path"
+					patch_mix "" "$as_R_item" "$mix_path"
 				elif [[ "$own" == "L" ]]; then
-					apply_to_local "$as_L_item" "" "$mix_path"
+					patch_mix "$as_L_item" "" "$mix_path"
 				fi
 			elif [[ "$type" == "f" ]]; then
-				install_cmd -m 0700 -o "$_USER" -g "$_USER" "$LR_path" "$mix_path"
+				install_cmd -m 0700 -o "$_OWNER" -g "$_OWNER" "$LR_path" "$mix_path"
 			fi
 		done
 	done
@@ -1102,7 +1096,7 @@ cmd_apply() {
 	fi
 
 	_TRACK_FILE="$_USER_DATA_DIR/$TRACK_FILENAME" _PROFILE="$profile" _USER="$_USERNAME" _GIT_COMMIT_ID="$(get_git_commit_id)" \
-		apply_to_local "$_HOME" "$profile_dir" "$(get_home_profile_dir "$DEFAULT_PROFILE_NAME")"
+		patch_mix "$_HOME" "$profile_dir" "$(get_home_profile_dir "$DEFAULT_PROFILE_NAME")"
 
 	if ! $_INTERNAL; then
 		printf "%bApplied '%s' profile.%b\n" "${C[G]}" "$profile" "${C[0]}"
@@ -1235,8 +1229,13 @@ main_() {
 # fi
 
 patch_LR() {
-	local L="$1"
-	local R="$2"
+	local L_dir="$1"
+	local R_dir="$2"
+	local MIX_dir="$3"
+	local sign="$4"
+
+	local -a adds=() mods=() deletes=()
+	local -A del_parents=() RR_dirs=()
 
 	while :; do
 		# Path's Header
@@ -1245,18 +1244,74 @@ patch_LR() {
 		read_byte own
 
 		# Path & Sum (file)
-		local path file_sum
+		local path="" file_sum=""
 		if [[ "$type" == "f" ]]; then
 			read_by_null "path"
 			read_by_null "file_sum"
 		elif [[ "$type" == "d" ]]; then
 			read_by_null "path"
 		fi
+		echo "read: ($type:$own) $path ($file_sum)"
 
-		echo "($own:$type) $path"
+		# If path under dead parent, Skip.
+		local parent="${path%/*}"
+		if [[ -v del_parents["$parent"] ]]; then
+			echo "im $path! my parent ($parent) is dead! skipping!"
+			if [[ "$type" == "d" ]]; then
+				del_parents["$path"]=1 # To tell childs
+			fi
+			continue
+		fi
+
+		# Generate L or R path
+		local LR_path=""
+
+		if [[ -z "$LR_path" ]]; then
+			if [[ "$own" == "${OWN[L]}" ]]; then
+				LR_path="$L_dir/$path"
+
+			elif [[ "$own" == "${OWN[R]}" || "$own" == "${OWN[U]}" ]]; then
+				LR_path="$R_dir/$path"
+
+			elif [[ "$own" == "${OWN[RR]}" ]]; then
+				if [[ "$path" == *"/"* ]]; then
+					# search added item here?
+					LR_path="$R_dir/${path%/*}/$sign${path##*/}"
+				else
+					LR_path="$R_dir/$sign$path"
+				fi
+
+				if [[ "$type" == "d" ]]; then
+					:
+				fi
+			fi
+		fi
+
+		# Check mix item state (is deleted? modified? ...)
+		local mix_path="$MIX_dir/$path"
+		local state=${STATE[_]}
+
+		if [[ "$type" == "f" ]]; then
+			if [[ -f "$mix_path" ]]; then
+				if [[ "$file_sum" != "$(get_sum "$mix_path")" ]]; then
+					state=${STATE[M]}
+				fi
+			else
+				state=${STATE[D]}
+			fi
+		fi
+
+		if [[ "$type" == "d" ]]; then
+			if [[ -d "$mix_path" ]]; then
+				local item
+				while read_by_null item; do
+					adds+=("$own$item")
+				done < <(find "$mix_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%p\0")
+			else
+				state=${STATE[D]}
+				del_parents["$path"]=1
+			fi
+		fi
+
 	done
-}
-
-patch_mix() {
-	:
 }

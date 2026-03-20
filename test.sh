@@ -220,10 +220,13 @@ test_patch_diff() {
 	local L="$tmp_dir/L"
 	local R="$tmp_dir/R"
 	local MIX="$tmp_dir/_MIX"
-	local meta="$tmp_dir/$TRACK_FILENAME"
+	local track="$tmp_dir/$TRACK_FILENAME"
 
-	_TRACK_FILE="$meta" _PROFILE="$TEST_PROFILE" _USER="$TEST_USER" _GIT_COMMIT_ID="$TEST_GIT_COMMIT_ID" \
-		apply_to_local "$L" "$R" "$MIX"
+	write_track_header "$track" "$(id -u "$TEST_USER")" "$TEST_PROFILE" "some_git_commit_id"
+	_TRACK="$track" _PREFIX="$TEST_PROFILE#" _OWNER="$TEST_USER" \
+		patch_mix "$L" "$R" "$MIX"
+
+	rm -rf "$MIX/R_dir"
 
 	print_tree "$tmp_dir" "MIXING"
 
@@ -234,8 +237,8 @@ test_patch_diff() {
 		read_by_null commit_id
 
 		# Pass paths to patcher
-		patch_LR "$L" "$R"
-	} <"$meta"
+		patch_LR "$L" "$R" "$MIX" "$TEST_PREFIX"
+	} <"$track"
 }
 
 test_patch_diff
