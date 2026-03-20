@@ -595,9 +595,9 @@ declare -Ar STATE_CLR=(
 )
 
 apply_to_local() {
-	local MIX_dir="$1"
-	local R_dir="${2:-}" # Preferrer
-	local L_dir="${3:-}"
+	local L_dir="${1:-}"
+	local R_dir="${2:-}"
+	local MIX_dir="$3"
 
 	if [[ -z "${_INIT+x}" ]]; then
 		local _INIT="false"
@@ -625,7 +625,7 @@ apply_to_local() {
 		local L_items=("${all_L_items[@]}")
 	fi
 
-	local own prefixed_items=()
+	local own RR_items=()
 	for own in "R" "U" "L"; do
 		local -n items="${own}_items"
 
@@ -645,43 +645,44 @@ apply_to_local() {
 
 			local as_R_item="${R_dir}/${base}"
 			local as_L_item="${L_dir}/${base}"
-			local repo_path="${!as_var}"
+			local LR_path="${!as_var}"
 
 			local sum=""
 			if [[ "$type" == "f" ]]; then
-				sum="$(get_sum "$repo_path")"
+				sum="$(get_sum "$LR_path")"
 			fi
 
-			local output_path="${MIX_dir}/${base}"
-			local write_path="${output_path:$MIX_dir_len+1}"
+			local mix_path="${MIX_dir}/${base}"
+			local write_path="${mix_path:$MIX_dir_len+1}"
 			local write_own="$own"
 
 			# Skip prefixed override path (for default)
-			if [[ "$own" == "L" ]] && is_contain "$base" "prefixed_items"; then
+			if [[ "$own" == "L" ]] && is_contain "$base" "RR_items"; then
 				continue
 			fi
 
 			# Fix: <Prefixed Path> -> <Output Path>
 			if [[ "$own" == "R" && "$base" == "$_PREFIX"* ]]; then
-				local origin_base="${base#"${_PREFIX}"}"
-				output_path="${MIX_dir}/${origin_base}"
-				prefixed_items+=("$origin_base")
-				write_path="${output_path:$MIX_dir_len+1}"
+				local restored_base="${base#"${_PREFIX}"}"
+				mix_path="${MIX_dir}/${restored_base}"
+				RR_items+=("$restored_base")
+				write_path="${mix_path:$MIX_dir_len+1}"
 				write_own="RR"
 			fi
 
 			append_track "$_TRACK_FILE" "$type" "$write_own" "$write_path" "$sum"
+
 			if [[ "$type" == "d" ]]; then
-				install_cmd -m 0700 -o "$_USER" -g "$_USER" "$output_path" -d
+				install_cmd -m 0700 -o "$_USER" -g "$_USER" "$mix_path" -d
 				if [[ "$own" == "U" ]]; then
-					apply_to_local "$output_path" "$as_R_item" "$as_L_item"
+					apply_to_local "$as_L_item" "$as_R_item" "$mix_path"
 				elif [[ "$own" == "R" ]]; then
-					apply_to_local "$output_path" "$as_R_item" ""
+					apply_to_local "" "$as_R_item" "$mix_path"
 				elif [[ "$own" == "L" ]]; then
-					apply_to_local "$output_path" "" "$as_L_item"
+					apply_to_local "$as_L_item" "" "$mix_path"
 				fi
 			elif [[ "$type" == "f" ]]; then
-				install_cmd -m 0700 -o "$_USER" -g "$_USER" "$repo_path" "$output_path"
+				install_cmd -m 0700 -o "$_USER" -g "$_USER" "$LR_path" "$mix_path"
 			fi
 		done
 	done

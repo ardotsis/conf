@@ -46,9 +46,9 @@ print_tree() {
 	local dir="$1"
 	local tag="$2"
 
-	printf "========== %s ==========\n" "$tag"
+	printf "========== %s - START ==========\n" "$tag"
 	tree "$dir" --noreport
-	printf "========== %s ==========\n" "$tag - END"
+	printf "========== %s - FINISH ==========\n" "$tag"
 }
 
 test_main() {
@@ -223,9 +223,9 @@ test_patch_diff() {
 	local meta="$tmp_dir/$TRACK_FILENAME"
 
 	_TRACK_FILE="$meta" _PROFILE="$TEST_PROFILE" _USER="$TEST_USER" _GIT_COMMIT_ID="$TEST_GIT_COMMIT_ID" \
-		apply_to_local "$MIX" "$R" "$L"
+		apply_to_local "$L" "$R" "$MIX"
 
-	print_tree "$tmp_dir" "MIXED"
+	print_tree "$tmp_dir" "MIXING"
 
 	# Read meta headers
 	{
