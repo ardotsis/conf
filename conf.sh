@@ -1238,15 +1238,13 @@ patch_LR() {
 	local L="$1"
 	local R="$2"
 
-	# Get metadata via pipeline (cat X | patch_LR)
-
 	while :; do
-		# Read path's headers
+		# Path's Header
 		local type own
 		read_byte type || break
 		read_byte own
 
-		# Read path
+		# Path & Sum (file)
 		local path file_sum
 		if [[ "$type" == "f" ]]; then
 			read_by_null "path"
