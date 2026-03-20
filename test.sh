@@ -4,32 +4,30 @@ set -euo pipefail -o noclobber
 # shellcheck disable=SC1091
 source "$DOCKER_DEV_APP_DIR"/conf.sh
 
-TEST_GIT_COMMIT_ID="some_git_commit_id"
-
 generate_test_data() {
 	local dest_dir="$1"
 	local prefix="$2"
 
-	mkdir -p "$dest_dir/"{a,b,out}
+	mkdir -p "$dest_dir/"{L,R,_MIX}
 
-	local a_dir="$dest_dir/a"
-	local b_dir="$dest_dir/b"
+	local L_dir="$dest_dir/L"
+	local R_dir="$dest_dir/R"
 
 	# base directory
-	mkdir -p "$a_dir/"{a_dir,u_dir,p_dir}
-	printf "a" >>"$a_dir/p_file"
-	touch "$a_dir/p_dir/a_file"{1..3}
-	touch "$a_dir/a_file"{1..3}
-	touch "$a_dir/a_dir/a_file"{1..3}
-	touch "$a_dir/u_dir/u_file"{1..3}
+	mkdir -p "$L_dir/"{L_dir,U_dir,X_dir}
+	printf "a" >>"$L_dir/X_file"
+	touch "$L_dir/X_dir/L_file"{1..3}
+	touch "$L_dir/L_file"{1..3}
+	touch "$L_dir/L_dir/L_file"{1..3}
+	touch "$L_dir/U_dir/U_file"{1..3}
 
 	# override directory
-	mkdir -p "$b_dir/"{b_dir,u_dir,"$prefix"p_dir}
-	printf "b" >>"$b_dir/${prefix}p_file"
-	touch "$b_dir/${prefix}p_dir/b_"{1..3}
-	touch "$b_dir/b_file"{1..3}
-	touch "$b_dir/b_dir/b_file"{1..3}
-	touch "$b_dir/u_dir/u_file"{1..6}
+	mkdir -p "$R_dir/"{R_dir,U_dir,"$prefix"X_dir}
+	printf "b" >>"$R_dir/${prefix}X_file"
+	touch "$R_dir/${prefix}X_dir/R_"{1..3}
+	touch "$R_dir/R_file"{1..3}
+	touch "$R_dir/R_dir/R_file"{1..3}
+	touch "$R_dir/U_dir/U_file"{1..6}
 }
 
 get_temp_path() {
@@ -38,54 +36,63 @@ get_temp_path() {
 	printf "/tmp/test-%s" "$random_str"
 }
 
+log_test() {
+	local msg="$1"
+	local color_seq="${2:-${C[W]}}"
+	printf "%b[TEST] %s%b\n" "$color_seq" "$msg" "${C[0]}" >&2
+}
+
+print_tree() {
+	local dir="$1"
+	local tag="$2"
+
+	printf "========== %s ==========\n" "$tag"
+	tree "$dir" --noreport
+	printf "========== %s ==========\n" "$tag - END"
+}
+
 test_main() {
-	_show_msg() {
-		printfc "[Test] $1" "$2" >&2
-	}
-
-	local user="kana"
-	local profile="uwu"
-	local prefix="${profile}#"
-
-	useradd -G "sudo" "$user"
+	useradd -G "sudo" "$TEST_USER"
+	log_test "Created test user: $TEST_USER"
 
 	# Get temp test dir
 	local tmp_dir
 	tmp_dir="$(get_temp_path)"
 	mkdir "$tmp_dir"
+	log_test "Created test temp dir: $tmp_dir"
 
 	# Homes
 	local repo_a_dir="$tmp_dir/a"
 	local repo_b_dir="$tmp_dir/b"
-	local local_dir="$tmp_dir/out"
+	local out_dir="$tmp_dir/out"
 
-	# Track file
-	local user_id
-	user_id="$(id -u "$user")"
-	local track_file="$tmp_dir/$user_id"
+	local track_file="$tmp_dir/$TRACK_FILENAME"
 
 	_build() {
 		rm -rf "${tmp_dir:?}/"*
-		generate_test_data "$tmp_dir" "$prefix"
+		generate_test_data "$tmp_dir" "$TEST_PREFIX"
+		print_tree "$tmp_dir" "BUILT"
 	}
 
 	_run_apply_to_local() {
-		# Write track headers
-		printf "%s\0%s\0" "$profile" "$TEST_GIT_COMMIT_ID" >>"$track_file"
-
-		_TRACK_FILE="$track_file" _PREFIX="$prefix" _USER="$user" \
-			apply_to_local "$local_dir" "$repo_b_dir" "$repo_a_dir"
+		_TRACK_FILE="$track_file" _PROFILE="$TEST_PROFILE" _USER="$TEST_USER" _GIT_COMMIT_ID="$TEST_GIT_COMMIT_ID" \
+			apply_to_local "$out_dir" "$repo_b_dir" "$repo_a_dir"
 	}
 
 	_run_apply_to_repo() {
-		local -a unlinks_ref
+		{
+			read_by_null _ # old user id
+			read_by_null profile
+			read_by_null track_commit_id
 
-		_TRACK_FILE="$track_file" \
-			apply_to_repo "$local_dir" "$repo_b_dir" "$repo_a_dir" "unlinks_ref"
+			local -a unlinks_ref
+			apply_to_repo "$out_dir" "$repo_b_dir" "$repo_a_dir" "$TEST_PROFILE" "unlinks_ref"
+		} <"$track_file"
 
 		for item in "${unlinks_ref[@]}"; do
 			echo "unlink: $item"
 		done
+		print_tree "$tmp_dir" "APPLIED TO REPO"
 	}
 
 	### Delete test
@@ -97,7 +104,7 @@ test_main() {
 		_run_apply_to_local
 
 		if [[ ! -e "$rm_dir" ]]; then
-			_show_msg "Invalid del dir: $rm_dir" "${C[R]}"
+			log_test "Invalid del dir: $rm_dir" "${C[R]}"
 			exit 1
 		fi
 
@@ -105,9 +112,9 @@ test_main() {
 		_run_apply_to_repo
 
 		if "$callback"; then
-			_show_msg "$callback - Success" "${C[G]}"
+			log_test "$callback - Success" "${C[G]}"
 		else
-			_show_msg "$callback - Failed" "${C[R]}"
+			log_test "$callback - Failed" "${C[R]}"
 		fi
 		printf "\n"
 	}
@@ -115,12 +122,17 @@ test_main() {
 	_del_a_dir() {
 		[[ ! -e "$repo_a_dir/a_dir" ]] && return 0 || return 1
 	}
-	_run_del_test "$local_dir/a_dir" "_del_a_dir"
+	_run_del_test "$out_dir/a_dir" "_del_a_dir"
 
 	_del_u_dir() {
 		[[ ! -e "$repo_a_dir/u_dir" && ! -e "$repo_b_dir/u_dir" ]] && return 0 || return 1
 	}
-	_run_del_test "$local_dir/u_dir" "_del_u_dir"
+	_run_del_test "$out_dir/u_dir" "_del_u_dir"
+
+	_del_p_dir() {
+		[[ ! -e "$repo_b_dir/${TEST_PREFIX}p_dir" ]] && return 0 || return 1
+	}
+	_run_del_test "$out_dir/p_dir" "_del_p_dir"
 
 	### Add test
 	_run_add_test() {
@@ -128,16 +140,15 @@ test_main() {
 		local callback="$2"
 
 		_build
-		# TODO: Detect not in tracked item (=root item)
 
 		_run_apply_to_local
 		mkdir "$add_dir"
 		_run_apply_to_repo
 
 		if "$callback"; then
-			_show_msg "$callback - Success" "${C[G]}"
+			log_test "$callback - Success" "${C[G]}"
 		else
-			_show_msg "$callback - Failed" "${C[R]}"
+			log_test "$callback - Failed" "${C[R]}"
 		fi
 		printf "\n"
 
@@ -146,10 +157,13 @@ test_main() {
 	_add_kana_dir() {
 		[[ -d "$repo_a_dir/a_dir/kana" ]] && return 0 || return 1
 	}
-	_run_add_test "$local_dir/a_dir/kana" "_add_kana_dir"
+	_run_add_test "$out_dir/a_dir/kana" "_add_kana_dir"
 
-	# Clean up temp test dir
-	_show_msg "Clean up test dir" "${C[C]}"
+	_add_kana_dir_to_p() {
+		[[ -d "$repo_b_dir/${TEST_PREFIX}p_dir/kana" ]] && return 0 || return 1
+	}
+	_run_add_test "$out_dir/p_dir/kana" "_add_kana_dir_to_p"
+
 	rm -rf "$tmp_dir"
 
 	### Modify test
@@ -166,9 +180,9 @@ test_main() {
 		_run_apply_to_repo
 
 		if "$callback"; then
-			_show_msg "$callback - Success" "${C[G]}"
+			log_test "$callback - Success" "${C[G]}"
 		else
-			_show_msg "$callback - Failed" "${C[R]}"
+			log_test "$callback - Failed" "${C[R]}"
 		fi
 		printf "\n"
 
@@ -180,7 +194,48 @@ test_main() {
 		fi
 		return 1
 	}
-	_run_modify_test "$local_dir/a_dir/a_file1" "_modify_a_file1"
+	_run_modify_test "$out_dir/a_dir/a_file1" "_modify_a_file1"
 }
 
-test_main
+# test_main
+declare -r TEST_USER="kana"
+declare -r TEST_PROFILE="mine"
+declare -r TEST_PREFIX="$(get_prefix "$TEST_PROFILE")"
+declare -r TEST_GIT_COMMIT_ID="test_git_commit_id"
+
+test_patch_diff() {
+	# Create test environment
+	log_test "Create user"
+	useradd -G "sudo" "$TEST_USER"
+
+	log_test "Create temp test directory"
+	local tmp_dir
+	tmp_dir="$(get_temp_path)"
+	mkdir "$tmp_dir"
+
+	log_test "Create test data"
+	generate_test_data "$tmp_dir" "$TEST_PREFIX"
+	print_tree "$tmp_dir" "CREATE TEST DATA"
+
+	local L="$tmp_dir/L"
+	local R="$tmp_dir/R"
+	local MIX="$tmp_dir/_MIX"
+	local meta="$tmp_dir/$TRACK_FILENAME"
+
+	_TRACK_FILE="$meta" _PROFILE="$TEST_PROFILE" _USER="$TEST_USER" _GIT_COMMIT_ID="$TEST_GIT_COMMIT_ID" \
+		apply_to_local "$MIX" "$R" "$L"
+
+	print_tree "$tmp_dir" "MIXED"
+
+	# Read meta headers
+	{
+		read_by_null user_id
+		read_by_null profile
+		read_by_null commit_id
+
+		# Pass paths to patcher
+		patch_LR "$L" "$R"
+	} <"$meta"
+}
+
+test_patch_diff
