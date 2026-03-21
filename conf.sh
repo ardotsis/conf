@@ -1232,10 +1232,15 @@ patch_LR() {
 	local L_dir="$1"
 	local R_dir="$2"
 	local MIX_dir="$3"
-	local sign="$4"
+	local rr="$4"
 
-	local -a adds=() mods=() deletes=()
+	local -A adds=() mods=() deletes=()
 	local -A del_parents=() RR_dirs=()
+
+	# Helper
+	_is_root_item() { [[ "$1" != *"/"* ]] && return 0 || return 1; }
+	_basename() { printf "%s" "${1##*/}"; }
+	_dirname() { printf "%s" "${1%/*}"; }
 
 	while :; do
 		# Path's Header
@@ -1244,19 +1249,19 @@ patch_LR() {
 		read_byte own
 
 		# Path & Sum (file)
-		local path="" file_sum=""
+		local path="" old_sum=""
 		if [[ "$type" == "f" ]]; then
 			read_by_null "path"
-			read_by_null "file_sum"
+			read_by_null "old_sum"
 		elif [[ "$type" == "d" ]]; then
 			read_by_null "path"
 		fi
-		echo "read: ($type:$own) $path ($file_sum)"
+		# echo "read: ($type:$own) $path ($old_sum)"
 
-		# If path under dead parent, Skip.
-		local parent="${path%/*}"
+		# shellcheck disable=SC2155
+		local parent="$(_dirname "$path")"
 		if [[ -v del_parents["$parent"] ]]; then
-			echo "im $path! my parent ($parent) is dead! skipping!"
+			# echo "im $path! my parent ($parent) is dead! skipping!"
 			if [[ "$type" == "d" ]]; then
 				del_parents["$path"]=1 # To tell childs
 			fi
@@ -1274,30 +1279,24 @@ patch_LR() {
 				LR_path="$R_dir/$path"
 
 			elif [[ "$own" == "${OWN[RR]}" ]]; then
-				if [[ "$path" == *"/"* ]]; then
-					# search added item here?
-					LR_path="$R_dir/${path%/*}/$sign${path##*/}"
+				if _is_root_item "$path"; then
+					LR_path="$R_dir/$rr$path"
 				else
-					LR_path="$R_dir/$sign$path"
-				fi
-
-				if [[ "$type" == "d" ]]; then
-					:
+					LR_path="$R_dir/$parent/$rr$(_basename "$path")"
 				fi
 			fi
 		fi
 
-		# Check mix item state (is deleted? modified? ...)
 		local mix_path="$MIX_dir/$path"
-		local state=${STATE[_]}
+		local mix_state=${STATE[_]}
 
 		if [[ "$type" == "f" ]]; then
 			if [[ -f "$mix_path" ]]; then
-				if [[ "$file_sum" != "$(get_sum "$mix_path")" ]]; then
-					state=${STATE[M]}
+				if [[ "$old_sum" != "$(get_sum "$mix_path")" ]]; then
+					mix_state=${STATE[M]}
 				fi
 			else
-				state=${STATE[D]}
+				mix_state=${STATE[D]}
 			fi
 		fi
 
@@ -1305,13 +1304,20 @@ patch_LR() {
 			if [[ -d "$mix_path" ]]; then
 				local item
 				while read_by_null item; do
-					adds+=("$own$item")
-				done < <(find "$mix_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%p\0")
+					adds["$item"]=1
+				done < <(find "$mix_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y$LR_path/%f\0")
 			else
-				state=${STATE[D]}
+				mix_state=${STATE[D]}
 				del_parents["$path"]=1
 			fi
 		fi
 
+		echo "adds: ${!adds[@]}"
+
+		case "$mix_state" in
+		"${STATE[_]}" | "${STATE[M]}")
+			unset "adds[$type$LR_path]"
+			;;
+		esac
 	done
 }
