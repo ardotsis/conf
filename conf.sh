@@ -1162,9 +1162,9 @@ patch_LR() {
 			;;
 		esac
 
-		# printf "(M) $mix_path -> ${C[y]}$LR_path${C[0]}\n"
+		printf "(M) $mix_path -> ${C[y]}$LR_path${C[0]}\n"
 	done
 
-	((${#adds[@]} > 0)) && printf "[NEW] %s\n" "${adds[@]}"
+	# ((${#adds[@]} > 0)) && printf "[NEW] %s\n" "${adds[@]}"
 
 }
