@@ -682,172 +682,6 @@ patch_mix() {
 	done
 }
 
-apply_to_repo() {
-	local output_dir="$1"
-	local override_dir="$2"
-	local default_dir="$3"
-	local profile="$4"
-	local -n arr_ref="$5" # todo fix name
-
-	local no_change="true"
-
-	# TODO: Deprecated
-	_show_err() {
-		printf "apply_local_repo err: %s\n" "$1" >&2
-		exit 1
-	}
-
-	local prefix
-	prefix="$(get_prefix "$profile")"
-
-	local -A added_items=() deleted_dirs=() prefix_dirs=()
-
-	local prefix_dir="" prefix_base=""
-	local output_dir_len="${#output_dir}"
-
-	while :; do
-		local type own
-
-		read_byte type || break
-		read_byte own
-
-		# Read Item Contents
-		local load_path sum
-		if [[ "$type" == "f" ]]; then
-			read_by_null "load_path"
-			read_by_null "sum"
-		elif [[ "$type" == "d" ]]; then
-			read_by_null "load_path"
-		else
-			_show_err "unknown file type: '$type'"
-		fi
-
-		local parent_dir="${load_path%/*}"
-
-		if [[ -v deleted_dirs["$parent_dir"] ]]; then
-			if [[ "$type" == "d" ]]; then
-				deleted_dirs["$load_path"]=1
-			fi
-			printf_splash "($type:$own) ├─ $load_path" "${STATE_CLR[$state]}"
-			continue
-		fi
-
-		local final_path=""
-
-		if [[ -v prefix_dirs["$parent_dir"] ]]; then
-			final_path="${prefix_dirs["$parent_dir"]}/${load_path##*/}"
-		fi
-
-		# if [[ -n "$prefix_dir" ]]; then
-		# 	if [[ "$load_path" == "$prefix_base/"* ]]; then
-		# 		final_path=$prefix_dir/${load_path##*/}
-		# 	else
-		# 		prefix_base=""
-		# 		prefix_dir=""
-		# 	fi
-		# fi
-
-		if [[ -z "$final_path" ]]; then
-			if [[ "$own" == "${OWN[RR]}" ]]; then
-				if [[ "$load_path" == *"/"* ]]; then
-					final_path="$override_dir/${load_path%/*}/$prefix${load_path##*/}"
-				else
-					final_path="$override_dir/$prefix$load_path"
-				fi
-
-				if [[ "$type" == "d" ]]; then
-					:
-					# prefix_dirs["$load_path"]="$final_path"
-					# prefix_base="$load_path"
-					# prefix_dir="$final_path"
-				fi
-
-			elif [[ "$own" == "${OWN[R]}" || "$own" == "${OWN[U]}" ]]; then
-				final_path="$override_dir/$load_path"
-			elif [[ "$own" == "${OWN[L]}" ]]; then
-				final_path="$default_dir/$load_path"
-			else
-				_show_err "unknown own type '$own'"
-			fi
-		fi
-
-		local home_path="$output_dir/$load_path" state=${STATE[_]}
-		if [[ "$type" == "f" ]]; then
-			if [[ -f "$home_path" ]]; then
-				if [[ "$sum" != "$(get_sum "$home_path")" ]]; then
-					state=${STATE[M]}
-				fi
-			else
-				state=${STATE[D]}
-			fi
-		else
-			if [[ -d "$home_path" ]]; then
-				local item
-				while read_by_null item; do
-					added_items["$item"]=1
-				done < <(find "$home_path" -maxdepth 1 -mindepth 1 ! -type l -printf "$own%y%p\0")
-			else
-				state=${STATE[D]}
-				deleted_dirs["$load_path"]=1
-			fi
-		fi
-
-		if [[ "$state" != "${STATE[_]}" ]]; then
-			no_change="false"
-		fi
-
-		case "$state" in
-		"${STATE[_]}" | "${STATE[M]}")
-			unset "added_items[$type$home_path]"
-			if [[ "$state" == "${STATE[M]}" ]]; then
-				rm -f "$final_path"
-				install_cmd -o root -g root -m 700 "$home_path" "$final_path"
-			fi
-
-			# if root file
-			if [[ "$load_path" != *"/"* ]]; then
-				arr_ref+=("$load_path")
-			fi
-
-			;;
-		"${STATE[D]}")
-			if [[ "$own" == "${OWN[U]}" ]]; then
-				rm -rf "${default_dir:?}/$load_path"
-			fi
-			rm -rf "$final_path"
-			;;
-		esac
-		printf_splash "($type:$own) $load_path" "${STATE_CLR[$state]}"
-	done
-
-	if ((${#added_items[@]} > 0)); then
-		no_change="false"
-	fi
-
-	local added_item
-	for added_item in "${!added_items[@]}"; do
-		local own="${added_item:0:1}"
-		local item_type="${added_item:1:1}"
-
-		local repo=""
-		if [[ "$own" == "${OWN[RR]}" ]]; then
-			echo "prefixed where: $added_item"
-		fi
-
-		# echo "ADDED $added_item"
-		# local new_base="${added_item:2+$output_dir_len+1}" # TODO: Refactor
-		# echo "NEW BASS: $new_base"
-		# cp -r "${added_item:1}" "$default_dir/$new_base" # TODO: if 'd' or 'f'
-
-		# printf_splash "Added: $new_base" "${STATE_CLR[${STATE[A]}]}"
-	done
-
-	if [[ "$no_change" == "true" ]]; then
-		return 3
-	fi
-
-}
-
 ##################################################
 #                    Commands                    #
 ##################################################
@@ -1237,10 +1071,7 @@ patch_LR() {
 	local -A adds=() mods=() deletes=()
 	local -A del_parents=() RR_dirs=()
 
-	# Helper
 	_is_root_item() { [[ "$1" != *"/"* ]] && return 0 || return 1; }
-	_basename() { printf "%s" "${1##*/}"; }
-	_dirname() { printf "%s" "${1%/*}"; }
 
 	while :; do
 		# Path's Header
@@ -1258,8 +1089,9 @@ patch_LR() {
 		fi
 		# echo "read: ($type:$own) $path ($old_sum)"
 
-		# shellcheck disable=SC2155
-		local parent="$(_dirname "$path")"
+		local parent="${path%/*}"
+		local base="${path##*/}"
+
 		if [[ -v del_parents["$parent"] ]]; then
 			if [[ "$type" == "d" ]]; then
 				del_parents["$path"]=1
@@ -1275,13 +1107,21 @@ patch_LR() {
 				LR_path="$L_dir/$path"
 
 			elif [[ "$own" == "${OWN[R]}" || "$own" == "${OWN[U]}" ]]; then
-				LR_path="$R_dir/$path"
+				if [[ "$own" == "${OWN[R]}" && -v RR_dirs["$parent"] ]]; then
+					RR_dir="${RR_dirs["$parent"]}"
+					LR_path="$RR_dir/$base"
+					if [[ "$type" == "d" ]]; then
+						RR_dirs["$path"]="$LR_path"
+					fi
+				else
+					LR_path="$R_dir/$path"
+				fi
 
 			elif [[ "$own" == "${OWN[RR]}" ]]; then
 				if _is_root_item "$path"; then
 					LR_path="$R_dir/$rr$path"
 				else
-					LR_path="$R_dir/$parent/$rr$(_basename "$path")"
+					LR_path="$R_dir/$parent/$rr$base)"
 				fi
 
 				RR_dirs["$path"]="$LR_path"
@@ -1315,21 +1155,12 @@ patch_LR() {
 
 		case "$mix_state" in
 		"${STATE[_]}" | "${STATE[M]}")
-			if [[ -v RR_dirs["$parent"] ]]; then
-
-				el="${RR_dirs["$parent"]}"
-				echo "nya: $el"
-
-				unset "adds[$type$LR_path]"
-				RR_dirs["$parent"]="$LR_path"
-			else
-				unset "adds[$type$LR_path]"
-			fi
-
+			unset "adds[$type$LR_path]"
 			;;
 		esac
+
+		printf "(M) $mix_path <-> (LR) $LR_path\n"
 	done
 
-	printf "(A): %s\n" "${!adds[@]}"
-	printf "(RR): %s\n" "${!RR_dirs[@]}"
+	printf "[A] %s\n" "${!adds[@]}"
 }

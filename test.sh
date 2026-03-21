@@ -8,10 +8,10 @@ generate_test_data() {
 	local dest_dir="$1"
 	local prefix="$2"
 
-	mkdir -p "$dest_dir/"{L,R,_MIX}
+	mkdir -p "$dest_dir/"{LEFT,RIGHT,MIX}
 
-	local L_dir="$dest_dir/L"
-	local R_dir="$dest_dir/R"
+	local L_dir="$dest_dir/LEFT"
+	local R_dir="$dest_dir/RIGHT"
 
 	# base directory
 	mkdir -p "$L_dir/"{L_dir,U_dir,X_dir}
@@ -36,8 +36,8 @@ generate_test_data() {
 
 get_temp_path() {
 	local random_str
-	random_str="$(tr -dc A-Za-z0-9 </dev/urandom | head -c 8)"
-	printf "/tmp/test-%s" "$random_str"
+	random_str="$(tr -dc a-z0-9 </dev/urandom | head -c 6)"
+	printf "/tmp/%s" "$random_str"
 }
 
 log_test() {
@@ -214,16 +214,16 @@ test_patch_diff() {
 
 	log_test "Create temp test directory"
 	local tmp_dir
-	tmp_dir="$(get_temp_path)"
+	tmp_dir="/tmp/test_"
 	mkdir "$tmp_dir"
 
 	log_test "Create test data"
 	generate_test_data "$tmp_dir" "$TEST_PREFIX"
 	print_tree "$tmp_dir" "CREATE TEST DATA"
 
-	local L="$tmp_dir/L"
-	local R="$tmp_dir/R"
-	local MIX="$tmp_dir/_MIX"
+	local L="$tmp_dir/LEFT"
+	local R="$tmp_dir/RIGHT"
+	local MIX="$tmp_dir/MIX"
 	local track="$tmp_dir/$TRACK_FILENAME"
 
 	write_track_header "$track" "$(id -u "$TEST_USER")" "$TEST_PROFILE" "some_git_commit_id"
