@@ -1261,9 +1261,8 @@ patch_LR() {
 		# shellcheck disable=SC2155
 		local parent="$(_dirname "$path")"
 		if [[ -v del_parents["$parent"] ]]; then
-			# echo "im $path! my parent ($parent) is dead! skipping!"
 			if [[ "$type" == "d" ]]; then
-				del_parents["$path"]=1 # To tell childs
+				del_parents["$path"]=1
 			fi
 			continue
 		fi
@@ -1284,6 +1283,8 @@ patch_LR() {
 				else
 					LR_path="$R_dir/$parent/$rr$(_basename "$path")"
 				fi
+
+				RR_dirs["$path"]="$LR_path"
 			fi
 		fi
 
@@ -1312,12 +1313,23 @@ patch_LR() {
 			fi
 		fi
 
-		echo "adds: ${!adds[@]}"
-
 		case "$mix_state" in
 		"${STATE[_]}" | "${STATE[M]}")
-			unset "adds[$type$LR_path]"
+			if [[ -v RR_dirs["$parent"] ]]; then
+
+				el="${RR_dirs["$parent"]}"
+				echo "nya: $el"
+
+				unset "adds[$type$LR_path]"
+				RR_dirs["$parent"]="$LR_path"
+			else
+				unset "adds[$type$LR_path]"
+			fi
+
 			;;
 		esac
 	done
+
+	printf "(A): %s\n" "${!adds[@]}"
+	printf "(RR): %s\n" "${!RR_dirs[@]}"
 }

@@ -15,16 +15,20 @@ generate_test_data() {
 
 	# base directory
 	mkdir -p "$L_dir/"{L_dir,U_dir,X_dir}
-	printf "a" >>"$L_dir/X_file"
+	printf "L" >>"$L_dir/X_file"
 	touch "$L_dir/X_dir/L_file"{1..3}
+	mkdir "$L_dir/X_dir/X2_dir"
+	touch "$L_dir/X_dir/X2_dir/L_file"{1..3}
 	touch "$L_dir/L_file"{1..3}
 	touch "$L_dir/L_dir/L_file"{1..3}
 	touch "$L_dir/U_dir/U_file"{1..3}
 
 	# override directory
 	mkdir -p "$R_dir/"{R_dir,U_dir,"$prefix"X_dir}
-	printf "b" >>"$R_dir/${prefix}X_file"
-	touch "$R_dir/${prefix}X_dir/R_"{1..3}
+	printf "R" >>"$R_dir/${prefix}X_file"
+	touch "$R_dir/${prefix}X_dir/R_file"{1..3}
+	mkdir "$R_dir/${prefix}X_dir/X2_dir"
+	touch "$R_dir/${prefix}X_dir/X2_dir/R_file"{1..3}
 	touch "$R_dir/R_file"{1..3}
 	touch "$R_dir/R_dir/R_file"{1..3}
 	touch "$R_dir/U_dir/U_file"{1..6}
