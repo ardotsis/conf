@@ -8,7 +8,7 @@ generate_test_data() {
 	local dest_dir="$1"
 	local prefix="$2"
 
-	mkdir -p "$dest_dir/"{LEFT,RIGHT,MIX}
+	mkdir -p "$dest_dir/"{LEFT,RIGHT,_MIX}
 
 	local L_dir="$dest_dir/LEFT"
 	local R_dir="$dest_dir/RIGHT"
@@ -21,7 +21,7 @@ generate_test_data() {
 	touch "$L_dir/X_dir/X2_dir/L_file"{1..3}
 	touch "$L_dir/L_file"{1..3}
 	touch "$L_dir/L_dir/L_file"{1..3}
-	touch "$L_dir/U_dir/U_file"{1..3}
+	touch "$L_dir/U_dir/U_file"{1..6}
 
 	# override directory
 	mkdir -p "$R_dir/"{R_dir,U_dir,"$prefix"X_dir}
@@ -31,7 +31,7 @@ generate_test_data() {
 	touch "$R_dir/${prefix}X_dir/X2_dir/R_file"{1..3}
 	touch "$R_dir/R_file"{1..3}
 	touch "$R_dir/R_dir/R_file"{1..3}
-	touch "$R_dir/U_dir/U_file"{1..6}
+	touch "$R_dir/U_dir/U_file"{1..3}
 }
 
 get_temp_path() {
@@ -221,18 +221,21 @@ test_patch_diff() {
 	generate_test_data "$tmp_dir" "$TEST_PREFIX"
 	print_tree "$tmp_dir" "CREATE TEST DATA"
 
-	local L="$tmp_dir/LEFT"
-	local R="$tmp_dir/RIGHT"
-	local MIX="$tmp_dir/MIX"
+	local L_dir="$tmp_dir/LEFT"
+	local R_dir="$tmp_dir/RIGHT"
+	local MIX_dir="$tmp_dir/_MIX"
 	local track="$tmp_dir/$TRACK_FILENAME"
 
 	write_track_header "$track" "$(id -u "$TEST_USER")" "$TEST_PROFILE" "some_git_commit_id"
 	_TRACK="$track" _PREFIX="$TEST_PROFILE#" _OWNER="$TEST_USER" \
-		patch_mix "$L" "$R" "$MIX"
-
-	rm -rf "$MIX/R_dir"
+		patch_mix "$L_dir" "$R_dir" "$MIX_dir"
 
 	print_tree "$tmp_dir" "MIXING"
+	# touch "$MIX_dir/U_dir/qq"
+	mkdir "$MIX_dir/U_dir/hello"
+	mkdir "$MIX_dir/R_dir/a"
+	touch "$MIX_dir/L_dir/a"
+	# touch "$MIX_dir/U_dir/U_file5"
 
 	# Read meta headers
 	{
@@ -241,7 +244,8 @@ test_patch_diff() {
 		read_by_null commit_id
 
 		# Pass paths to patcher
-		patch_LR "$L" "$R" "$MIX" "$TEST_PREFIX"
+		patch_LR "$L_dir" "$R_dir" "$MIX_dir" "$TEST_PREFIX"
+
 	} <"$track"
 }
 

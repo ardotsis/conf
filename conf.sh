@@ -1106,8 +1106,8 @@ patch_LR() {
 			if [[ "$own" == "${OWN[L]}" ]]; then
 				LR_path="$L_dir/$path"
 
-			elif [[ "$own" == "${OWN[R]}" || "$own" == "${OWN[U]}" ]]; then
-				if [[ "$own" == "${OWN[R]}" && -v RR_dirs["$parent"] ]]; then
+			elif [[ "$own" == "${OWN[R]}" ]]; then
+				if [[ -v RR_dirs["$parent"] ]]; then
 					RR_dir="${RR_dirs["$parent"]}"
 					LR_path="$RR_dir/$base"
 					if [[ "$type" == "d" ]]; then
@@ -1116,6 +1116,9 @@ patch_LR() {
 				else
 					LR_path="$R_dir/$path"
 				fi
+
+			elif [[ "$own" == "${OWN[U]}" ]]; then
+				LR_path="$R_dir/$path"
 
 			elif [[ "$own" == "${OWN[RR]}" ]]; then
 				if _is_root_item "$path"; then
@@ -1145,8 +1148,8 @@ patch_LR() {
 			if [[ -d "$mix_path" ]]; then
 				local item
 				while read_by_null item; do
-					adds["$item"]=1
-				done < <(find "$mix_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y$LR_path/%f\0")
+					adds["$item"]="$LR_path"
+				done < <(find "$mix_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%f\0")
 			else
 				mix_state=${STATE[D]}
 				del_parents["$path"]=1
@@ -1155,12 +1158,13 @@ patch_LR() {
 
 		case "$mix_state" in
 		"${STATE[_]}" | "${STATE[M]}")
-			unset "adds[$type$LR_path]"
+			unset "adds[$type$base]"
 			;;
 		esac
 
-		printf "(M) $mix_path <-> (LR) $LR_path\n"
+		# printf "(M) $mix_path -> ${C[y]}$LR_path${C[0]}\n"
 	done
 
-	printf "[A] %s\n" "${!adds[@]}"
+	((${#adds[@]} > 0)) && printf "[NEW] %s\n" "${adds[@]}"
+
 }
