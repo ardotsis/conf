@@ -1172,7 +1172,7 @@ patch_LR() {
 	done
 
 	((${#adds[@]} > 0)) && printf "[NEW] %s\n" "${adds[@]}"
-	((${#adds[@]} > 0)) && printf "[DEL] %s\n" "${dels[@]}"
-	((${#adds[@]} > 0)) && printf "[MOD] %s\n" "${mods[@]}"
+	((${#dels[@]} > 0)) && printf "[DEL] %s\n" "${dels[@]}"
+	((${#mods[@]} > 0)) && printf "[MOD] %s\n" "${mods[@]}"
 
 }
