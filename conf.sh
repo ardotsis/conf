@@ -1147,8 +1147,8 @@ patch_LR() {
 		if [[ "$type" == "d" ]]; then
 			if [[ -d "$mix_path" ]]; then
 				local item
-				while read_by_null item; do
-					adds["$item"]="$LR_path/$item"
+				while read_by_null found_item; do
+					adds["$found_item"]="$LR_path/$found_item"
 				done < <(find "$mix_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%f\0")
 			else
 				mix_state=${STATE[D]}
