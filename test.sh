@@ -230,8 +230,12 @@ test_patch_diff() {
 	print_tree "$tmp_dir" "MIXING"
 
 	# Create change
-	rm -rf "$MIX_dir/U_dir/U_file1"
-	echo "MODIFIED" >|"$MIX_dir/R_dir/R_file1"
+	rm -rf "$MIX_dir/U_dir"
+	echo "MODIFIED" >|"$MIX_dir/X_dir/R_file1"
+	echo "MODIFIED" >|"$MIX_dir/X_dir/newFile"
+	echo "MODIFIED" >|"$MIX_dir/X_dir/X2_dir/newFile"
+	echo "MODIFIED" >|"$MIX_dir/X_dir/aaa"
+	mkdir "MODIFIED" >|"$MIX_dir/X_dir/aaa"
 
 	# Read meta headers
 	{
@@ -240,9 +244,23 @@ test_patch_diff() {
 		read_by_null profile
 		read_by_null commit_id
 
-		local adds
-		# Pass paths to patcher
-		patch_LR "$L_dir" "$R_dir" "$MIX_dir" "$profile#"
+		local -A adds dels mods uncs roots
+		local -ra patch_LR_args=(
+			"adds"
+			"dels"
+			"mods"
+			"uncs"
+			"roots"
+			"$L_dir"
+			"$R_dir"
+			"$MIX_dir"
+			"$profile#"
+		)
+
+		patch_LR "${patch_LR_args[@]}"
+
+		printf "[M] %s\n" "${mods[@]}"
+		printf "[A] %s\n" "${adds[@]}"
 
 	} <"$track"
 }

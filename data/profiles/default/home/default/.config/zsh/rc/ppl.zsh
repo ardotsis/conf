@@ -1,12 +1,4 @@
-declare -ar ppls=(
-	"kamakura amane"
-	"muranaka mimori"
-	"arimura ruka"
-	"fujinami mizuki"
-	"yoshida mitsuki"
-)
-
 ppl() {
-	printf "%s\n" "${ppls[@]}"
+	# read from file Z_RC_DIR/ppl.zsh/ppl
 	printf "hurry up. u have no time to study.\n"
 }

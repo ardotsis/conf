@@ -576,7 +576,9 @@ read_byte() {
 }
 
 get_sum() {
-	printf "%s" "$(sha256sum "$1" | cut -d ' ' -f1)"
+	# sum_meta="$(sha256sum "$1")"
+	sum_meta="$(sha1sum "$1")"
+	printf "%s" "${sum_meta%% *}"
 }
 
 printf_splash() {
@@ -1068,12 +1070,14 @@ main_() {
 # fi
 
 patch_LR() {
-	local L_dir="$1"
-	local R_dir="$2"
-	local MIX_dir="$3"
-	local rr="$4" # prefix
+	local -n A="$1" D="$2" M="$3" U="$4" R="$5"
+	local L_dir="$6"
+	local R_dir="$7"
+	local MIX_dir="$8"
+	local rr="$9"
 
-	local -A A=() D=() M=() U=()
+	local L_len="${#L_dir}"
+	local R_len="${#R_dir}"
 	local -A del_parents=() RR_dirs=()
 
 	_is_root_item() { [[ "$1" != *"/"* ]] && return 0 || return 1; }
@@ -1172,12 +1176,14 @@ patch_LR() {
 			D["$type$path"]="$type$LR_path"
 			;;
 		"${STATE[M]}")
-			unset "A[$type$parent/$base]"
+			unset "A[$type$path]"
 			M["$type$path"]="$type$LR_path"
+			_is_root_item "$path" && R["$path"]=1
 			;;
 		"${STATE[U]}")
 			unset "A[$type$path]"
 			U["$type$path"]="$type$LR_path"
+			_is_root_item "$path" && R["$path"]=1
 			;;
 		esac
 	done
