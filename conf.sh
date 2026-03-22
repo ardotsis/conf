@@ -1183,7 +1183,6 @@ patch_LR() {
 			;;
 		"${STATE[U]}")
 			U["$out_MIX_path"]="$out_LR_path"
-			echo "unset $unset_path"
 			unset "A[$unset_path]"
 			_is_root_item "$path" && R["$path"]=1
 			;;

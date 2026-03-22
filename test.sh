@@ -120,13 +120,14 @@ test_main() {
 					local MIX_path="${item:1}"
 					local LR_path="${items[$item]}"
 					LR_path="${LR_path:1}"
+
 					printf "%b[${state_char}] %s%b\n" "${STATE_CLR[$state]}" "$MIX_path" "${C[0]}"
 
 					case "$state" in
 					"${STATE[A]}")
 						case "$type" in
 						"d")
-							cp -r "$MIX_dir" "$LR_path"
+							cp -r "$MIX_path" "$LR_path"
 							chown "$T_USER:$T_USER" "$LR_path"
 							;;
 						"f")
