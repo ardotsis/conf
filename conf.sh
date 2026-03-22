@@ -1114,7 +1114,7 @@ patch_LR() {
 
 		if [[ -z "$LR_path" ]]; then
 			if [[ "$own" == "${OWN[L]}" ]]; then
-				LR_path="$L_dir/$path"
+				LR_path="$path"
 
 			elif [[ "$own" == "${OWN[R]}" ]]; then
 				if [[ -v RR_dirs["$parent"] ]]; then
@@ -1124,17 +1124,17 @@ patch_LR() {
 						RR_dirs["$path"]="$LR_path"
 					fi
 				else
-					LR_path="$R_dir/$path"
+					LR_path="$path"
 				fi
 
 			elif [[ "$own" == "${OWN[U]}" ]]; then
-				LR_path="$R_dir/$path"
+				LR_path="$path"
 
 			elif [[ "$own" == "${OWN[RR]}" ]]; then
 				if _is_root_item "$path"; then
-					LR_path="$R_dir/$rr$path"
+					LR_path="$rr$path"
 				else
-					LR_path="$R_dir/$parent/$rr$base)"
+					LR_path="$parent/$rr$base"
 				fi
 
 				RR_dirs["$path"]="$LR_path"
