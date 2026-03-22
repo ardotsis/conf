@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail -o noclobber
 
 # shellcheck disable=SC1091
 source "$DOCKER_DEV_APP_DIR"/conf.sh
@@ -233,8 +232,9 @@ test_patch_diff() {
 	# Create change
 	rm -rf "$MIX_dir/L_dir"
 	touch "$MIX_dir/R_dir/newFile"
-	rm -f "$MIX_dir/R_dir/R_file1"
-	echo 'helo' >"$MIX_dir/R_dir/R_file1"
+	mkdir "$MIX_dir/R_dir/newDir"
+	touch "$MIX_dir/X_dir/X2_dir/helloX"
+	echo "MODIFIED" >|"$MIX_dir/R_dir/R_file1"
 
 	# Read meta headers
 	{
