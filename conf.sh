@@ -1092,7 +1092,7 @@ patch_LR() {
 		elif [[ "$type" == "d" ]]; then
 			read_by_null "path"
 		else
-			_error "Unknown file type '$type'. Did you read headers?"
+			_error "Unknown file type '$type'. Did you read headers correctly?"
 		fi
 		# echo "read: ($type:$own) $path ($old_sum)"
 
