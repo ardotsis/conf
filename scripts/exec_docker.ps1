@@ -10,7 +10,6 @@ param(
     [string] $WorkDir
 )
 
-
 if (-not $WorkDir) {
     if ($Username -eq "root") {
         $WorkDir = "/root"
