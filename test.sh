@@ -236,6 +236,8 @@ test_patch_diff() {
 	touch "$MIX_dir/L_dir/a"
 	# touch "$MIX_dir/L_dir/bbb"
 	# mkdir "$MIX_dir/U_dir/hello"
+	rm -f "$MIX_dir/R_dir/R_file1"
+	echo 'helo' >"$MIX_dir/R_dir/R_file1"
 
 	rm -rf "$MIX_dir/L_dir"
 
