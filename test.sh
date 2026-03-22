@@ -81,8 +81,9 @@ test_main() {
 	# Create change
 	rm -rf "$MIX_dir/U_dir"
 	# rm -rf "$MIX_dir/R_dir"
-	touch "$MIX_dir/X_dir/helllooo"
-	mkdir "$MIX_dir/X_dir/X2_dir/helloDIRRR"
+	local new_di="$MIX_dir/X_dir/X2_dir/test_new_dir"
+	mkdir "$new_di"
+	touch "$new_di/hello"content{1..3}
 
 	# Read meta headers
 	{
