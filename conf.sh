@@ -1137,10 +1137,10 @@ patch_LR() {
 		if [[ "$type" == "f" ]]; then
 			if [[ -f "$mix_path" ]]; then
 				if [[ "$old_sum" != "$(get_sum "$mix_path")" ]]; then
-					mix_state=${STATE[M]}
+					mix_state="${STATE[M]}"
 				fi
 			else
-				mix_state=${STATE[D]}
+				mix_state="${STATE[D]}"
 			fi
 		fi
 
@@ -1148,7 +1148,7 @@ patch_LR() {
 			if [[ -d "$mix_path" ]]; then
 				local item
 				while read_by_null item; do
-					adds["$item"]="$LR_path"
+					adds["$item"]="$LR_path/$item"
 				done < <(find "$mix_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%f\0")
 			else
 				mix_state=${STATE[D]}
@@ -1165,6 +1165,6 @@ patch_LR() {
 		printf "(M) $mix_path -> ${C[y]}$LR_path${C[0]}\n"
 	done
 
-	# ((${#adds[@]} > 0)) && printf "[NEW] %s\n" "${adds[@]}"
+	((${#adds[@]} > 0)) && printf "[NEW] %s\n" "${adds[@]}"
 
 }

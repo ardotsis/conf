@@ -1,9 +1,12 @@
+declare -ar ppls=(
+	"kamakura amane"
+	"muranaka mimori"
+	"arimura ruka"
+	"fujinami mizuki"
+	"yoshida mitsuki"
+)
+
 ppl() {
-	printf "kamakura amane\n"
-	printf "muranaka mimori\n"
-	printf "arimura ruka\n"
-	printf "fujinami mizuki\n"
-	printf "yoshida mitsuki\n"
-	printf "\n"
+	printf "%s\n" "${ppls[@]}"
 	printf "hurry up. u have no time to study.\n"
 }
