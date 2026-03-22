@@ -557,12 +557,6 @@ get_sum() {
 	printf "%s" "${sum_meta%% *}"
 }
 
-printf_splash() {
-	local msg="$1"
-	local color_ascii="$2"
-	printf "%b%s%b\n" "$color_ascii" "$msg" "${C[0]}" >&2
-}
-
 declare -Ar STATE=(
 	[U]=0
 	[M]=1 # Modified
@@ -1056,6 +1050,10 @@ write_track_header() {
 		"$user_id" "$profile" "$git_commit_id" >>"$filepath"
 }
 
+diff() {
+	:
+}
+
 cmd_update() {
 	if [[ ! -e "$_TRACK_FILE" ]]; then
 		error "No track file. Try 'apply' command first."
@@ -1102,6 +1100,11 @@ cmd_update() {
 		)
 		patch_LR "${patch_LR_args[@]}"
 	} <"$_TRACK_FILE"
+
+	if ((("${#adds[@]}" + ${#dels[@]} + ${#mods[@]}) == 0)); then
+		info "Everything up-to-date."
+		return 0
+	fi
 
 	local kind
 	for kind in "adds" "dels" "mods" "uncs"; do
@@ -1157,6 +1160,9 @@ cmd_update() {
 	local archive_path="$_USER_DATA_DIR/$current_commit_id.tar.gz"
 	_debug "Backup current home ($archive_path)"
 	tar -C "$_HOME" -czf "$archive_path" "${!roots[@]}"
+
+	_debug "unlink..."
+	rm -rf "${!roots[@]}"
 
 	_debug "Committing..."
 	git_conf add "$REPO_PROFILES_DIR" >/dev/null 2>&1

@@ -1,3 +1,6 @@
+# conf
+alias conf="sudo conf"
+
 # ls
 alias ls="ls --color=auto"
 alias l="ls --color=auto -lFh"
