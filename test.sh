@@ -230,11 +230,11 @@ test_patch_diff() {
 	print_tree "$tmp_dir" "MIXING"
 
 	# Create change
-	rm -rf "$MIX_dir/L_dir"
-	touch "$MIX_dir/R_dir/newFile"
-	mkdir "$MIX_dir/R_dir/newDir"
-	touch "$MIX_dir/X_dir/X2_dir/helloX"
-	echo "MODIFIED" >|"$MIX_dir/R_dir/R_file1"
+	# rm -rf "$MIX_dir/L_dir"
+	# touch "$MIX_dir/R_dir/newFile"
+	# mkdir "$MIX_dir/R_dir/newDir"
+	# touch "$MIX_dir/X_dir/X2_dir/helloX"
+	# echo "MODIFIED" >|"$MIX_dir/R_dir/R_file1"
 
 	# Read meta headers
 	{

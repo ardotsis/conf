@@ -1156,7 +1156,7 @@ patch_LR() {
 				while read_by_null item; do
 					local y="${item:0:1}" f="${item:1}"
 					# shellcheck disable=SC2034
-					adds["$y$base/$f"]="$y$LR_path/$f"
+					adds["$y$parent/$f"]="$y$LR_path/$f"
 				done < <(find "$mix_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%f\0")
 			else
 				mix_state=${STATE[D]}
@@ -1166,6 +1166,7 @@ patch_LR() {
 
 		case "$mix_state" in
 		"${STATE[_]}" | "${STATE[M]}")
+			echo "rm: $type$path"
 			unset "adds[$type$path]"
 			if [[ "$mix_state" == "${STATE[M]}" ]]; then
 				# shellcheck disable=SC2034
@@ -1183,7 +1184,7 @@ patch_LR() {
 	for kind in "adds" "dels" "mods"; do
 		local -n items="$kind"
 		if ((${#items[@]} > 0)); then
-			printf "[$kind] %s\n" "${items[@]}"
+			printf "[$kind] %s\n" "${!items[@]}"
 		fi
 	done
 }
