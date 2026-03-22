@@ -1068,7 +1068,7 @@ patch_LR() {
 	local MIX_dir="$3"
 	local rr="$4"
 
-	local -A adds=() mods=() deletes=()
+	local -A adds=() mods=() dels=()
 	local -A del_parents=() RR_dirs=()
 
 	_is_root_item() { [[ "$1" != *"/"* ]] && return 0 || return 1; }
@@ -1147,8 +1147,8 @@ patch_LR() {
 		if [[ "$type" == "d" ]]; then
 			if [[ -d "$mix_path" ]]; then
 				local item
-				while read_by_null found_item; do
-					adds["$found_item"]="$LR_path/$found_item"
+				while read_by_null item; do
+					adds["$item"]="$LR_path/$item"
 				done < <(find "$mix_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%f\0")
 			else
 				mix_state=${STATE[D]}
@@ -1159,6 +1159,12 @@ patch_LR() {
 		case "$mix_state" in
 		"${STATE[_]}" | "${STATE[M]}")
 			unset "adds[$type$base]"
+			if [[ "$mix_state" == "${STATE[M]}" ]]; then
+				mods["$type$base"]=1
+			fi
+			;;
+		"${STATE[D]}")
+			dels["$type$base"]=1
 			;;
 		esac
 
@@ -1166,5 +1172,7 @@ patch_LR() {
 	done
 
 	((${#adds[@]} > 0)) && printf "[NEW] %s\n" "${adds[@]}"
+	((${#adds[@]} > 0)) && printf "[DEL] %s\n" "${dels[@]}"
+	((${#adds[@]} > 0)) && printf "[MOD] %s\n" "${mods[@]}"
 
 }
