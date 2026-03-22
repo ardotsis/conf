@@ -319,30 +319,6 @@ error() {
 	exit 1
 }
 
-draw_box() {
-	local txt="$1"
-	local width="$2"
-
-	local s="#"
-	local inner=$((width - 2))
-	local txt_len=${#txt}
-
-	local space=$((inner - txt_len))
-	((space < 0)) && return 1
-	local left=$((space / 2))
-	local right=$((space - left))
-
-	printf '%*s\n' "$width" | tr ' ' $s
-
-	printf "$s"
-	printf '%*s' "$left"
-	printf "%s" "$txt"
-	printf '%*s' "$right"
-	printf "$s\n"
-
-	printf '%*s\n' "$width" | tr ' ' $s
-}
-
 is_cmd_exist() {
 	local cmd="$1"
 
