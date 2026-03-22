@@ -593,7 +593,7 @@ declare -Ar STATE=(
 )
 
 declare -Ar STATE_CLR=(
-	[${STATE[U]}]=""
+	[${STATE[U]}]="${C[K]}"
 	[${STATE[M]}]="${C[Y]}"
 	[${STATE[A]}]="${C[G]}"
 	[${STATE[D]}]="${C[R]}"
@@ -1169,14 +1169,15 @@ patch_LR() {
 			# Do nothing
 			;;
 		"${STATE[D]}")
-			D["$type$base"]="$type$LR_path"
+			D["$type$path"]="$type$LR_path"
 			;;
 		"${STATE[M]}")
-			unset "A[$type$path]"
-			M["$type$base"]="$type$LR_path"
+			unset "A[$type$parent/$base]"
+			M["$type$path"]="$type$LR_path"
 			;;
 		"${STATE[U]}")
 			unset "A[$type$path]"
+			U["$type$path"]="$type$LR_path"
 			;;
 		esac
 	done
