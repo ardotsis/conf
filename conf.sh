@@ -586,14 +586,14 @@ printf_splash() {
 }
 
 declare -Ar STATE=(
-	[_]=0
+	[U]=0
 	[M]=1 # Modified
 	[A]=2 # Added
 	[D]=3 # Deleted
 )
 
 declare -Ar STATE_CLR=(
-	[${STATE[_]}]=""
+	[${STATE[U]}]=""
 	[${STATE[M]}]="${C[Y]}"
 	[${STATE[A]}]="${C[G]}"
 	[${STATE[D]}]="${C[R]}"
@@ -1073,8 +1073,8 @@ patch_LR() {
 	local MIX_dir="$3"
 	local rr="$4" # prefix
 
+	local -A A=() D=() M=() U=()
 	local -A del_parents=() RR_dirs=()
-	local -A adds=() mods=() dels=()
 
 	_is_root_item() { [[ "$1" != *"/"* ]] && return 0 || return 1; }
 
@@ -1138,7 +1138,7 @@ patch_LR() {
 		fi
 
 		local mix_path="$MIX_dir/$path"
-		local mix_state=${STATE[_]}
+		local mix_state="${STATE[U]}"
 
 		if [[ "$type" == "f" ]]; then
 			if [[ -f "$mix_path" ]]; then
@@ -1154,37 +1154,42 @@ patch_LR() {
 			if [[ -d "$mix_path" ]]; then
 				local item
 				while read_by_null item; do
-					local y="${item:0:1}" f="${item:1}"
+					local n_type="${item:0:1}" n_path="${item:1}"
 					# shellcheck disable=SC2034
-					adds["$y$parent/$f"]="$y$LR_path/$f"
+					A["$n_type$parent/$n_path"]="$n_type$LR_path/$n_path"
 				done < <(find "$mix_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%f\0")
 			else
-				mix_state=${STATE[D]}
+				mix_state="${STATE[D]}"
 				del_parents["$path"]=1
 			fi
 		fi
 
 		case "$mix_state" in
-		"${STATE[_]}" | "${STATE[M]}")
-			echo "rm: $type$path"
-			unset "adds[$type$path]"
-			if [[ "$mix_state" == "${STATE[M]}" ]]; then
-				# shellcheck disable=SC2034
-				mods["$type$base"]="$type$LR_path"
-			fi
+		"${STATE[A]}")
+			# Do nothing
 			;;
 		"${STATE[D]}")
-			# shellcheck disable=SC2034
-			dels["$type$base"]="$type$LR_path"
+			D["$type$base"]="$type$LR_path"
+			;;
+		"${STATE[M]}")
+			unset "A[$type$path]"
+			M["$type$base"]="$type$LR_path"
+			;;
+		"${STATE[U]}")
+			unset "A[$type$path]"
 			;;
 		esac
 	done
 
 	local kind
-	for kind in "adds" "dels" "mods"; do
+	for kind in "A" "D" "M" "U"; do
 		local -n items="$kind"
 		if ((${#items[@]} > 0)); then
-			printf "[$kind] %s\n" "${!items[@]}"
+			local kind_item
+			for kind_item in "${items[@]}"; do
+				local state="${STATE[$kind]}"
+				printf "%b[$kind] %s%b\n" "${STATE_CLR[$state]}" "$kind_item" "${C[0]}"
+			done
 		fi
 	done
 }
