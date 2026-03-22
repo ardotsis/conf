@@ -654,8 +654,9 @@ patch_mix() {
 				sum="$(get_sum "$LR_path")"
 			fi
 
-			local mix_path="${MIX_dir}/${base}"
-			local write_path="${mix_path:$MIX_dir_len+1}"
+			local MIX_path="${MIX_dir}/$base"
+			local write_path="${MIX_path:$MIX_dir_len+1}"
+			# local write_path="$base"
 			local write_own="$own"
 
 			# if "L" has "RR" item
@@ -665,25 +666,25 @@ patch_mix() {
 
 			if [[ "$own" == "R" && "$base" == "$_PREFIX"* ]]; then
 				local restored_base="${base#"${_PREFIX}"}"
-				mix_path="${MIX_dir}/${restored_base}"
+				MIX_path="${MIX_dir}/${restored_base}"
 				RR_items+=("$restored_base")
-				write_path="${mix_path:$MIX_dir_len+1}"
+				write_path="${MIX_path:$MIX_dir_len+1}"
 				write_own="RR"
 			fi
 
 			append_track "$_TRACK" "$type" "$write_own" "$write_path" "$sum"
 
 			if [[ "$type" == "d" ]]; then
-				install_cmd -m 0700 -o "$_OWNER" -g "$_OWNER" "$mix_path" -d
+				install_cmd -m 0700 -o "$_OWNER" -g "$_OWNER" "$MIX_path" -d
 				if [[ "$own" == "U" ]]; then
-					patch_mix "$as_L_item" "$as_R_item" "$mix_path"
+					patch_mix "$as_L_item" "$as_R_item" "$MIX_path"
 				elif [[ "$own" == "R" ]]; then
-					patch_mix "" "$as_R_item" "$mix_path"
+					patch_mix "" "$as_R_item" "$MIX_path"
 				elif [[ "$own" == "L" ]]; then
-					patch_mix "$as_L_item" "" "$mix_path"
+					patch_mix "$as_L_item" "" "$MIX_path"
 				fi
 			elif [[ "$type" == "f" ]]; then
-				install_cmd -m 0700 -o "$_OWNER" -g "$_OWNER" "$LR_path" "$mix_path"
+				install_cmd -m 0700 -o "$_OWNER" -g "$_OWNER" "$LR_path" "$MIX_path"
 			fi
 		done
 	done
@@ -1076,19 +1077,15 @@ patch_LR() {
 	local MIX_dir="$8"
 	local rr="$9"
 
-	local L_len="${#L_dir}"
-	local R_len="${#R_dir}"
 	local -A del_parents=() RR_dirs=()
 
 	_is_root_item() { [[ "$1" != *"/"* ]] && return 0 || return 1; }
 
 	while :; do
-		# Path's Header
 		local type own
 		read_byte type || break
 		read_byte own
 
-		# Path & Sum (file)
 		local path="" old_sum=""
 		if [[ "$type" == "f" ]]; then
 			read_by_null "path"
@@ -1114,7 +1111,7 @@ patch_LR() {
 
 		if [[ -z "$LR_path" ]]; then
 			if [[ "$own" == "${OWN[L]}" ]]; then
-				LR_path="$path"
+				LR_path="$L_dir/$path"
 
 			elif [[ "$own" == "${OWN[R]}" ]]; then
 				if [[ -v RR_dirs["$parent"] ]]; then
@@ -1124,79 +1121,71 @@ patch_LR() {
 						RR_dirs["$path"]="$LR_path"
 					fi
 				else
-					LR_path="$path"
+					LR_path="$R_dir/$path"
 				fi
 
 			elif [[ "$own" == "${OWN[U]}" ]]; then
-				LR_path="$path"
+				LR_path="$R_dir/$path"
 
 			elif [[ "$own" == "${OWN[RR]}" ]]; then
 				if _is_root_item "$path"; then
-					LR_path="$rr$path"
+					LR_path="$R_dir/$rr$path"
 				else
-					LR_path="$parent/$rr$base"
+					LR_path="$R_dir/$parent/$rr$base)"
 				fi
 
 				RR_dirs["$path"]="$LR_path"
 			fi
 		fi
 
-		local mix_path="$MIX_dir/$path"
-		local mix_state="${STATE[U]}"
+		local MIX_path="$MIX_dir/$path"
+		local MIX_state="${STATE[U]}"
 
 		if [[ "$type" == "f" ]]; then
-			if [[ -f "$mix_path" ]]; then
-				if [[ "$old_sum" != "$(get_sum "$mix_path")" ]]; then
-					mix_state="${STATE[M]}"
+			if [[ -f "$MIX_path" ]]; then
+				if [[ "$old_sum" != "$(get_sum "$MIX_path")" ]]; then
+					MIX_state="${STATE[M]}"
 				fi
 			else
-				mix_state="${STATE[D]}"
+				MIX_state="${STATE[D]}"
 			fi
 		fi
 
 		if [[ "$type" == "d" ]]; then
-			if [[ -d "$mix_path" ]]; then
+			if [[ -d "$MIX_path" ]]; then
 				local item
 				while read_by_null item; do
 					local n_type="${item:0:1}" n_path="${item:1}"
 					# shellcheck disable=SC2034
-					A["$n_type$parent/$n_path"]="$n_type$LR_path/$n_path"
-				done < <(find "$mix_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%f\0")
+					A["$n_type$MIX_dir/$parent/$n_path"]="$n_type$LR_path/$n_path"
+				done < <(find "$MIX_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%f\0")
 			else
-				mix_state="${STATE[D]}"
+				MIX_state="${STATE[D]}"
 				del_parents["$path"]=1
 			fi
 		fi
 
-		case "$mix_state" in
+		local out_MIX_path="$type$MIX_path"
+		local out_LR_path="$type$LR_path"
+		local unset_path="$type$MIX_dir/$path"
+
+		case "$MIX_state" in
 		"${STATE[A]}")
 			# Do nothing
 			;;
 		"${STATE[D]}")
-			D["$type$path"]="$type$LR_path"
+			D["$out_MIX_path"]="$out_LR_path"
 			;;
 		"${STATE[M]}")
-			unset "A[$type$path]"
-			M["$type$path"]="$type$LR_path"
+			M["$out_MIX_path"]="$out_LR_path"
+			unset "A[$unset_path]"
 			_is_root_item "$path" && R["$path"]=1
 			;;
 		"${STATE[U]}")
-			unset "A[$type$path]"
-			U["$type$path"]="$type$LR_path"
+			U["$out_MIX_path"]="$out_LR_path"
+			unset "A[$unset_path]"
 			_is_root_item "$path" && R["$path"]=1
 			;;
 		esac
-	done
-
-	local kind
-	for kind in "A" "D" "M" "U"; do
-		local -n items="$kind"
-		if ((${#items[@]} > 0)); then
-			local kind_item
-			for kind_item in "${items[@]}"; do
-				local state="${STATE[$kind]}"
-				printf "%b[$kind] %s%b\n" "${STATE_CLR[$state]}" "$kind_item" "${C[0]}"
-			done
-		fi
 	done
 }

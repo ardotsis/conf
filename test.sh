@@ -3,14 +3,39 @@
 # shellcheck disable=SC1091
 source "$DOCKER_DEV_APP_DIR"/conf.sh
 
+declare -r T_USER="kana"
+declare -r T_PROFILE="mine"
+declare -r T_GIT_COMMIT_ID="test_git_commit_id"
+declare -r T_LEFT_DIRNAME="LEFT"
+declare -r T_RIGHT_DIRNAME="RIGHT"
+declare -r T_MIX_DIRNAME="_MIX"
+
+log_test() {
+	local msg="$1"
+	_debug "TEST - $msg" >&2
+}
+
+print_tree() {
+	local dir="$1"
+	local tag="$2"
+
+	printf "========== %s ==========\n" "$tag"
+	tree "$dir" --noreport
+	printf "========== %s (END) ==========\n" "$tag"
+}
+
+get_temp_path() {
+	local random_str
+	random_str="$(tr -dc a-z0-9 </dev/urandom | head -c 6)"
+	printf "/tmp/%s" "$random_str"
+}
 generate_test_data() {
 	local dest_dir="$1"
 	local prefix="$2"
 
-	mkdir -p "$dest_dir/"{LEFT,RIGHT,_MIX}
-
-	local L_dir="$dest_dir/LEFT"
-	local R_dir="$dest_dir/RIGHT"
+	mkdir -p "$dest_dir/"{$T_LEFT_DIRNAME,$T_RIGHT_DIRNAME,$T_MIX_DIRNAME}
+	local L_dir="$dest_dir/$T_LEFT_DIRNAME"
+	local R_dir="$dest_dir/$T_RIGHT_DIRNAME"
 
 	# base directory
 	mkdir -p "$L_dir/"{L_dir,U_dir,X_dir}
@@ -33,209 +58,30 @@ generate_test_data() {
 	touch "$R_dir/U_dir/U_file"{1..3}
 }
 
-get_temp_path() {
-	local random_str
-	random_str="$(tr -dc a-z0-9 </dev/urandom | head -c 6)"
-	printf "/tmp/%s" "$random_str"
-}
-
-log_test() {
-	local msg="$1"
-	_debug "TEST - $msg" >&2
-}
-
-print_tree() {
-	local dir="$1"
-	local tag="$2"
-
-	printf "========== %s - START ==========\n" "$tag"
-	tree "$dir" --noreport
-	printf "========== %s - FINISH ==========\n" "$tag"
-}
-
 test_main() {
-	useradd -G "sudo" "$TEST_USER"
-	log_test "Created test user: $TEST_USER"
+	useradd -G "sudo" "$T_USER"
 
-	# Get temp test dir
-	local tmp_dir
-	tmp_dir="$(get_temp_path)"
-	mkdir "$tmp_dir"
-	log_test "Created test temp dir: $tmp_dir"
-
-	# Homes
-	local repo_a_dir="$tmp_dir/a"
-	local repo_b_dir="$tmp_dir/b"
-	local out_dir="$tmp_dir/out"
-
-	local track_file="$tmp_dir/$TRACK_FILENAME"
-
-	_build() {
-		rm -rf "${tmp_dir:?}/"*
-		generate_test_data "$tmp_dir" "$TEST_PREFIX"
-		print_tree "$tmp_dir" "BUILT"
-	}
-
-	_run_apply_to_local() {
-		_TRACK_FILE="$track_file" _PROFILE="$TEST_PROFILE" _USER="$TEST_USER" _GIT_COMMIT_ID="$TEST_GIT_COMMIT_ID" \
-			apply_to_local "$out_dir" "$repo_b_dir" "$repo_a_dir"
-	}
-
-	_run_apply_to_repo() {
-		{
-			read_by_null _ # old user id
-			read_by_null profile
-			read_by_null track_commit_id
-
-			local -a unlinks_ref
-			apply_to_repo "$out_dir" "$repo_b_dir" "$repo_a_dir" "$TEST_PROFILE" "unlinks_ref"
-		} <"$track_file"
-
-		for item in "${unlinks_ref[@]}"; do
-			echo "unlink: $item"
-		done
-		print_tree "$tmp_dir" "APPLIED TO REPO"
-	}
-
-	### Delete test
-	_run_del_test() {
-		local rm_dir="$1"
-		local callback="$2"
-
-		_build
-		_run_apply_to_local
-
-		if [[ ! -e "$rm_dir" ]]; then
-			log_test "Invalid del dir: $rm_dir" "${C[R]}"
-			exit 1
-		fi
-
-		rm -rf "$rm_dir"
-		_run_apply_to_repo
-
-		if "$callback"; then
-			log_test "$callback - Success" "${C[G]}"
-		else
-			log_test "$callback - Failed" "${C[R]}"
-		fi
-		printf "\n"
-	}
-
-	_del_a_dir() {
-		[[ ! -e "$repo_a_dir/a_dir" ]] && return 0 || return 1
-	}
-	_run_del_test "$out_dir/a_dir" "_del_a_dir"
-
-	_del_u_dir() {
-		[[ ! -e "$repo_a_dir/u_dir" && ! -e "$repo_b_dir/u_dir" ]] && return 0 || return 1
-	}
-	_run_del_test "$out_dir/u_dir" "_del_u_dir"
-
-	_del_p_dir() {
-		[[ ! -e "$repo_b_dir/${TEST_PREFIX}p_dir" ]] && return 0 || return 1
-	}
-	_run_del_test "$out_dir/p_dir" "_del_p_dir"
-
-	### Add test
-	_run_add_test() {
-		local add_dir="$1" # TODO: support file
-		local callback="$2"
-
-		_build
-
-		_run_apply_to_local
-		mkdir "$add_dir"
-		_run_apply_to_repo
-
-		if "$callback"; then
-			log_test "$callback - Success" "${C[G]}"
-		else
-			log_test "$callback - Failed" "${C[R]}"
-		fi
-		printf "\n"
-
-	}
-
-	_add_kana_dir() {
-		[[ -d "$repo_a_dir/a_dir/kana" ]] && return 0 || return 1
-	}
-	_run_add_test "$out_dir/a_dir/kana" "_add_kana_dir"
-
-	_add_kana_dir_to_p() {
-		[[ -d "$repo_b_dir/${TEST_PREFIX}p_dir/kana" ]] && return 0 || return 1
-	}
-	_run_add_test "$out_dir/p_dir/kana" "_add_kana_dir_to_p"
-
-	rm -rf "$tmp_dir"
-
-	### Modify test
-	local modify_content="hello, world 1234"
-	_run_modify_test() {
-		local modify_file="$1"
-		local callback="$2"
-
-		_build
-
-		_run_apply_to_local
-		rm -f "$modify_file"
-		printf "%s" "$modify_content" >>"$modify_file"
-		_run_apply_to_repo
-
-		if "$callback"; then
-			log_test "$callback - Success" "${C[G]}"
-		else
-			log_test "$callback - Failed" "${C[R]}"
-		fi
-		printf "\n"
-
-	}
-
-	_modify_a_file1() {
-		if [[ "$(cat "$repo_a_dir/a_dir/a_file1")" == "$modify_content" ]]; then
-			return 0
-		fi
-		return 1
-	}
-	_run_modify_test "$out_dir/a_dir/a_file1" "_modify_a_file1"
-}
-
-# test_main
-declare -r TEST_USER="kana"
-declare -r TEST_PROFILE="mine"
-declare -r TEST_GIT_COMMIT_ID="test_git_commit_id"
-
-test_patch_diff() {
 	# Create test environment
-	log_test "Create user"
-	useradd -G "sudo" "$TEST_USER"
-
-	log_test "Create temp test directory"
 	local tmp_dir
 	tmp_dir="/tmp/test_"
 	mkdir "$tmp_dir"
-
-	log_test "Create test data"
-	generate_test_data "$tmp_dir" "$(get_prefix "$TEST_PROFILE")"
+	generate_test_data "$tmp_dir" "$(get_prefix "$T_PROFILE")"
 	print_tree "$tmp_dir" "CREATE TEST DATA"
 
-	local L_dir="$tmp_dir/LEFT"
-	local R_dir="$tmp_dir/RIGHT"
-	local MIX_dir="$tmp_dir/_MIX"
+	local L_dir="$tmp_dir/$T_LEFT_DIRNAME"
+	local R_dir="$tmp_dir/$T_RIGHT_DIRNAME"
+	local MIX_dir="$tmp_dir/$T_MIX_DIRNAME"
 	local track="$tmp_dir/$TRACK_FILENAME"
 
-	write_track_header "$track" "$(id -u "$TEST_USER")" "$TEST_PROFILE" "some_git_commit_id"
-	_TRACK="$track" _PREFIX="$TEST_PROFILE#" _OWNER="$TEST_USER" \
+	write_track_header "$track" "$(id -u "$T_USER")" "$T_PROFILE" "$T_GIT_COMMIT_ID"
+	_TRACK="$track" _PREFIX="$(get_prefix "$T_PROFILE")" _OWNER="$T_USER" \
 		patch_mix "$L_dir" "$R_dir" "$MIX_dir"
-
-	print_tree "$tmp_dir" "MIXING"
+	print_tree "$tmp_dir" "Patch Mix"
 
 	# Create change
 	rm -rf "$MIX_dir/U_dir"
-	echo "MODIFIED" >|"$MIX_dir/X_dir/R_file1"
-	echo "MODIFIED" >|"$MIX_dir/X_dir/newFile"
-	echo "MODIFIED" >|"$MIX_dir/X_dir/X2_dir/newFile"
-	echo "MODIFIED" >|"$MIX_dir/X_dir/aaa"
-	mkdir "MODIFIED" >|"$MIX_dir/X_dir/aaa"
+	# rm -rf "$MIX_dir/R_dir"
+	touch "$MIX_dir/R_dir/helllooo"
 
 	# Read meta headers
 	{
@@ -244,7 +90,7 @@ test_patch_diff() {
 		read_by_null profile
 		read_by_null commit_id
 
-		local -A adds dels mods uncs roots
+		local -A adds=() dels=() mods=() uncs=() roots=()
 		local -ra patch_LR_args=(
 			"adds"
 			"dels"
@@ -256,13 +102,53 @@ test_patch_diff() {
 			"$MIX_dir"
 			"$profile#"
 		)
-
 		patch_LR "${patch_LR_args[@]}"
 
-		printf "[M] %s\n" "${mods[@]}"
-		printf "[A] %s\n" "${adds[@]}"
+		local kind
+		for kind in "adds" "dels" "mods" "uncs"; do
+			local -n items="$kind"
+			local state_char="${kind:0:1}"
+			state_char="${state_char^^}"
+			local state="${STATE[$state_char]}"
 
+			if ((${#items[@]} > 0)); then
+				for item in "${!items[@]}"; do
+					local type="${item:0:1}"
+					local MIX_path="${item:1}"
+					local LR_path="${items[$item]}"
+					LR_path="${LR_path:1}"
+					printf "%b[${state_char}] %s%b\n" "${STATE_CLR[$state]}" "$MIX_path" "${C[0]}"
+
+					case "$state" in
+					"${STATE[A]}")
+						install_cmd -m 0700 -o "$T_USER" -g "$T_USER" "$MIX_path" "$LR_path"
+						;;
+					"${STATE[D]}")
+						case "$type" in
+						"d")
+							rm -rf "$LR_path"
+							;;
+						"f")
+							rm -f "$LR_path"
+							;;
+						esac
+						;;
+					"${STATE[M]}")
+						rm -f "$LR_path"
+						install_cmd -m 0699 -o "$T_USER" -g "$T_USER" "$MIX_path" "$LR_path"
+						#
+						;;
+					"${STATE[U]}")
+						# Do nothing
+						;;
+					esac
+
+				done
+			fi
+		done
 	} <"$track"
+
+	print_tree "$tmp_dir" "Patch LR"
 }
 
-test_patch_diff
+test_main
