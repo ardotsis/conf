@@ -81,7 +81,8 @@ test_main() {
 	# Create change
 	rm -rf "$MIX_dir/U_dir"
 	# rm -rf "$MIX_dir/R_dir"
-	touch "$MIX_dir/R_dir/helllooo"
+	touch "$MIX_dir/X_dir/helllooo"
+	mkdir "$MIX_dir/X_dir/X2_dir/helloDIRRR"
 
 	# Read meta headers
 	{
@@ -90,6 +91,7 @@ test_main() {
 		read_by_null profile
 		read_by_null commit_id
 
+		# shellcheck disable=SC2034
 		local -A adds=() dels=() mods=() uncs=() roots=()
 		local -ra patch_LR_args=(
 			"adds"
@@ -121,7 +123,15 @@ test_main() {
 
 					case "$state" in
 					"${STATE[A]}")
-						install_cmd -m 0700 -o "$T_USER" -g "$T_USER" "$MIX_path" "$LR_path"
+						case "$type" in
+						"d")
+							cp -r "$MIX_dir" "$LR_path"
+							chown "$T_USER:$T_USER" "$LR_path"
+							;;
+						"f")
+							install_cmd -m 0700 -o "$T_USER" -g "$T_USER" "$MIX_path" "$LR_path"
+							;;
+						esac
 						;;
 					"${STATE[D]}")
 						case "$type" in
@@ -135,7 +145,7 @@ test_main() {
 						;;
 					"${STATE[M]}")
 						rm -f "$LR_path"
-						install_cmd -m 0699 -o "$T_USER" -g "$T_USER" "$MIX_path" "$LR_path"
+						install_cmd -m 0700 -o "$T_USER" -g "$T_USER" "$MIX_path" "$LR_path"
 						#
 						;;
 					"${STATE[U]}")

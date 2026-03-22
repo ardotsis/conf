@@ -1157,7 +1157,7 @@ patch_LR() {
 				while read_by_null item; do
 					local n_type="${item:0:1}" n_path="${item:1}"
 					# shellcheck disable=SC2034
-					A["$n_type$MIX_dir/$parent/$n_path"]="$n_type$LR_path/$n_path"
+					A["$n_type$MIX_dir/$path/$n_path"]="$n_type$LR_path/$n_path"
 				done < <(find "$MIX_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%f\0")
 			else
 				MIX_state="${STATE[D]}"
@@ -1183,6 +1183,7 @@ patch_LR() {
 			;;
 		"${STATE[U]}")
 			U["$out_MIX_path"]="$out_LR_path"
+			echo "unset $unset_path"
 			unset "A[$unset_path]"
 			_is_root_item "$path" && R["$path"]=1
 			;;
