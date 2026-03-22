@@ -231,10 +231,13 @@ test_patch_diff() {
 		patch_mix "$L_dir" "$R_dir" "$MIX_dir"
 
 	print_tree "$tmp_dir" "MIXING"
-	mkdir "$MIX_dir/R_dir/a"
+	mkdir "$MIX_dir/R_dir/newdir"
+	touch "$MIX_dir/R_dir/newdir/file"
 	touch "$MIX_dir/L_dir/a"
-	touch "$MIX_dir/L_dir/bbb"
-	mkdir "$MIX_dir/U_dir/hello"
+	# touch "$MIX_dir/L_dir/bbb"
+	# mkdir "$MIX_dir/U_dir/hello"
+
+	rm -rf "$MIX_dir/L_dir"
 
 	# Read meta headers
 	{

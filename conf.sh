@@ -272,7 +272,8 @@ _log() {
 	local i=0
 	local lineno="${BASH_LINENO[1]}"
 	local caller=" <GLOBAL> "
-	local -r ignore="_log _debug _info _warn _error _vars main"
+	local -r ignore="_log _debug _info _warn _error _vars install_cmd main"
+	# todo: prefix "_" func to ignore in log (& main)
 	for funcname in "${FUNCNAME[@]}"; do
 		i=$((i + 1))
 		[[ $ignore =~ (^|[[:space:]])$funcname($|[[:space:]]) ]] && continue # TODO: use is_contain
@@ -282,7 +283,8 @@ _log() {
 	done
 
 	local timestamp
-	timestamp="$(date "+%Y-%m-%d %H:%M:%S")"
+	# timestamp="$(date "+%Y-%m-%d %H:%M:%S")"
+	printf -v timestamp '%(%Y-%m-%d %H:%M:%S)T' -1
 	if [[ $SHOW_LOG == "true" ]]; then
 		printf "[%s] [%b%s%b] [%s:%s] %b\n" "$timestamp" "${LC["${level}"]}" "${level^^}" "${C["0"]}" "$caller" "$lineno" "$msg" >&2
 	fi
@@ -290,7 +292,10 @@ _log() {
 _debug() { _log "debug" "$1"; }
 _info() { _log "info" "$1"; }
 _warn() { _log "warn" "$1"; }
-_error() { _log "error" "$1"; }
+_error() {
+	_log "error" "$1"
+	exit 1
+}
 _vars() {
 	local var_names=("$@")
 
@@ -1066,10 +1071,10 @@ patch_LR() {
 	local L_dir="$1"
 	local R_dir="$2"
 	local MIX_dir="$3"
-	local rr="$4"
+	local rr="$4" # prefix
 
-	local -A adds=() mods=() dels=()
 	local -A del_parents=() RR_dirs=()
+	local -A adds=() mods=() dels=()
 
 	_is_root_item() { [[ "$1" != *"/"* ]] && return 0 || return 1; }
 
@@ -1086,6 +1091,8 @@ patch_LR() {
 			read_by_null "old_sum"
 		elif [[ "$type" == "d" ]]; then
 			read_by_null "path"
+		else
+			_error "Unknown file type '$type'. Did you read headers?"
 		fi
 		# echo "read: ($type:$own) $path ($old_sum)"
 
@@ -1160,11 +1167,11 @@ patch_LR() {
 		"${STATE[_]}" | "${STATE[M]}")
 			unset "adds[$type$base]"
 			if [[ "$mix_state" == "${STATE[M]}" ]]; then
-				mods["$type$base"]=1
+				mods["$type$base"]="$LR_path"
 			fi
 			;;
 		"${STATE[D]}")
-			dels["$type$base"]=1
+			dels["$type$base"]="$LR_path"
 			;;
 		esac
 
@@ -1174,5 +1181,4 @@ patch_LR() {
 	((${#adds[@]} > 0)) && printf "[NEW] %s\n" "${adds[@]}"
 	((${#dels[@]} > 0)) && printf "[DEL] %s\n" "${dels[@]}"
 	((${#mods[@]} > 0)) && printf "[MOD] %s\n" "${mods[@]}"
-
 }
