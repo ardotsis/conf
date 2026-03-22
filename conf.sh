@@ -1094,7 +1094,6 @@ patch_LR() {
 		else
 			_error "Unknown file type '$type'. Did you read headers correctly?"
 		fi
-		# echo "read: ($type:$own) $path ($old_sum)"
 
 		local parent="${path%/*}"
 		local base="${path##*/}"
@@ -1155,7 +1154,8 @@ patch_LR() {
 			if [[ -d "$mix_path" ]]; then
 				local item
 				while read_by_null item; do
-					adds["$item"]="$LR_path/$item"
+					local y="${item:0:1}" f="${item:1}"
+					adds["$item"]="$y$LR_path/$f"
 				done < <(find "$mix_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%f\0")
 			else
 				mix_state=${STATE[D]}
@@ -1167,18 +1167,20 @@ patch_LR() {
 		"${STATE[_]}" | "${STATE[M]}")
 			unset "adds[$type$base]"
 			if [[ "$mix_state" == "${STATE[M]}" ]]; then
-				mods["$type$base"]="$LR_path"
+				mods["$type$base"]="$type$LR_path"
 			fi
 			;;
 		"${STATE[D]}")
-			dels["$type$base"]="$LR_path"
+			dels["$type$base"]="$type$LR_path"
 			;;
 		esac
-
-		printf "(M) $mix_path -> ${C[y]}$LR_path${C[0]}\n"
 	done
 
-	((${#adds[@]} > 0)) && printf "[NEW] %s\n" "${adds[@]}"
-	((${#dels[@]} > 0)) && printf "[DEL] %s\n" "${dels[@]}"
-	((${#mods[@]} > 0)) && printf "[MOD] %s\n" "${mods[@]}"
+	local kind
+	for kind in "adds" "dels" "mods"; do
+		local -n items="$kind"
+		if ((${#items[@]} > 0)); then
+			printf "[$kind] %s\n" "${!items[@]}"
+		fi
+	done
 }

@@ -42,8 +42,7 @@ get_temp_path() {
 
 log_test() {
 	local msg="$1"
-	local color_seq="${2:-${C[W]}}"
-	printf "%b[TEST] %s%b\n" "$color_seq" "$msg" "${C[0]}" >&2
+	_debug "TEST - $msg" >&2
 }
 
 print_tree() {
@@ -204,7 +203,6 @@ test_main() {
 # test_main
 declare -r TEST_USER="kana"
 declare -r TEST_PROFILE="mine"
-declare -r TEST_PREFIX="$(get_prefix "$TEST_PROFILE")"
 declare -r TEST_GIT_COMMIT_ID="test_git_commit_id"
 
 test_patch_diff() {
@@ -218,7 +216,7 @@ test_patch_diff() {
 	mkdir "$tmp_dir"
 
 	log_test "Create test data"
-	generate_test_data "$tmp_dir" "$TEST_PREFIX"
+	generate_test_data "$tmp_dir" "$(get_prefix "$TEST_PROFILE")"
 	print_tree "$tmp_dir" "CREATE TEST DATA"
 
 	local L_dir="$tmp_dir/LEFT"
@@ -231,24 +229,22 @@ test_patch_diff() {
 		patch_mix "$L_dir" "$R_dir" "$MIX_dir"
 
 	print_tree "$tmp_dir" "MIXING"
-	mkdir "$MIX_dir/R_dir/newdir"
-	touch "$MIX_dir/R_dir/newdir/file"
-	touch "$MIX_dir/L_dir/a"
-	# touch "$MIX_dir/L_dir/bbb"
-	# mkdir "$MIX_dir/U_dir/hello"
+
+	# Create change
+	rm -rf "$MIX_dir/L_dir"
+	touch "$MIX_dir/R_dir/newFile"
 	rm -f "$MIX_dir/R_dir/R_file1"
 	echo 'helo' >"$MIX_dir/R_dir/R_file1"
 
-	rm -rf "$MIX_dir/L_dir"
-
 	# Read meta headers
 	{
+		local user_id profile commit_id
 		read_by_null user_id
 		read_by_null profile
 		read_by_null commit_id
 
 		# Pass paths to patcher
-		patch_LR "$L_dir" "$R_dir" "$MIX_dir" "$TEST_PREFIX"
+		patch_LR "$L_dir" "$R_dir" "$MIX_dir" "$profile#"
 
 	} <"$track"
 }
