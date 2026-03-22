@@ -10,6 +10,7 @@ param(
     [string] $WorkDir
 )
 
+
 if (-not $WorkDir) {
     if ($Username -eq "root") {
         $WorkDir = "/root"
@@ -24,9 +25,17 @@ $env:DOCKER_CLI_HINTS = "false"
 $ImageName = "conf-${Os}"
 $ContainerName = "${ImageName}-container"
 
+if ($Exec -eq "zsh") {
+    $FinalExec = @($Exec, "--login")
+}
+else {
+    $FinalExec = @($Exec)
+}
+
 & $Docker exec `
     --interactive `
     --tty `
     --workdir "$WorkDir" `
     --user "$Username" `
-    "$ContainerName" "$Exec" `
+    "$ContainerName" `
+    $FinalExec `

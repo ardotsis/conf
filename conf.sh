@@ -97,7 +97,7 @@ declare -Ar _OPTION_MAP=(
 )
 
 get_git_commit_id() {
-	printf "%s" "$(git -C "$REPO_INSTALL_DIR" rev-parse HEAD)"
+	printf "%s" "$(git_conf rev-parse HEAD)"
 }
 
 get_profile_dir() {
@@ -601,6 +601,126 @@ declare -Ar STATE_CLR=(
 	[${STATE[D]}]="${C[R]}"
 )
 
+patch_LR() {
+	local -n A="$1" D="$2" M="$3" U="$4" R="$5"
+	local L_dir="$6"
+	local R_dir="$7"
+	local MIX_dir="$8"
+	local rr="$9"
+
+	local -A del_parents=() RR_dirs=()
+
+	_is_root_item() { [[ "$1" != *"/"* ]] && return 0 || return 1; }
+
+	while :; do
+		local type own
+		read_byte type || break
+		read_byte own
+
+		local path="" old_sum=""
+		if [[ "$type" == "f" ]]; then
+			read_by_null "path"
+			read_by_null "old_sum"
+		elif [[ "$type" == "d" ]]; then
+			read_by_null "path"
+		else
+			_error "Unknown file type '$type'. Did you read headers correctly?"
+		fi
+
+		local parent="${path%/*}"
+		local base="${path##*/}"
+
+		if [[ -v del_parents["$parent"] ]]; then
+			if [[ "$type" == "d" ]]; then
+				del_parents["$path"]=1
+			fi
+			continue
+		fi
+
+		# Generate L or R path
+		local LR_path=""
+
+		if [[ -z "$LR_path" ]]; then
+			if [[ "$own" == "${OWN[L]}" ]]; then
+				LR_path="$L_dir/$path"
+
+			elif [[ "$own" == "${OWN[R]}" ]]; then
+				if [[ -v RR_dirs["$parent"] ]]; then
+					RR_dir="${RR_dirs["$parent"]}"
+					LR_path="$RR_dir/$base"
+					if [[ "$type" == "d" ]]; then
+						RR_dirs["$path"]="$LR_path"
+					fi
+				else
+					LR_path="$R_dir/$path"
+				fi
+
+			elif [[ "$own" == "${OWN[U]}" ]]; then
+				LR_path="$R_dir/$path"
+
+			elif [[ "$own" == "${OWN[RR]}" ]]; then
+				if _is_root_item "$path"; then
+					LR_path="$R_dir/$rr$path"
+				else
+					LR_path="$R_dir/$parent/$rr$base)"
+				fi
+
+				RR_dirs["$path"]="$LR_path"
+			fi
+		fi
+
+		local MIX_path="$MIX_dir/$path"
+		local MIX_state="${STATE[U]}"
+
+		if [[ "$type" == "f" ]]; then
+			if [[ -f "$MIX_path" ]]; then
+				if [[ "$old_sum" != "$(get_sum "$MIX_path")" ]]; then
+					MIX_state="${STATE[M]}"
+				fi
+			else
+				MIX_state="${STATE[D]}"
+			fi
+		fi
+
+		if [[ "$type" == "d" ]]; then
+			if [[ -d "$MIX_path" ]]; then
+				local item
+				while read_by_null item; do
+					local n_type="${item:0:1}" n_path="${item:1}"
+					# shellcheck disable=SC2034
+					A["$n_type$MIX_dir/$path/$n_path"]="$n_type$LR_path/$n_path"
+				done < <(find "$MIX_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%f\0")
+			else
+				MIX_state="${STATE[D]}"
+				del_parents["$path"]=1
+			fi
+		fi
+
+		local out_MIX_path="$type$MIX_path"
+		local out_LR_path="$type$LR_path"
+		local unset_path="$type$MIX_dir/$path"
+
+		case "$MIX_state" in
+		"${STATE[A]}")
+			# Do nothing
+			;;
+		"${STATE[D]}")
+			D["$out_MIX_path"]="$out_LR_path"
+			;;
+		"${STATE[M]}")
+			M["$out_MIX_path"]="$out_LR_path"
+			unset "A[$unset_path]"
+			_is_root_item "$path" && R["$path"]=1
+			;;
+		"${STATE[U]}")
+			U["$out_MIX_path"]="$out_LR_path"
+			unset "A[$unset_path]"
+			_is_root_item "$path" && R["$path"]=1
+			;;
+		esac
+	done
+}
+
 # shellcheck disable=SC2329
 patch_mix() {
 	local L_dir="${1:-}"
@@ -937,8 +1057,9 @@ cmd_apply() {
 		fi
 	fi
 
-	_TRACK_FILE="$_USER_DATA_DIR/$TRACK_FILENAME" _PROFILE="$profile" _USER="$_USERNAME" _GIT_COMMIT_ID="$(get_git_commit_id)" \
-		patch_mix "$_HOME" "$profile_dir" "$(get_home_profile_dir "$DEFAULT_PROFILE_NAME")"
+	write_track_header "$_TRACK_FILE" "$_USER_ID" "$profile" "$(get_git_commit_id)"
+	_TRACK="$_TRACK_FILE" _PREFIX="$(get_prefix "$profile")" _OWNER="$_USERNAME" \
+		patch_mix "$(get_home_profile_dir "$DEFAULT_PROFILE_NAME")" "$profile_dir" "$_HOME"
 
 	if ! $_INTERNAL; then
 		printf "%bApplied '%s' profile.%b\n" "${C[G]}" "$profile" "${C[0]}"
@@ -960,63 +1081,114 @@ write_track_header() {
 }
 
 cmd_update() {
-	# git_conf clean -fdx "$REPO_PROFILES_DIR"
 	if [[ ! -e "$_TRACK_FILE" ]]; then
-		warn "No track file. Try 'apply' command first."
-		exit 1
+		error "No track file. Try 'apply' command first."
 	fi
 
 	local current_commit_id
 	current_commit_id="$(get_git_commit_id)"
 
+	_debug "Cleaning git..."
+	git_conf clean -fdx "$REPO_PROFILES_DIR"
+
 	{
-		# shellcheck disable=SC2034
-		local _ profile track_commit_id
-		read_by_null _ # old user id
+		local user_id profile old_commit_id
+		read_by_null user_id
 		read_by_null profile
-		read_by_null track_commit_id
+		read_by_null old_commit_id
+
+		if [[ "$current_commit_id" != "$old_commit_id" ]]; then
+			error "You need to apply latest version of git snapshot."
+		fi
 
 		local default_dir profile_dir
 		default_dir="$(get_home_profile_dir "$DEFAULT_PROFILE_NAME")"
-		profile_dir="$(get_home_profile_dir "$profile")"
-
-		if [[ "$current_commit_id" != "$track_commit_id" ]]; then
-			warn "You need to apply latest version of git snapshot."
-			exit 1
+		if [[ -n "$profile" ]]; then
+			profile_dir="$(get_home_profile_dir "$profile")"
+		else
+			profile_dir=""
 		fi
 
-		local -a unlink_items
-		if ! apply_to_repo \
-			"$_HOME" \
-			"$profile_dir" \
-			"$default_dir" \
-			"$profile" \
-			"unlink_items"; then
+		local prefix
+		prefix="$(get_prefix "$profile")"
 
-			# No change
-			_debug "No change on '$_HOME'"
-			return 0
-		fi
-
-		local archive_path="$_USER_DATA_DIR/$current_commit_id.tar.gz"
-		_debug "Backup current home ($archive_path)"
-		tar -C "$_HOME" -czf "$archive_path" "${unlink_items[@]}"
-
-		for unlink_item in "${unlink_items[@]}"; do
-			_debug "Unlink: $unlink_item"
-			rm -rf "$unlink_item"
-		done
-
+		local -A adds=() dels=() mods=() uncs=() roots=()
+		local -ra patch_LR_args=(
+			"adds"
+			"dels"
+			"mods"
+			"uncs"
+			"roots"
+			"$default_dir"
+			"$profile_dir"
+			"$_HOME"
+			"$prefix"
+		)
+		patch_LR "${patch_LR_args[@]}"
 	} <"$_TRACK_FILE"
+
+	local kind
+	for kind in "adds" "dels" "mods" "uncs"; do
+		local -n items="$kind"
+		local state_char="${kind:0:1}"
+		state_char="${state_char^^}"
+		local state="${STATE[$state_char]}"
+
+		if ((${#items[@]} > 0)); then
+			for item in "${!items[@]}"; do
+				local type="${item:0:1}"
+				local MIX_path="${item:1}"
+				local LR_path="${items[$item]}"
+				LR_path="${LR_path:1}"
+
+				printf "%b[${state_char}] %s%b\n" "${STATE_CLR[$state]}" "$MIX_path" "${C[0]}"
+
+				case "$state" in
+				"${STATE[A]}")
+					case "$type" in
+					"d")
+						cp -r "$MIX_path" "$LR_path"
+						chown "$_USERNAME:$_USERNAME" "$LR_path"
+						;;
+					"f")
+						install_cmd -m 0700 -o "$_USERNAME" -g "$_USERNAME" "$MIX_path" "$LR_path"
+						;;
+					esac
+					;;
+				"${STATE[D]}")
+					case "$type" in
+					"d")
+						rm -rf "$LR_path"
+						;;
+					"f")
+						rm -f "$LR_path"
+						;;
+					esac
+					;;
+				"${STATE[M]}")
+					rm -f "$LR_path"
+					install_cmd -m 0700 -o "$_USERNAME" -g "$_USERNAME" "$MIX_path" "$LR_path"
+					#
+					;;
+				"${STATE[U]}")
+					# Do nothing
+					;;
+				esac
+			done
+		fi
+	done
+
+	local archive_path="$_USER_DATA_DIR/$current_commit_id.tar.gz"
+	_debug "Backup current home ($archive_path)"
+	tar -C "$_HOME" -czf "$archive_path" "${!roots[@]}"
 
 	_debug "Committing..."
 	git_conf add "$REPO_PROFILES_DIR" >/dev/null 2>&1
 	git_conf commit -m "$_USERNAME updates conf" --no-verify >/dev/null 2>&1
-
 	# Update track data
 	rm -f "$_TRACK_FILE"
-
 	_INTERNAL="true" cmd_apply "$profile"
+
 }
 
 main_() {
@@ -1065,127 +1237,7 @@ main_() {
 	fi
 }
 
-# if [[ -z "${BASH_SOURCE[0]+x}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
-# 	# Execute directly, Pipeline
-# 	main_ "$@"
-# fi
-
-patch_LR() {
-	local -n A="$1" D="$2" M="$3" U="$4" R="$5"
-	local L_dir="$6"
-	local R_dir="$7"
-	local MIX_dir="$8"
-	local rr="$9"
-
-	local -A del_parents=() RR_dirs=()
-
-	_is_root_item() { [[ "$1" != *"/"* ]] && return 0 || return 1; }
-
-	while :; do
-		local type own
-		read_byte type || break
-		read_byte own
-
-		local path="" old_sum=""
-		if [[ "$type" == "f" ]]; then
-			read_by_null "path"
-			read_by_null "old_sum"
-		elif [[ "$type" == "d" ]]; then
-			read_by_null "path"
-		else
-			_error "Unknown file type '$type'. Did you read headers correctly?"
-		fi
-
-		local parent="${path%/*}"
-		local base="${path##*/}"
-
-		if [[ -v del_parents["$parent"] ]]; then
-			if [[ "$type" == "d" ]]; then
-				del_parents["$path"]=1
-			fi
-			continue
-		fi
-
-		# Generate L or R path
-		local LR_path=""
-
-		if [[ -z "$LR_path" ]]; then
-			if [[ "$own" == "${OWN[L]}" ]]; then
-				LR_path="$L_dir/$path"
-
-			elif [[ "$own" == "${OWN[R]}" ]]; then
-				if [[ -v RR_dirs["$parent"] ]]; then
-					RR_dir="${RR_dirs["$parent"]}"
-					LR_path="$RR_dir/$base"
-					if [[ "$type" == "d" ]]; then
-						RR_dirs["$path"]="$LR_path"
-					fi
-				else
-					LR_path="$R_dir/$path"
-				fi
-
-			elif [[ "$own" == "${OWN[U]}" ]]; then
-				LR_path="$R_dir/$path"
-
-			elif [[ "$own" == "${OWN[RR]}" ]]; then
-				if _is_root_item "$path"; then
-					LR_path="$R_dir/$rr$path"
-				else
-					LR_path="$R_dir/$parent/$rr$base)"
-				fi
-
-				RR_dirs["$path"]="$LR_path"
-			fi
-		fi
-
-		local MIX_path="$MIX_dir/$path"
-		local MIX_state="${STATE[U]}"
-
-		if [[ "$type" == "f" ]]; then
-			if [[ -f "$MIX_path" ]]; then
-				if [[ "$old_sum" != "$(get_sum "$MIX_path")" ]]; then
-					MIX_state="${STATE[M]}"
-				fi
-			else
-				MIX_state="${STATE[D]}"
-			fi
-		fi
-
-		if [[ "$type" == "d" ]]; then
-			if [[ -d "$MIX_path" ]]; then
-				local item
-				while read_by_null item; do
-					local n_type="${item:0:1}" n_path="${item:1}"
-					# shellcheck disable=SC2034
-					A["$n_type$MIX_dir/$path/$n_path"]="$n_type$LR_path/$n_path"
-				done < <(find "$MIX_path" -maxdepth 1 -mindepth 1 ! -type l -printf "%y%f\0")
-			else
-				MIX_state="${STATE[D]}"
-				del_parents["$path"]=1
-			fi
-		fi
-
-		local out_MIX_path="$type$MIX_path"
-		local out_LR_path="$type$LR_path"
-		local unset_path="$type$MIX_dir/$path"
-
-		case "$MIX_state" in
-		"${STATE[A]}")
-			# Do nothing
-			;;
-		"${STATE[D]}")
-			D["$out_MIX_path"]="$out_LR_path"
-			;;
-		"${STATE[M]}")
-			M["$out_MIX_path"]="$out_LR_path"
-			unset "A[$unset_path]"
-			_is_root_item "$path" && R["$path"]=1
-			;;
-		"${STATE[U]}")
-			U["$out_MIX_path"]="$out_LR_path"
-			unset "A[$unset_path]"
-			_is_root_item "$path" && R["$path"]=1
-			;;
-		esac
-	done
-}
+if [[ -z "${BASH_SOURCE[0]+x}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
+	# Execute directly, Pipeline
+	main_ "$@"
+fi
