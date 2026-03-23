@@ -42,14 +42,13 @@ declare -ar ZSH_PLUGIN_REPOS=(
 	zdharma-continuum/fast-syntax-highlighting
 	sindresorhus/pure
 )
-
 declare -Ar C=(
 	[0]="\033[0m" # Reset
 	[B]="\033[1m" # Bold
 
 	# Normal
 	[r]="\033[0;31m" # Red
-	[y]="\033[0;33m" # Orange/Yellow
+	[y]="\033[0;33m" # Yellow
 	[g]="\033[0;32m" # Green
 	[c]="\033[0;36m" # Cyan
 	[b]="\033[0;34m" # Blue
@@ -62,7 +61,7 @@ declare -Ar C=(
 	[Y]="\033[1;33m"  # Bold Yellow
 	[G]="\033[1;32m"  # Bold Green
 	[C]="\033[1;36m"  # Bold Cyan
-	[B_]="\033[1;34m" # Bold Blue (L for Light/Large)
+	[B_]="\033[1;34m" # Bold Blue
 	[P]="\033[1;35m"  # Bold Purple
 	[K]="\033[1;30m"  # Bold Black
 	[W]="\033[1;37m"  # Bold White
@@ -96,6 +95,13 @@ declare -Ar _OPTION_MAP=(
 	[-luv]="love"
 )
 
+info() { printf "%b%s%b\n" "${C[G]}" "$1" "${C[0]}" >&2; }
+warn() { printf "%b%s%b\n" "${C[Y]}" "$1" "${C[0]}" >&2; }
+error() {
+	printf "%b%s%b\n" "${C[R]}" "$1" "${C[0]}" >&2
+	exit 1
+}
+
 get_git_commit_id() {
 	printf "%s" "$(git_conf rev-parse HEAD)"
 }
@@ -114,7 +120,7 @@ get_home_profile_dir() {
 	printf "%s/home/%s" "$profile_dir" "$profile"
 }
 
-is_root() {
+util::is_root() {
 	[[ "$(id -u "$CURRENT_USER")" == "0" ]] && return 0
 	return 1
 }
@@ -130,22 +136,40 @@ is_contain() {
 	fi
 }
 
+print_conf_ascii() {
+	local sub_text="ar.sis & kana."
+	local width=39
+	local padding="$(((width - ${#sub_text}) / 2))"
+
+	printf "\n"
+	printf "                                 .o88o. \n"
+	printf "                                 888 \`\" \n"
+	printf " .ooooo.   .ooooo.  ooo. .oo.   o888oo  \n"
+	printf "d88' \`\"Y8 d88' \`88b \`888P\"Y88b   888    \n"
+	printf "888       888   888  888   888   888    \n"
+	printf "888   .o8 888   888  888   888   888    \n"
+	printf "\`Y8bod8P' \`Y8bod8P' o888o o888o o888o   \n"
+	printf "\n%${padding}s%s\n\n\n" "" "$sub_text"
+}
+
 print_help() {
 	local indent="    "
 	local col_width="18"
 	local fmt="${indent}%-${col_width}s %s\n"
 
-	printf "Usage:\n"
+	print_conf_ascii
+
+	printf "%bUsage:%b\n" "${C[W]}" "${C[0]}"
 	printf "${indent}%s\n" "conf [option] <command> [<args>]"
 	printf "${indent}%s\n" "conf [-v | --version]"
 	printf "${indent}%s\n" "conf [-h | --help]"
 	printf "\n"
 
-	printf "Options:\n"
+	printf "%bOptions:%b\n" "${C[W]}" "${C[0]}"
 	printf "$fmt" "-d,  --debug" "Enable debug mode"
 	printf "\n"
 
-	printf "Commands:\n"
+	printf "%bCommands:%b\n" "${C[W]}" "${C[0]}"
 	printf "$fmt" "install" "install description"
 	printf "$fmt" "adduser" "adduser description"
 	printf "$fmt" "apply" "apply description"
@@ -165,7 +189,7 @@ get_err_msg() {
 		tip=" See 'conf --help'."
 	fi
 
-	printf "conf: %s%s\n" "$msg" "$tip"
+	printf "%s%s\n" "$msg" "$tip"
 }
 
 install_cmd() {
@@ -252,7 +276,7 @@ declare _PARSE_ERR_MSG=""
 declare -a CMDS=()
 
 if ! parse_args "_OPTION" "CMDS" "_PARSE_ERR_MSG" "$@"; then
-	printf "%s\n" "$_PARSE_ERR_MSG" >&2
+	error "$_PARSE_ERR_MSG"
 	exit 1
 fi
 
@@ -310,13 +334,6 @@ _vars() {
 	done
 
 	_log "debug" "$msg"
-}
-
-info() { printf "%b%s%b\n" "${C[G]}" "$1" "${C[0]}" >&2; }
-warn() { printf "%b%s%b\n" "${C[Y]}" "$1" "${C[0]}" >&2; }
-error() {
-	printf "%b%s%b\n" "${C[R]}" "$1" "${C[0]}" >&2
-	exit 1
 }
 
 is_cmd_exist() {
@@ -666,9 +683,17 @@ patch_LR() {
 			fi
 		fi
 
+		local unset_path="$type$MIX_dir/$path"
+
+		case "$MIX_state" in
+		"${STATE[M]}" | "${STATE[U]}")
+			unset "A[$unset_path]"
+			_is_root_item "$path" && R["$path"]=1
+			;;
+		esac
+
 		local out_MIX_path="$type$MIX_path"
 		local out_LR_path="$type$LR_path"
-		local unset_path="$type$MIX_dir/$path"
 
 		case "$MIX_state" in
 		"${STATE[A]}")
@@ -679,13 +704,9 @@ patch_LR() {
 			;;
 		"${STATE[M]}")
 			M["$out_MIX_path"]="$out_LR_path"
-			unset "A[$unset_path]"
-			_is_root_item "$path" && R["$path"]=1
 			;;
 		"${STATE[U]}")
 			U["$out_MIX_path"]="$out_LR_path"
-			unset "A[$unset_path]"
-			_is_root_item "$path" && R["$path"]=1
 			;;
 		esac
 	done
@@ -909,7 +930,7 @@ cmd_init() {
 
 	# After Install
 	if [[ $_INTERNAL == "false" ]]; then
-		printf "%b%s%b\n" "${C[G]}" "conf has installed." "${C[0]}"
+		info "conf has initialized."
 	fi
 
 	if [[ -n "$username" ]]; then
@@ -1023,7 +1044,7 @@ cmd_apply() {
 	else
 		profile_dir="$(get_home_profile_dir "$profile")"
 		if [[ ! -e "$profile_dir" ]]; then
-			error "'$profile' profile doesn't exist."
+			error "'$profile' profile does not exist."
 		fi
 	fi
 
@@ -1032,7 +1053,7 @@ cmd_apply() {
 		patch_mix "$(get_home_profile_dir "$DEFAULT_PROFILE_NAME")" "$profile_dir" "$_HOME"
 
 	if ! $_INTERNAL; then
-		printf "%bApplied '%s' profile.%b\n" "${C[G]}" "$profile" "${C[0]}"
+		info "'$profile' profile has applied."
 	fi
 }
 
@@ -1050,11 +1071,7 @@ write_track_header() {
 		"$user_id" "$profile" "$git_commit_id" >>"$filepath"
 }
 
-diff() {
-	:
-}
-
-cmd_update() {
+cmd_commit() {
 	if [[ ! -e "$_TRACK_FILE" ]]; then
 		error "No track file. Try 'apply' command first."
 	fi
@@ -1120,14 +1137,16 @@ cmd_update() {
 				local LR_path="${items[$item]}"
 				LR_path="${LR_path:1}"
 
-				printf "%b[${state_char}] %s%b\n" "${STATE_CLR[$state]}" "$MIX_path" "${C[0]}"
+				if [[ "$state" != "${STATE[U]}" ]]; then
+					printf "%b[${state_char}] %s%b\n" "${STATE_CLR[$state]}" "$MIX_path" "${C[0]}"
+				fi
 
 				case "$state" in
 				"${STATE[A]}")
 					case "$type" in
 					"d")
 						cp -r "$MIX_path" "$LR_path"
-						chown "$_USERNAME:$_USERNAME" "$LR_path"
+						chown -r "$_USERNAME:$_USERNAME" "$LR_path"
 						;;
 					"f")
 						install_cmd -m 0700 -o "$_USERNAME" -g "$_USERNAME" "$MIX_path" "$LR_path"
@@ -1173,6 +1192,10 @@ cmd_update() {
 
 }
 
+cmd_comm() {
+	cmd_commit "$@"
+}
+
 main_() {
 	_debug "args: $*"
 	_vars "BASH_VERSION"
@@ -1188,30 +1211,26 @@ main_() {
 	fi
 
 	if (("${#CMDS[@]}" == 0)); then
-		printf "%s\n" "$(get_err_msg "Please specify the conf command." "true")" >&2
-		return 1
+		error "$(get_err_msg "Please specify the conf command." "true")"
 	fi
 
 	if [[ -n "$LOVE" ]]; then
-		printf "i love you %s.\n" "$LOVE"
+		printf "%bi love you %s.%b\n" "${C[p]}" "$LOVE" "${C[0]}"
 	fi
 
 	local cmd="${CMDS[0]}"
 	local cmd_func="cmd_$cmd"
 
 	if ! declare -F "$cmd_func" >/dev/null 2>&1; then
-		printf "%s\n" "$(get_err_msg "'$cmd' is not conf command." "true")" >&2
-		exit 1
+		error "$(get_err_msg "'$cmd' is not conf command." "true")"
 	fi
 
-	if ! is_root; then
+	if ! util::is_root; then
 		error "Permission denied (you must be root)"
 	else
 		update_conf_user_env "${SUDO_USER:-$CURRENT_USER}"
 		_INTERNAL="false" "$cmd_func" "${CMDS[@]:1}"
 	fi
-
-	_debug "conf command exit with $? code"
 
 	if [[ $IS_DOCKER_ENTRYPOINT == "true" ]]; then
 		printf "Keeping docker container running...\n"

@@ -4,8 +4,8 @@ param(
     [string] $Os,
     [Parameter(Mandatory = $true)]
     [string] $Username,
-    [Parameter(Mandatory = $true)]
-    [string] $Exec,
+    [Parameter(Mandatory = $false)]
+    [string] $Exec = "",
     [Parameter(Mandatory = $false)]
     [string] $WorkDir
 )
@@ -24,8 +24,8 @@ $env:DOCKER_CLI_HINTS = "false"
 $ImageName = "conf-${Os}"
 $ContainerName = "${ImageName}-container"
 
-if ($Exec -eq "zsh") {
-    $FinalExec = @($Exec, "--login")
+if ( ( $Exec -eq "" ) -or ($Exec -eq "zsh")  ) {
+    $FinalExec = @("zsh", "--login")
 }
 else {
     $FinalExec = @($Exec)

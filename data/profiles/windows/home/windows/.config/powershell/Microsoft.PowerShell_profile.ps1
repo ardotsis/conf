@@ -1,13 +1,22 @@
+# General
+##################################
+#            General             #
+##################################
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
-
-
-# Aliases
+###################################
+#             Alias              #
+################################## Aliases
 Set-Alias -Name nv -Value nvim -Force
 
+##################################
+#            Utility             #
+##################################
+function poi {
+    Clear-RecycleBin -Confirm:$false
+}
 
-# =============================== Old config ===============================
-function Get-BoxedText {
+function Get-TextBox {
     param (
         [Parameter(Mandatory = $true)]
         [string]$Text,
@@ -45,29 +54,4 @@ function yt-all {
 function yt-wav {
     param ([string] $url)
     yt-dlp.exe --output '.\%(title)s' -x --audio-format wav $url
-}
-
-
-$ItemMaps = @(
-    @('Screenshot *.png', 'E:\Downloads\.Images\Screenshots'),
-    @('^IMG_\d+\.png$', '.\Maybe-iPhone'),
-    @('^.{15}\.(jpg|png)$', '.\Maybe-Twitter'),
-    @('^.\.txt$', '.\Maybe-YouTube'),
-    @('^.\.txt$', '.\Text-Files')
-)
-
-
-function Invoke-OrganizeFolder {
-    [CmdletBinding()]
-    param (
-        [Parameter()]
-        [string]
-        $Path = '.'
-    )
-
-    foreach ($item in $ItemMaps) {
-        Get-ChildItem -Path $Path | Where-Object { $_.Name -match $item[0] } | ForEach-Object {
-            $_.Name
-        }
-    }
 }
