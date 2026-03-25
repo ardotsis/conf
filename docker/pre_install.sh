@@ -6,18 +6,18 @@ source "$_DOCKER_APP_DIR/conf.sh"
 
 pre_install() {
 	# ZSH plugins
-	install_zsh_plugins "$ZSH_PLUGINS_DIR"
-
+	install_zsh_plugins "$ZSH_PLUGINS_DIR" &
 	# Neovim
-	install_nvim
+	install_nvim &
+	# Starship
+	install_starship "$LOCAL_DIR/bin" &
 
 	# Zoxide
 	local man1_dir="$LOCAL_DIR/share/man/man1"
 	[[ ! -e "$man1_dir" ]] && mkdir -p "$man1_dir"
-	install_zoxide "$LOCAL_DIR/bin" "$man1_dir"
+	install_zoxide "$LOCAL_DIR/bin" "$man1_dir" &
 
-	# Starship
-	install_starship "$LOCAL_DIR/bin"
+	wait
 }
 
 pre_install

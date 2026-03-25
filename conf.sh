@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail -o noclobber
 
 # System
@@ -137,7 +137,7 @@ is_contain() {
 }
 
 print_conf_ascii() {
-	local sub_text="ar.sis & kana."
+	local sub_text="isolated place for ar.sis & kana."
 	local width=39
 	local padding="$(((width - ${#sub_text}) / 2))"
 
@@ -149,7 +149,7 @@ print_conf_ascii() {
 	printf "888       888   888  888   888   888    \n"
 	printf "888   .o8 888   888  888   888   888    \n"
 	printf "\`Y8bod8P' \`Y8bod8P' o888o o888o o888o   \n"
-	printf "\n%${padding}s%s\n\n\n" "" "$sub_text"
+	printf "\n%${padding}s%b%s%b\n\n\n" "" "" "$sub_text"
 }
 
 print_help() {
@@ -588,7 +588,7 @@ declare -Ar STATE_CLR=(
 	[${STATE[D]}]="${C[R]}"
 )
 
-patch_LR() {
+get_diff() {
 	local -n A="$1" D="$2" M="$3" U="$4" R="$5"
 	local L_dir="$6"
 	local R_dir="$7"
@@ -1104,7 +1104,7 @@ cmd_commit() {
 		prefix="$(get_prefix "$profile")"
 
 		local -A adds=() dels=() mods=() uncs=() roots=()
-		local -ra patch_LR_args=(
+		local -ra get_diff_args=(
 			"adds"
 			"dels"
 			"mods"
@@ -1115,7 +1115,7 @@ cmd_commit() {
 			"$_HOME"
 			"$prefix"
 		)
-		patch_LR "${patch_LR_args[@]}"
+		get_diff "${get_diff_args[@]}"
 	} <"$_TRACK_FILE"
 
 	if ((("${#adds[@]}" + ${#dels[@]} + ${#mods[@]}) == 0)); then

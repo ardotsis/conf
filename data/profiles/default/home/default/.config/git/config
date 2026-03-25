@@ -1,10 +1,10 @@
 [user]
     name = ar.sis
-    email = contact@ardotsis.com
+    email = hi@ardotsis.com
 
 [core]
     editor = nvim
-    autocrlf = input
+    autocrlf = false
 
 [init]
     defaultBranch = main
